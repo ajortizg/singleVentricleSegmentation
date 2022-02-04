@@ -59,6 +59,8 @@ def saveVideo(nii_data, fileName, saveDirVideo):
 
 def saveVideoSeg(nii_data, fileName, fileNameSeg, timeSeg, saveDirVideoSeg):
 
+    print( timeSeg )
+
     nii_segimg = nib.load(fileNameSeg)
     nii_segdata = nii_segimg.get_fdata()
 
@@ -90,7 +92,7 @@ def saveVideoSeg(nii_data, fileName, fileNameSeg, timeSeg, saveDirVideoSeg):
             
                 axSeg = fig.add_subplot(2*numRows, numCols, z+1+numZSlices)
                 axSeg.imshow(nii_segdata[:,:,z],cmap='gray', interpolation=None)
-                axSeg.set_title("layer {} / frame {}".format(z, t))
+                #axSeg.set_title("layer {} / frame {}".format(z, t))
                 axSeg.axis('off')
         else:
             for z in range(numZSlices):
@@ -99,19 +101,6 @@ def saveVideoSeg(nii_data, fileName, fileNameSeg, timeSeg, saveDirVideoSeg):
                 ax.set_title("layer {} / frame {}".format(z, t))
                 ax.axis('off')
 
-        # for z, ax in enumerate(axs.flat):
-        #     # For every slice print the image, otherwise show empty space.
-        #     if z < numZSlices:
-        #         ax.imshow(nii_data[:,:,z,t],cmap='gray', interpolation=None)
-        #         ax.set_title("layer {} / frame {}".format(z, t))
-        #         ax.axis('off')
-        #     elif z < 2 * numZSlices and t == segNum:
-        #         print( f"t = {t}" )
-        #         ax.imshow(nii_segdata[:,:,z-numZSlices],cmap='gray', interpolation=None)
-        #         ax.set_title("segmentation")
-        #         ax.axis('off')
-        #     else:
-        #         ax.axis('off')
         imgName = f"video{t}.png"
         pathName = os.path.join(saveDirVideoSeg, imgName)
         plt.savefig(pathName,dpi=100)
@@ -126,10 +115,6 @@ def plotNifty(args):
 
     #==================================
     # Load 4D nifty [x,y,z,t]
-    #baseDir = '/home/stefan/machineLearning/data/UKBTest/'
-    #subDir = 'Adolescent_1/'
-    #fileName = 'Adolescent_1.nii.gz'
-    #path = baseDir + subDir + fileName
     if not (args.fileName):
        parser.error('add -fileName')
     fileName = args.fileName
@@ -192,6 +177,8 @@ def plotNifty(args):
         print("save video with segmenation")
     if args.fileNameSeg is not None:
         fileNameSeg = args.fileNameSeg
+        if not (args.timeSeg):
+            parser.error('add -timeSeg')
         timeSeg = args.timeSeg
         saveDirVideoSeg = saveDir + '/videoSeg/'
         if not os.path.exists(saveDirVideoSeg):
@@ -214,7 +201,7 @@ if __name__ == '__main__':
     parser.set_defaults(useSaveVideo=False)
 
     parser.add_argument('--fileNameSeg', help="file name of segmentatioin")
-    parser.add_argument('--timeSeg', help="time of segmentation")
+    parser.add_argument('--timeSeg', type=int, help="time of segmentation")
 
     args = parser.parse_args()
 
