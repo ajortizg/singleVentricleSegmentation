@@ -313,8 +313,8 @@ print("test central finite difference in 3d")
 print("====================================")
 
 NZ3DCD=16
-NY3DCD=157
-NX3DCD=213
+NY3DCD=256
+NX3DCD=256
 nabla3dCDOp = differentialOps.Nabla3D_Central()
 
 #############
