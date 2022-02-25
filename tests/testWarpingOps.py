@@ -17,9 +17,10 @@ import time
 import torch.nn.functional as F
 
 #==================================
-import restrictionOps
+sys.path.append("../src/")
+# import warpingOps
 
-# from tvl1OF3d_cuda_ext import tvl1OF3d
+from opticalFlow_cuda_ext import opticalFlow
 
 
 #==================================
@@ -27,11 +28,11 @@ DEVICE = 'cuda'
 
 
 
-def checkRestrictionOps(args):
+def testWarpingOps(args):
 
     print("""
     ==================================
-        checkRestrictionOps
+        testWarpingOps
     ==================================
     """)
 
@@ -85,22 +86,47 @@ def checkRestrictionOps(args):
     imageB = torch.from_numpy(nii_data[z,:,:,tB]).float().to(DEVICE)
 
 
-    restrOp2D = restrictionOps.Restriction2D_Test1()
-    imageA_down = restrOp2D.scale_down(imageA)
 
-    print("imageA.shape = ", imageA.shape )
-    print("imageA_down.shape = ", imageA_down.shape )
+    # restrOp2D = restrictionOps.Restriction2D_Test1()
+    # imageA_down = restrOp2D.scale_down(imageA)
+    # print("imageA_down.shape = ", imageA_down.shape )
+    # imgNameA_down = f"imgA2D_down.png"
+    # pathNameA_down = os.path.join(saveDir, imgNameA_down) 
+    # cv2.imwrite(pathNameA_down,imageA_down)
 
 
-    imgNameA = f"imgA2D.png"
-    pathNameA = os.path.join(saveDir, imgNameA) 
-    cv2.imwrite(pathNameA,imageA)
-    imgNameA_down = f"imgA2D_down.png"
-    pathNameA_down = os.path.join(saveDir, imgNameA_down) 
-    cv2.imwrite(pathNameA_down,imageA_down)
+    ## example warping 
+
+    #test random
+    phi_0 = np.random.uniform(-0.4, 0.4, (NY, NX, 2))
+    mask = np.zeros_like(phi_0)
+    mask[1:-1,1:-1, :] = 1
+    phi_0 *= mask
+    #phi_0 = _np.zeros_like(phi_0)
+
+    #test 2
+    # phi_0 = np.zeros((NY, NX, 2))
+
+    phi = torch.from_numpy(phi_0).float().to(DEVICE)
+    imageA_warped = opticalFlow.warp2d_cubicSpline(imageA,phi)
+
 
     #TODO swap result (Z,Y,X) back to (X,Y,Z):
     #result_backSwap = np.swapaxes(result, 0, 2)
+
+    #save 
+    print("imageA.shape = ", imageA.shape )
+    imgNameA = f"imgA2D.png"
+    pathNameA = os.path.join(saveDir, imgNameA) 
+    imageA_np = imageA.cpu().detach().numpy()
+    cv2.imwrite(pathNameA,imageA_np)
+
+    #save 
+    print("imageA_warped.shape = ", imageA_warped.shape )
+    imgNameA_warped = f"imgA2D_warped.png"
+    pathNameA_warped = os.path.join(saveDir, imgNameA_warped) 
+    imageA_warped_np = imageA_warped.cpu().detach().numpy()
+    cv2.imwrite(pathNameA_warped,imageA_warped_np)
 
 
 if __name__ == '__main__':
@@ -110,5 +136,4 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-
-    checkRestrictionOps(args)
+    testWarpingOps(args)

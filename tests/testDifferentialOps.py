@@ -18,7 +18,9 @@ import torch.nn.functional as F
 from termcolor import colored
 
 #==================================
+sys.path.append("../pythonOps/")
 import differentialOps
+# from pythonOps import differentialOps
 
 from opticalFlow_cuda_ext import opticalFlow
 

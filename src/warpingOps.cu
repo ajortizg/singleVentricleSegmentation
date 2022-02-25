@@ -337,8 +337,8 @@ __device__ T cuda_interpolate1d_cubic(const torch::PackedTensorAccessor32<T,1,to
 
 
 template <typename T>
-__device__ T interpolate_bicubic(const torch::PackedTensorAccessor32<T,2,torch::RestrictPtrTraits> u, 
-                                 const int NY, const int NX, const T iy, const T ix) {
+__device__ T cuda_interpolate2d_bicubic(const torch::PackedTensorAccessor32<T,2,torch::RestrictPtrTraits> u, 
+                                      const int NY, const int NX, const T iy, const T ix) {
 
   const int ix_f = floorf(ix);
   const T wx = ix - ix_f;
@@ -419,8 +419,8 @@ __global__ void cuda_warp2d_cubicSpline_kernel(
   {
     const T dx = phi[iy][ix][0];
     const T dy = phi[iy][ix][1];
-    u_warped[iy][ix] = cuda_interpolate2d_bilinear(u, NY, NX, ix + dy, ix + dx);
-    //u_warped[ix] = cuda_interpolate1d_bicubic(x, idx + dx);
+    //u_warped[iy][ix] = cuda_interpolate2d_bilinear(u, NY, NX, iy + dy, ix + dx);
+    u_warped[iy][ix] = cuda_interpolate2d_bicubic(u, NY, NX, iy + dy, ix + dx);
   }
 
 }
