@@ -1,6 +1,11 @@
 #include <torch/extension.h>
 #include <vector>
 
+#include <pybind11/pybind11.h>
+
+namespace py = pybind11;
+
+
 //=======================================
 // CUDA forward declarations
 //=======================================
@@ -89,6 +94,10 @@ torch::Tensor cuda_divergence3d_cd_backward( const torch::Tensor &b);
 // }
 
 
+
+// ======================================================
+// old: functions: (remove, since they can be called by classes)
+// ===================================================
 
 torch::Tensor nabla1d_fd_forward(
     const torch::Tensor &b)
@@ -186,19 +195,123 @@ torch::Tensor divergence3d_cd_backward(
   return cuda_divergence3d_cd_backward(b);
 }
 
-// torch::Tensor alternative_nabla3d_cd_forward(
-//     const torch::Tensor &b)
-// {
-//   CHECK_INPUT(b);
 
-//   return alternative_cuda_nabla3d_cd_forward(b);
-// }
+
+
+// ======================================================
+// new: classes
+// ===================================================
+
+class Nabla1D_FD {
+public:
+  torch::Tensor forward(const torch::Tensor &b) const {
+    CHECK_INPUT(b);
+    return cuda_nabla1d_fd_forward(b);
+  }
+  torch::Tensor backward(const torch::Tensor &b) const{
+    CHECK_INPUT(b);
+    return cuda_divergence1d_fd_backward(b);
+  }
+};
+
+class Nabla2D_FD {
+public:
+  torch::Tensor forward(const torch::Tensor &b) const {
+    CHECK_INPUT(b);
+    return cuda_nabla2d_fd_forward(b);
+  }
+  torch::Tensor backward(const torch::Tensor &b) const{
+    CHECK_INPUT(b);
+    return cuda_divergence2d_fd_backward(b);
+  }
+};
+
+class Nabla3D_FD {
+public:
+  torch::Tensor forward(const torch::Tensor &b) const {
+    CHECK_INPUT(b);
+    return cuda_nabla3d_fd_forward(b);
+  }
+  torch::Tensor backward(const torch::Tensor &b) const{
+    CHECK_INPUT(b);
+    return cuda_divergence3d_fd_backward(b);
+  }
+};
+
+
+class Nabla1D_CD {
+public:
+  torch::Tensor forward(const torch::Tensor &b) const {
+    CHECK_INPUT(b);
+    return cuda_nabla1d_cd_forward(b);
+  }
+  torch::Tensor backward(const torch::Tensor &b) const{
+    CHECK_INPUT(b);
+    return cuda_divergence1d_cd_backward(b);
+  }
+};
+
+class Nabla2D_CD {
+public:
+  torch::Tensor forward(const torch::Tensor &b) const {
+    CHECK_INPUT(b);
+    return cuda_nabla2d_cd_forward(b);
+  }
+  torch::Tensor backward(const torch::Tensor &b) const{
+    CHECK_INPUT(b);
+    return cuda_divergence2d_cd_backward(b);
+  }
+};
+
+class Nabla3D_CD {
+public:
+  torch::Tensor forward(const torch::Tensor &b) const {
+    CHECK_INPUT(b);
+    return cuda_nabla3d_cd_forward(b);
+  }
+  torch::Tensor backward(const torch::Tensor &b) const{
+    CHECK_INPUT(b);
+    return cuda_divergence3d_cd_backward(b);
+  }
+};
+
 
 //=======================================
 // python interface
 //=======================================
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
 {
+
+  py::class_<Nabla1D_FD>(m,"Nabla1D_FD")
+        .def(py::init<>())
+        .def("forward", &Nabla1D_FD::forward)
+        .def("backward", &Nabla1D_FD::backward);
+
+  py::class_<Nabla2D_FD>(m,"Nabla2D_FD")
+        .def(py::init<>())
+        .def("forward", &Nabla2D_FD::forward)
+        .def("backward", &Nabla2D_FD::backward);
+
+  py::class_<Nabla3D_FD>(m,"Nabla3D_FD")
+        .def(py::init<>())
+        .def("forward", &Nabla3D_FD::forward)
+        .def("backward", &Nabla3D_FD::backward);
+
+  py::class_<Nabla1D_CD>(m,"Nabla1D_CD")
+        .def(py::init<>())
+        .def("forward", &Nabla1D_CD::forward)
+        .def("backward", &Nabla1D_CD::backward);
+
+  py::class_<Nabla2D_CD>(m,"Nabla2D_CD")
+        .def(py::init<>())
+        .def("forward", &Nabla2D_CD::forward)
+        .def("backward", &Nabla2D_CD::backward);
+
+  py::class_<Nabla3D_CD>(m,"Nabla3D_CD")
+        .def(py::init<>())
+        .def("forward", &Nabla3D_CD::forward)
+        .def("backward", &Nabla3D_CD::backward);
+
   // m.def("primal_step", &primal_update_step, "Update step for primal variable u");
   // m.def("dual_step", &dual_update_step, "Update step for dual variable p");
   // m.def("prox_l2", &prox_l2, "Proximal operator for L2 function");
@@ -215,4 +328,5 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
   m.def("nabla3d_cd_forward", &nabla3d_cd_forward, "nabla in 3D with central difference quotients");
   m.def("divergence3d_cd_backward", &divergence3d_cd_backward, "divergence in 3D with central difference quotients");
   //m.def("alternative_nabla3d_cd_forward", &alternative_nabla3d_cd_forward, "3D central difference quotients for (X,Y,Z)-data");
+
 }
