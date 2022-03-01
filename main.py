@@ -21,28 +21,3 @@ target = data[:, :, :, tf]
 # Compute the optical flow
 alg = TVL1()
 alg.compute(source, target)
-
-# u = np.random.randn(3, 4, 2)
-# v = np.random.randn(3, 4, 2)
-# w = np.random.randn(3, 4, 2)
-# uvw = np.array([u, v, w])
-# print(uvw.shape)
-# # print(u)
-# # print(uv[1,:,:]==v)
-
-# rows, cols = u.shape
-# # xx, yy = np.meshgrid(range(cols), range(rows), indexing='xy')
-
-# # grid = np.array([xx, yy])
-
-# # print("uv\n", uv)
-# # print("grid\n", grid)
-
-# # sum = uv + grid
-# # print("sum\n", sum)
-# # print(sum.shape)
-
-# x = np.array([[1, 2, 3],
-#               [4, 5, 6],
-#               [7, 8, 9]])
-# print(x**2)
