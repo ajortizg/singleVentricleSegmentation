@@ -20,6 +20,7 @@ from termcolor import colored
 #==================================
 sys.path.append("../pythonOps/")
 import differentialOps
+import mesh
 # from pythonOps import differentialOps
 
 from opticalFlow_cuda_ext import opticalFlow
@@ -96,38 +97,59 @@ print("""
 
 
 ####################################
+# test sizes for meshes
+####################################
+NX1D = 257
+LX1D = 2.
+meshInfo1D_python = mesh.MeshInfo1D(NX1D,LX1D)
+meshInfo1D_cuda = opticalFlow.MeshInfo1D(NX1D,LX1D)
+dimVec1D = torch.Size([NX1D])
+
+NY2D = 129
+NX2D = 257
+LY2D = 8.
+LX2D = 2.
+meshInfo2D_python = mesh.MeshInfo2D(NY2D,NX2D,LY2D,LX2D)
+meshInfo2D_cuda = opticalFlow.MeshInfo2D(NY2D,NX2D,LY2D,LX2D)
+dimVec2D = torch.Size([NY2D,NX2D])
+
+NZ3D = 17
+NY3D = 129
+NX3D = 257
+LZ3D = 0.5
+LY3D = 8.
+LX3D = 2.
+meshInfo3D_python = mesh.MeshInfo3D(NZ3D,NY3D,NX3D,LZ3D,LY3D,LX3D)
+meshInfo3D_cuda = opticalFlow.MeshInfo3D(NZ3D,NY3D,NX3D,LZ3D,LY3D,LX3D)
+dimVec3D = torch.Size([NZ3D,NY3D,NX3D])
+
+####################################
 # forward difference quotients
 ####################################
-dimVec1DFD = torch.Size([2000])
-nabla1DFDOp = differentialOps.Nabla1D_Forward()
-nabla1DFDOpCuda = opticalFlow.Nabla1D_FD()
-checkDiffOpPytorchVsCuda( "1D forward difference quotients", dimVec1DFD, nabla1DFDOp, nabla1DFDOpCuda )
+nabla1DFDOp = differentialOps.Nabla1D_Forward(meshInfo1D_python)
+nabla1DFDOpCuda = opticalFlow.Nabla1D_FD(meshInfo1D_cuda)
+checkDiffOpPytorchVsCuda( "1D forward difference quotients", dimVec1D, nabla1DFDOp, nabla1DFDOpCuda )
 
-dimVec2DFD = torch.Size([157,200])
-nabla2DFDOp = differentialOps.Nabla2D_Forward()
-nabla2DFDOpCuda = opticalFlow.Nabla2D_FD()
-checkDiffOpPytorchVsCuda( "2D forward difference quotients", dimVec2DFD, nabla2DFDOp, nabla2DFDOpCuda )
+nabla2DFDOp = differentialOps.Nabla2D_Forward(meshInfo2D_python)
+nabla2DFDOpCuda = opticalFlow.Nabla2D_FD(meshInfo2D_cuda)
+checkDiffOpPytorchVsCuda( "2D forward difference quotients", dimVec2D, nabla2DFDOp, nabla2DFDOpCuda )
 
-dimVec3DFD = torch.Size([27,157,200])
-nabla3DFDOp = differentialOps.Nabla3D_Forward()
-nabla3DFDOpCuda = opticalFlow.Nabla3D_FD()
-checkDiffOpPytorchVsCuda( "3D forward difference quotients", dimVec3DFD, nabla3DFDOp, nabla3DFDOpCuda )
+nabla3DFDOp = differentialOps.Nabla3D_Forward(meshInfo3D_python)
+nabla3DFDOpCuda = opticalFlow.Nabla3D_FD(meshInfo3D_cuda)
+checkDiffOpPytorchVsCuda( "3D forward difference quotients", dimVec3D, nabla3DFDOp, nabla3DFDOpCuda )
 
 
 ####################################
 # central difference quotients
 ####################################
-dimVec1DCD = torch.Size([2000])
-nabla1DCDOp = differentialOps.Nabla1D_Central()
-nabla1DCDOpCuda = opticalFlow.Nabla1D_CD()
-checkDiffOpPytorchVsCuda( "1D central difference quotients", dimVec1DCD, nabla1DCDOp, nabla1DCDOpCuda )
+nabla1DCDOp = differentialOps.Nabla1D_Central(meshInfo1D_python)
+nabla1DCDOpCuda = opticalFlow.Nabla1D_CD(meshInfo1D_cuda)
+checkDiffOpPytorchVsCuda( "1D central difference quotients", dimVec1D, nabla1DCDOp, nabla1DCDOpCuda )
 
-dimVec2DCD = torch.Size([157,200])
-nabla2DCDOp = differentialOps.Nabla2D_Central()
-nabla2DCDOpCuda = opticalFlow.Nabla2D_CD()
-checkDiffOpPytorchVsCuda( "2D central difference quotients", dimVec2DCD, nabla2DCDOp, nabla2DCDOpCuda )
+nabla2DCDOp = differentialOps.Nabla2D_Central(meshInfo2D_python)
+nabla2DCDOpCuda = opticalFlow.Nabla2D_CD(meshInfo2D_cuda)
+checkDiffOpPytorchVsCuda( "2D central difference quotients", dimVec2D, nabla2DCDOp, nabla2DCDOpCuda )
 
-dimVec3DCD = torch.Size([27,157,200])
-nabla3DCDOp = differentialOps.Nabla3D_Central()
-nabla3DCDOpCuda = opticalFlow.Nabla3D_CD()
-checkDiffOpPytorchVsCuda( "3D central difference quotients", dimVec3DCD, nabla3DCDOp, nabla3DCDOpCuda )
+nabla3DCDOp = differentialOps.Nabla3D_Central(meshInfo3D_python)
+nabla3DCDOpCuda = opticalFlow.Nabla3D_CD(meshInfo3D_cuda)
+checkDiffOpPytorchVsCuda( "3D central difference quotients", dimVec3D, nabla3DCDOp, nabla3DCDOpCuda )

@@ -3,107 +3,134 @@
 
 #include <torch/extension.h>
 #include <vector>
+#include "coreDefines.h"
 
 //=======================================
 // CUDA forward declarations
 //=======================================
 
-torch::Tensor cuda_nabla1d_fd_forward( const torch::Tensor &b);
-torch::Tensor cuda_divergence1d_fd_backward( const torch::Tensor &b);
+torch::Tensor cuda_nabla1d_fd_forward( const torch::Tensor &b, const MeshInfo1D &meshInfo);
+torch::Tensor cuda_divergence1d_fd_backward( const torch::Tensor &b, const MeshInfo1D &meshInfo);
 
-torch::Tensor cuda_nabla2d_fd_forward( const torch::Tensor &b);
-torch::Tensor cuda_divergence2d_fd_backward( const torch::Tensor &b);
+torch::Tensor cuda_nabla2d_fd_forward( const torch::Tensor &b, const MeshInfo2D &meshInfo);
+torch::Tensor cuda_divergence2d_fd_backward( const torch::Tensor &b, const MeshInfo2D &meshInfo);
 
-torch::Tensor cuda_nabla3d_fd_forward( const torch::Tensor &b);
-torch::Tensor cuda_divergence3d_fd_backward( const torch::Tensor &b);
+torch::Tensor cuda_nabla3d_fd_forward( const torch::Tensor &b, const MeshInfo3D &meshInfo);
+torch::Tensor cuda_divergence3d_fd_backward( const torch::Tensor &b, const MeshInfo3D &meshInfo);
 
-torch::Tensor cuda_nabla1d_cd_forward( const torch::Tensor &b);
-torch::Tensor cuda_divergence1d_cd_backward( const torch::Tensor &b);
+torch::Tensor cuda_nabla1d_cd_forward( const torch::Tensor &b, const MeshInfo1D &meshInfo);
+torch::Tensor cuda_divergence1d_cd_backward( const torch::Tensor &b, const MeshInfo1D &meshInfo);
 
-torch::Tensor cuda_nabla2d_cd_forward( const torch::Tensor &b);
-torch::Tensor cuda_divergence2d_cd_backward( const torch::Tensor &b);
+torch::Tensor cuda_nabla2d_cd_forward( const torch::Tensor &b, const MeshInfo2D &meshInfo);
+torch::Tensor cuda_divergence2d_cd_backward( const torch::Tensor &b, const MeshInfo2D &meshInfo);
 
-torch::Tensor cuda_nabla3d_cd_forward( const torch::Tensor &b);
-torch::Tensor cuda_divergence3d_cd_backward( const torch::Tensor &b);
+torch::Tensor cuda_nabla3d_cd_forward( const torch::Tensor &b, const MeshInfo3D &meshInfo);
+torch::Tensor cuda_divergence3d_cd_backward( const torch::Tensor &b, const MeshInfo3D &meshInfo);
 
 //=======================================
 // C++ interface
 //=======================================
-#define CHECK_CUDA(x) TORCH_CHECK(x.device().type() == torch::kCUDA, #x " must be a CUDA tensor")
-#define CHECK_CONTIGUOUS(x) TORCH_CHECK(x.is_contiguous(), #x " must be contiguous")
-#define CHECK_INPUT(x) CHECK_CUDA(x); CHECK_CONTIGUOUS(x)
-
 
 class Nabla1D_FD {
 public:
+
+  const MeshInfo1D & _meshInfo;
+
+  Nabla1D_FD( const MeshInfo1D & meshInfo ) : _meshInfo(meshInfo) {}
+
   torch::Tensor forward(const torch::Tensor &b) const {
     CHECK_INPUT(b);
-    return cuda_nabla1d_fd_forward(b);
+    return cuda_nabla1d_fd_forward(b,_meshInfo);
   }
   torch::Tensor backward(const torch::Tensor &b) const{
     CHECK_INPUT(b);
-    return cuda_divergence1d_fd_backward(b);
+    return cuda_divergence1d_fd_backward(b,_meshInfo);
   }
 };
 
 class Nabla2D_FD {
 public:
+ 
+  const MeshInfo2D & _meshInfo;
+
+  Nabla2D_FD( const MeshInfo2D & meshInfo ) : _meshInfo(meshInfo) {}
+
   torch::Tensor forward(const torch::Tensor &b) const {
     CHECK_INPUT(b);
-    return cuda_nabla2d_fd_forward(b);
+    return cuda_nabla2d_fd_forward(b,_meshInfo);
   }
   torch::Tensor backward(const torch::Tensor &b) const{
     CHECK_INPUT(b);
-    return cuda_divergence2d_fd_backward(b);
+    return cuda_divergence2d_fd_backward(b,_meshInfo);
   }
 };
 
 class Nabla3D_FD {
 public:
+
+  const MeshInfo3D & _meshInfo;
+
+  Nabla3D_FD( const MeshInfo3D & meshInfo ) : _meshInfo(meshInfo) {}
+
   torch::Tensor forward(const torch::Tensor &b) const {
     CHECK_INPUT(b);
-    return cuda_nabla3d_fd_forward(b);
+    return cuda_nabla3d_fd_forward(b,_meshInfo);
   }
   torch::Tensor backward(const torch::Tensor &b) const{
     CHECK_INPUT(b);
-    return cuda_divergence3d_fd_backward(b);
+    return cuda_divergence3d_fd_backward(b,_meshInfo);
   }
 };
 
 
 class Nabla1D_CD {
 public:
+
+  const MeshInfo1D & _meshInfo;
+
+  Nabla1D_CD( const MeshInfo1D & meshInfo ) : _meshInfo(meshInfo) {}
+
   torch::Tensor forward(const torch::Tensor &b) const {
     CHECK_INPUT(b);
-    return cuda_nabla1d_cd_forward(b);
+    return cuda_nabla1d_cd_forward(b,_meshInfo);
   }
   torch::Tensor backward(const torch::Tensor &b) const{
     CHECK_INPUT(b);
-    return cuda_divergence1d_cd_backward(b);
+    return cuda_divergence1d_cd_backward(b,_meshInfo);
   }
 };
 
 class Nabla2D_CD {
 public:
+
+  const MeshInfo2D & _meshInfo;
+
+  Nabla2D_CD( const MeshInfo2D & meshInfo ) : _meshInfo(meshInfo) {}
+
   torch::Tensor forward(const torch::Tensor &b) const {
     CHECK_INPUT(b);
-    return cuda_nabla2d_cd_forward(b);
+    return cuda_nabla2d_cd_forward(b,_meshInfo);
   }
   torch::Tensor backward(const torch::Tensor &b) const{
     CHECK_INPUT(b);
-    return cuda_divergence2d_cd_backward(b);
+    return cuda_divergence2d_cd_backward(b,_meshInfo);
   }
 };
 
 class Nabla3D_CD {
 public:
+
+  const MeshInfo3D & _meshInfo;
+
+  Nabla3D_CD( const MeshInfo3D & meshInfo ) : _meshInfo(meshInfo) {}
+  
   torch::Tensor forward(const torch::Tensor &b) const {
     CHECK_INPUT(b);
-    return cuda_nabla3d_cd_forward(b);
+    return cuda_nabla3d_cd_forward(b,_meshInfo);
   }
   torch::Tensor backward(const torch::Tensor &b) const{
     CHECK_INPUT(b);
-    return cuda_divergence3d_cd_backward(b);
+    return cuda_divergence3d_cd_backward(b,_meshInfo);
   }
 };
 

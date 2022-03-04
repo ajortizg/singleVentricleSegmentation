@@ -24,7 +24,7 @@ alg.compute(source, target)
 
 # u = np.random.randn(3, 4, 2)
 # v = np.random.randn(3, 4, 2)
-# w = np.random.randn(3, 4, 2)
+# w = np.random.randn(3, 4cd, 2)
 # uvw = np.array([u, v, w])
 # print(uvw.shape)
 # # print(u)

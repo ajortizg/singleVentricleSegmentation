@@ -1,7 +1,30 @@
+#==================================
+import sys
+sys.path.append('core')
+
+#==================================
+import os
+import torch
 import matplotlib.pyplot as plt
+import cv2
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from skimage import measure
 
+
+def saveCurve1D(input, LX1D, saveDir, name):
+    NX1D = input.shape[0]
+    grid1D = torch.linspace(0, LX1D, steps=NX1D).cuda()
+    plt.plot(grid1D.cpu().detach().numpy(), input.cpu().detach().numpy())
+    plt.ylabel(name)
+    pathName = os.path.join(saveDir, name)
+    plt.savefig(pathName,dpi=100)
+    plt.close('all')
+
+def saveImage(input,saveDir,name):
+    NY2D = input.shape[0]
+    NX2D = input.shape[1]
+    pathNameA = os.path.join(saveDir, name) 
+    cv2.imwrite(pathNameA,input.cpu().detach().numpy())
 
 def plot_slices(X, str="", block=True):
     """

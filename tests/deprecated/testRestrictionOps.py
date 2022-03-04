@@ -17,9 +17,13 @@ import time
 import torch.nn.functional as F
 
 #==================================
+sys.path.append("../pythonOps/")
 import restrictionOps
 
-# from tvl1OF3d_cuda_ext import tvl1OF3d
+sys.path.append("../utils/")
+import plots
+
+from opticalFlow_cuda_ext import opticalFlow
 
 
 #==================================
@@ -84,23 +88,48 @@ def checkRestrictionOps(args):
     imageA = torch.from_numpy(nii_data[z,:,:,tA]).float().to(DEVICE)
     imageB = torch.from_numpy(nii_data[z,:,:,tB]).float().to(DEVICE)
 
+    
 
-    restrOp2D = restrictionOps.Restriction2D_Test1()
-    imageA_down = restrOp2D.scale_down(imageA)
+    
+    # sizeImageA_down = torch.Size([NY//2,NX//2])
+    # imageA_down = torch.zeros((sizeImageA_down)).cuda()
+    # restrictionOps.restrict2d(imageA,imageA_down)
+    imageA_down = restrictionOps.restrict2d(imageA)
 
+    # save 
     print("imageA.shape = ", imageA.shape )
     print("imageA_down.shape = ", imageA_down.shape )
 
+    imageA_np = imageA.cpu().detach().numpy()
+    plots.saveImage(imageA_np,saveDir,"imgA2D.png")
 
-    imgNameA = f"imgA2D.png"
-    pathNameA = os.path.join(saveDir, imgNameA) 
-    cv2.imwrite(pathNameA,imageA)
-    imgNameA_down = f"imgA2D_down.png"
-    pathNameA_down = os.path.join(saveDir, imgNameA_down) 
-    cv2.imwrite(pathNameA_down,imageA_down)
+    imageA_down_np = imageA_down.cpu().detach().numpy()
+    plots.saveImage(imageA_down_np,saveDir,"imgA2D_down.png")
 
     #TODO swap result (Z,Y,X) back to (X,Y,Z):
     #result_backSwap = np.swapaxes(result, 0, 2)
+
+
+
+    #==================================
+    # check in 3D
+    # tA = 8
+    # volA = torch.from_numpy(nii_data[:,:,:,tA]).float().to(DEVICE)
+    # volA_down = restrictionOps.restrict3d(volA)
+
+    # # save 
+    # print("imageA.shape = ", imageA.shape )
+    # print("imageA_down.shape = ", imageA_down.shape )
+
+    # volA_np = volA.cpu().detach().numpy()
+    # plots.plot_3d(volA_np) #,saveDir,"volA3D.png")
+
+    # volA_down_np = volA_down.cpu().detach().numpy()
+    # plots.plot_3d(volA_down_np) #,saveDir,"volA2D_down.png")
+
+    #TODO swap result (Z,Y,X) back to (X,Y,Z):
+    #result_backSwap = np.swapaxes(result, 0, 2)
+
 
 
 if __name__ == '__main__':

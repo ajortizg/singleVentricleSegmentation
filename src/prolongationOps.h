@@ -1,0 +1,73 @@
+#ifndef __PROLONGATIONOPS_H_
+#define __PROLONGATIONOPS_H_
+
+#include <torch/extension.h>
+#include <vector>
+#include "coreDefines.h"
+
+//=======================================
+// CUDA forward declarations
+//=======================================
+
+torch::Tensor cuda_prolongate1d( const torch::Tensor &u, const MeshInfo1D& meshInfo, const MeshInfo1D& meshInfoProlongated, const InterpolationType interpolation = INTERPOLATE_LINEAR);
+torch::Tensor cuda_prolongate2d( const torch::Tensor &u, const MeshInfo2D& meshInfo, const MeshInfo2D& meshInfoProlongated, const InterpolationType interpolation = INTERPOLATE_LINEAR);
+torch::Tensor cuda_prolongate3d( const torch::Tensor &u, const MeshInfo3D& meshInfo, const MeshInfo3D& meshInfoProlongated, const InterpolationType interpolation = INTERPOLATE_LINEAR);
+
+//=======================================
+// C++ interface
+//=======================================
+
+class Prolongation1D {
+public:
+
+  const MeshInfo1D & _meshInfo;
+  const MeshInfo1D & _meshInfoProlongated;
+
+  Prolongation1D( const MeshInfo1D & meshInfo, const MeshInfo1D& meshInfoProlongated ) : _meshInfo(meshInfo), _meshInfoProlongated(meshInfoProlongated) {}
+
+  torch::Tensor forward(const torch::Tensor &u, const InterpolationType interpolation = INTERPOLATE_LINEAR) const {
+    CHECK_INPUT(u);
+    return cuda_prolongate1d(u,_meshInfo,_meshInfoProlongated,interpolation);
+  }
+  // torch::Tensor backward(const torch::Tensor &b) const{
+  //   CHECK_INPUT(b);
+  // }
+};
+
+
+class Prolongation2D {
+public:
+
+  const MeshInfo2D & _meshInfo;
+  const MeshInfo2D & _meshInfoProlongated;
+
+  Prolongation2D( const MeshInfo2D & meshInfo, const MeshInfo2D& meshInfoProlongated ) : _meshInfo(meshInfo), _meshInfoProlongated(meshInfoProlongated) {}
+
+  torch::Tensor forward(const torch::Tensor &u, const InterpolationType interpolation = INTERPOLATE_LINEAR) const {
+    CHECK_INPUT(u);
+    return cuda_prolongate2d(u,_meshInfo,_meshInfoProlongated,interpolation);
+  }
+  // torch::Tensor backward(const torch::Tensor &b) const{
+  //   CHECK_INPUT(b);
+  // }
+};
+
+
+class Prolongation3D {
+public:
+
+  const MeshInfo3D & _meshInfo;
+  const MeshInfo3D & _meshInfoProlongated;
+
+  Prolongation3D( const MeshInfo3D & meshInfo, const MeshInfo3D& meshInfoProlongated ) : _meshInfo(meshInfo), _meshInfoProlongated(meshInfoProlongated) {}
+
+  torch::Tensor forward(const torch::Tensor &u, const InterpolationType interpolation = INTERPOLATE_LINEAR) const {
+    CHECK_INPUT(u);
+    return cuda_prolongate3d(u,_meshInfo,_meshInfoProlongated,interpolation);
+  }
+  // torch::Tensor backward(const torch::Tensor &b) const{
+  //   CHECK_INPUT(b);
+  // }
+};
+
+#endif

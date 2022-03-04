@@ -21,7 +21,7 @@ setup(
     ext_package='opticalFlow_cuda_ext',
     ext_modules=[
         CUDAExtension('opticalFlow',
-            sources=['src/bindings.cpp', 'src/differentialOps.cu', 'src/warpingOps.cu'],
+            sources=['src/bindings.cpp', 'src/differentialOps.cu', 'src/warpingOps.cu', 'src/prolongationOps.cu'],
             runtime_library_dirs = library_dirs,
             extra_compile_args={'cxx': [], 'nvcc': ['-O3']}),
     ],

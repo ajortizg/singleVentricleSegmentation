@@ -8,7 +8,8 @@ pip install nibabel
 pip install matplotlib
 pip install tikzplotlib
 pip install termcolor
-
+pip install skipy
+conda install scikit-image
 
 
 to install setup file:
