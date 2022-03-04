@@ -9,6 +9,8 @@ import matplotlib.pyplot as plt
 import cv2
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from skimage import measure
+from mpl_toolkits.mplot3d import axes3d
+import numpy as np
 
 
 def saveCurve1D(input, LX1D, saveDir, name):
@@ -28,36 +30,36 @@ def saveImage(input,saveDir,name):
 
 def plot_slices(X, str="", block=True):
     """
-    X:  numpy array with shape [X,Y,Z]
+    X:  numpy array with shape [Z,Y,X]
     """
-    fig, _ = plt.subplots(3, X.shape[2] // 3)
+    fig, _ = plt.subplots(3, X.shape[0] // 3)
     plt.suptitle(f"{str} {X.shape}")
     for i, ax in enumerate(fig.get_axes()):
-        ax.imshow(X[:, :, i].T, cmap="gray", origin="lower")
+        ax.imshow(X[i, :, :], cmap="gray", origin="lower")
         # ax.imshow(X[:, :, i], cmap="gray")
     plt.show(block=block)
 
 
 def plot_slice(slice, block=True):
     plt.figure()
-    plt.imshow(slice.T, cmap="gray", origin="lower")
+    # plt.imshow(slice.T, cmap="gray", origin="lower")
+    plt.imshow(slice, cmap="gray")
     plt.title(f"{slice.shape}")
     plt.show(block=block)
 
 
-def plot_3d(image, threshold=-300):
-    # p = image.transpose(2,1,0)
-    p = image
-    verts, faces, normals, values = measure.marching_cubes(
-        p, 25.0, method="lewiner")
-    fig = plt.figure(figsize=(10, 10))
-    ax = fig.add_subplot(111, projection='3d')
-    mesh = Poly3DCollection(verts[faces], alpha=0.1)
-    face_color = [0.5, 0.5, 1]
-    mesh.set_facecolor(face_color)
-    ax.add_collection3d(mesh)
-    ax.set_xlim(0, p.shape[0])
-    ax.set_ylim(0, p.shape[1])
-    ax.set_zlim(0, p.shape[2])
+def quiver3():
+    fig = plt.figure()
+    ax = fig.gca(projection='3d')
 
+    x, y, z = np.meshgrid(np.arange(-0.8, 1, 0.2),
+                          np.arange(-0.8, 1, 0.2),
+                          np.arange(-0.8, 1, 0.8))
+
+    u = np.sin(np.pi * x) * np.cos(np.pi * y) * np.cos(np.pi * z)
+    v = -np.cos(np.pi * x) * np.sin(np.pi * y) * np.cos(np.pi * z)
+    w = (np.sqrt(2.0 / 3.0) * np.cos(np.pi * x) * np.cos(np.pi * y) *
+         np.sin(np.pi * z))
+
+    ax.quiver(x, y, z, u, v, w, length=0.1, color='black')
     plt.show()
