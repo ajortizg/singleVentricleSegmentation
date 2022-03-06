@@ -14,47 +14,78 @@
 
 
 class MeshInfo1D {
-
-public:
   
+protected:
+
   const int _NX;
   const float _LX;
   const float _hX;
+
+public:
 
   MeshInfo1D( const int NX, const float LX ) : 
   _NX(NX), 
   _LX(LX), 
   _hX(LX/(_NX - 1)) {}
 
+  const int getNX() const { return _NX;}
+  const float getLX() const { return _LX;}
+  const float gethX() const { return _hX;}
+
 };
 
 class MeshInfo2D {
 
-public:
+protected:
   
   const int _NY,_NX;
   const float _LY,_LX;
   const float _hY,_hX;
+
+public:
 
   MeshInfo2D( const int NY, const int NX, const float LY, const float LX ) : 
   _NY(NY), _NX(NX), 
   _LY(LY), _LX(LX),
   _hY(LY/(_NY - 1)), _hX(LX/(_NX - 1)) {}
 
+  const int getNX() const { return _NX;}
+  const float getLX() const { return _LX;}
+  const float gethX() const { return _hX;}
+
+  const int getNY() const { return _NY;}
+  const float getLY() const { return _LY;}
+  const float gethY() const { return _hY;}
+
 };
 
 class MeshInfo3D {
 
-public:
+protected:
   
   const int _NZ,_NY,_NX;
   const float _LZ,_LY,_LX;
   const float _hZ,_hY,_hX;
 
+public:
+
   MeshInfo3D( const int NZ, const int NY, const int NX, const float LZ, const float LY, const float LX ) : 
    _NZ(NZ), _NY(NY), _NX(NX),
    _LZ(LZ), _LY(LY), _LX(LX),
    _hZ(LZ/(_NZ - 1)), _hY(LY/(_NY - 1)), _hX(LX/(_NX - 1)) {}
+
+  const int getNX() const { return _NX;}
+  const float getLX() const { return _LX;}
+  const float gethX() const { return _hX;}
+
+  const int getNY() const { return _NY;}
+  const float getLY() const { return _LY;}
+  const float gethY() const { return _hY;}
+
+  const int getNZ() const { return _NZ;}
+  const float getLZ() const { return _LZ;}
+  const float gethZ() const { return _hZ;}
+
 
 };
 
@@ -65,8 +96,8 @@ typedef enum
 {
   //INTERPOLATE_NEAREST,
   INTERPOLATE_LINEAR,
-  INTERPOLATE_CUBIC_HERMITESPLINE,
-  INTERPOLATE_CUBIC_BSPLINE
+  INTERPOLATE_CUBIC_HERMITESPLINE
+  // INTERPOLATE_CUBIC_BSPLINE
 } InterpolationType;
 
 

@@ -19,7 +19,8 @@ import torch.nn.functional as F
 
 
 #==================================
-sys.path.append("../pythonOps/")
+pythonOps_lib_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../pythonOps'))
+sys.path.append(pythonOps_lib_path)
 import mesh
 import prolongationOps
 

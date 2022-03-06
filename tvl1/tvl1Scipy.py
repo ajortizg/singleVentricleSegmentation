@@ -1,18 +1,29 @@
+#==================================
+import sys
+# sys.path.append('core')
+
 import numpy as np
 from scipy import ndimage
-from derivatives.derivatives import Nabla3D_Central as NablaCentral
-from derivatives.derivatives import Nabla3D_Forward as NablaForward
-from utils.plots import *
 import torch
-from utils.config import *
 import time
 from tqdm import tqdm
-import sys
 sys.path.append("../utils")
-sys.path.append("../derivatives")
+from utils.plots import *
+from utils.config import *
 
 
-class TVL1:
+# sys.path.append("../pythonOps/")
+# from pythonOps.mesh import *
+# from pythonOps.differentialOps import *
+pythonOps_lib_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../pythonOps'))
+sys.path.append(pythonOps_lib_path)
+import mesh
+import differentialOps
+
+from opticalFlow_cuda_ext import opticalFlow
+
+
+class TVL1Scipy:
     def __init__(self):
         # binomial filter for restriction operator
         # self.binomial = (1.0 / 256.0) * np.array([[[1, 4, 6, 4, 1],
@@ -84,7 +95,7 @@ class TVL1:
             p3s[s-1] = self.prolongation(p3s[s])
 
         pbar.close()
-        print(us[0])
+        # print(us[0])
         # for i, s in enumerate(srcs):
         #     print(f"scale: {i}", s.shape, uvws[i].shape)
         #     block = False
@@ -100,8 +111,16 @@ class TVL1:
         #     plot_slices(warp, str="W", block=True)
 
     def step(self, I0, I1, u, grid, p1, p2, p3, pbar):
+        NZ = I0.shape[0]
+        NY = I0.shape[1]
+        NX = I0.shape[2]
+        LZ = NZ-1
+        LY = NY-1
+        LX = NX-1
+        meshInfo3D_python = MeshInfo3D(NZ,NY,NX,LZ,LY,LX)
+
         # Compute target image gradients
-        nabla_ctrl = NablaCentral()
+        nabla_ctrl = Nabla3D_Central(meshInfo3D_python)
         I1_grad = nabla_ctrl.forward(torch.from_numpy(
             I1).to(DEVICE)).cpu().detach().numpy()
 
@@ -159,13 +178,13 @@ class TVL1:
 
                     # Proposition 1
                     # Compute the gradient of the optical flow using forward differences
-                    nabla_fwd = NablaForward()
+                    # nabla_fwd = NablaForward()
                     u_torch = torch.from_numpy(u).to(DEVICE)
-                    u_gradx = nabla_fwd.forward(u_torch[:, :, :, 0]).cpu(
+                    u_gradx = nabla_ctrl.forward(u_torch[:, :, :, 0]).cpu(
                     ).detach().numpy()  # gradient of u_x
-                    u_grady = nabla_fwd.forward(u_torch[:, :, :, 1]).cpu(
+                    u_grady = nabla_ctrl.forward(u_torch[:, :, :, 1]).cpu(
                     ).detach().numpy()  # gradient of u_y
-                    u_gradz = nabla_fwd.forward(u_torch[:, :, :, 2]).cpu(
+                    u_gradz = nabla_ctrl.forward(u_torch[:, :, :, 2]).cpu(
                     ).detach().numpy()  # gradient of u_z
 
                     p1_tilde = p1 + (TAU / THETA) * u_gradx

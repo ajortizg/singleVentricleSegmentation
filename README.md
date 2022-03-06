@@ -10,7 +10,7 @@ pip install tikzplotlib
 pip install termcolor
 pip install skipy
 conda install scikit-image
-
+pip install tqdm
 
 to install setup file:
  pip install . 

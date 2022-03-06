@@ -218,8 +218,8 @@ torch::Tensor cuda_warp1d(
   TORCH_CHECK(phi.dim() == 2, "Expected 2d tensor")
 
   const int NX = u.size(0);
-  const float LX = meshInfo._LX;
-  const float hX = meshInfo._hX;
+  const float LX = meshInfo.getLX();
+  const float hX = meshInfo.gethX();
 
   auto u_warped = torch::zeros({NX}, u.options());
 
@@ -278,10 +278,10 @@ torch::Tensor cuda_warp2d(
 
   const int NY = u.size(0);
   const int NX = u.size(1);
-  const float LY = meshInfo._LY;
-  const float LX = meshInfo._LX;
-  const float hY = meshInfo._hY;
-  const float hX = meshInfo._hX;
+  const float LY = meshInfo.getLY();
+  const float LX = meshInfo.getLX();
+  const float hY = meshInfo.gethY();
+  const float hX = meshInfo.gethX();
 
   auto u_warped = torch::zeros({NY,NX}, u.options());
 
@@ -345,12 +345,12 @@ torch::Tensor cuda_warp3d(
   const int NZ = u.size(0);
   const int NY = u.size(1);
   const int NX = u.size(2);
-  const float LZ = meshInfo._LY;
-  const float LY = meshInfo._LY;
-  const float LX = meshInfo._LX;
-  const float hZ = meshInfo._hY;
-  const float hY = meshInfo._hY;
-  const float hX = meshInfo._hX;
+  const float LZ = meshInfo.getLZ();
+  const float LY = meshInfo.getLY();
+  const float LX = meshInfo.getLX();
+  const float hZ = meshInfo.gethZ();
+  const float hY = meshInfo.gethY();
+  const float hX = meshInfo.gethX();
 
   auto u_warped = torch::zeros({NZ,NY,NX}, u.options());
 

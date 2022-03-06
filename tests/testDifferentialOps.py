@@ -1,6 +1,6 @@
 #==================================
 import sys
-sys.path.append('core')
+# sys.path.append('core')
 
 #==================================
 import argparse
@@ -18,10 +18,17 @@ import torch.nn.functional as F
 from termcolor import colored
 
 #==================================
-sys.path.append("../pythonOps/")
-import differentialOps
+# sys.path.append("../pythonOps")
+# # import differentialOps
+# # import mesh
+# from pythonOps.mesh import *
+# from pythonOps.differentialOps import *
+# # from pythonOps import differentialOps
+
+pythonOps_lib_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../pythonOps'))
+sys.path.append(pythonOps_lib_path)
 import mesh
-# from pythonOps import differentialOps
+import differentialOps
 
 from opticalFlow_cuda_ext import opticalFlow
 

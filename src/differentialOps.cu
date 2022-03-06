@@ -430,7 +430,7 @@ torch::Tensor cuda_nabla1d_fd_forward(
   TORCH_CHECK(b.dim() == 1, "Expected 1d tensor");
 
   const int NX = b.size(0);
-  const float hX = meshInfo._hX;
+  const float hX = meshInfo.gethX();
 
   auto Db = torch::zeros({NX, 1}, b.options());
 
@@ -466,7 +466,7 @@ torch::Tensor cuda_divergence1d_fd_backward(
   TORCH_CHECK(p.dim() == 2, "Expected 2d tensor");
 
   const int NX = p.size(0);
-  const float hX = meshInfo._hX;
+  const float hX = meshInfo.gethX();
 
   auto divp = torch::zeros({NX}, p.options());
 
@@ -503,8 +503,8 @@ torch::Tensor cuda_nabla2d_fd_forward(
 
   const int NY = b.size(0);
   const int NX = b.size(1);
-  const float hY = meshInfo._hY;
-  const float hX = meshInfo._hX;
+  const float hY = meshInfo.gethY();
+  const float hX = meshInfo.gethX();
 
   auto Db = torch::zeros({NY, NX, 2}, b.options());
 
@@ -542,8 +542,8 @@ torch::Tensor cuda_divergence2d_fd_backward(
 
   const int NY = p.size(0);
   const int NX = p.size(1);
-  const float hY = meshInfo._hY;
-  const float hX = meshInfo._hX;
+  const float hY = meshInfo.gethY();
+  const float hX = meshInfo.gethX();
 
   auto divp = torch::zeros({NY,NX}, p.options());
 
@@ -581,9 +581,9 @@ torch::Tensor cuda_nabla3d_fd_forward(
   const int NZ = b.size(0);
   const int NY = b.size(1);
   const int NX = b.size(2);
-  const float hZ = meshInfo._hZ;
-  const float hY = meshInfo._hY;
-  const float hX = meshInfo._hX;
+  const float hZ = meshInfo.gethZ();
+  const float hY = meshInfo.gethY();
+  const float hX = meshInfo.gethX();
 
   auto Db = torch::zeros({NZ,NY,NX, 3}, b.options());
 
@@ -623,9 +623,9 @@ torch::Tensor cuda_divergence3d_fd_backward(
   const int NZ = p.size(0);
   const int NY = p.size(1);
   const int NX = p.size(2);
-  const float hZ = meshInfo._hZ;
-  const float hY = meshInfo._hY;
-  const float hX = meshInfo._hX;
+  const float hZ = meshInfo.gethZ();
+  const float hY = meshInfo.gethY();
+  const float hX = meshInfo.gethX();
 
   auto divp = torch::zeros({NZ,NY,NX}, p.options());
 
@@ -666,7 +666,7 @@ torch::Tensor cuda_nabla1d_cd_forward(
   TORCH_CHECK(b.dim() == 1, "Expected 1d tensor");
 
   const int NX = b.size(0);
-  const float hX = meshInfo._hX;
+  const float hX = meshInfo.gethX();
 
   auto Db = torch::zeros({NX, 1}, b.options());
 
@@ -701,7 +701,7 @@ torch::Tensor cuda_divergence1d_cd_backward(
   TORCH_CHECK(p.dim() == 2, "Expected 2d tensor");
 
   const int NX = p.size(0);
-  const float hX = meshInfo._hX;
+  const float hX = meshInfo.gethX();
 
   auto divp = torch::zeros({NX}, p.options());
 
@@ -738,8 +738,8 @@ torch::Tensor cuda_nabla2d_cd_forward(
 
   const int NY = b.size(0);
   const int NX = b.size(1);
-  const float hY = meshInfo._hY;
-  const float hX = meshInfo._hX;
+  const float hY = meshInfo.gethY();
+  const float hX = meshInfo.gethX();
 
   auto Db = torch::zeros({NY, NX, 2}, b.options());
 
@@ -777,8 +777,8 @@ torch::Tensor cuda_divergence2d_cd_backward(
 
   const int NY = p.size(0);
   const int NX = p.size(1);
-  const float hY = meshInfo._hY;
-  const float hX = meshInfo._hX;
+  const float hY = meshInfo.gethY();
+  const float hX = meshInfo.gethX();
 
   auto divp = torch::zeros({NY,NX}, p.options());
 
@@ -816,9 +816,9 @@ torch::Tensor cuda_nabla3d_cd_forward(
   const int NZ = b.size(0);
   const int NY = b.size(1);
   const int NX = b.size(2);
-  const float hZ = meshInfo._hZ;
-  const float hY = meshInfo._hY;
-  const float hX = meshInfo._hX;
+  const float hZ = meshInfo.gethZ();
+  const float hY = meshInfo.gethY();
+  const float hX = meshInfo.gethX();
 
   auto Db = torch::zeros({NZ,NY,NX, 3}, b.options());
 
@@ -857,9 +857,9 @@ torch::Tensor cuda_divergence3d_cd_backward(
   const int NZ = p.size(0);
   const int NY = p.size(1);
   const int NX = p.size(2);
-  const float hZ = meshInfo._hZ;
-  const float hY = meshInfo._hY;
-  const float hX = meshInfo._hX;
+  const float hZ = meshInfo.gethZ();
+  const float hY = meshInfo.gethY();
+  const float hX = meshInfo.gethX();
 
   auto divp = torch::zeros({NZ,NY,NX}, p.options());
 

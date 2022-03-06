@@ -13,13 +13,31 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
 {
 
   py::class_<MeshInfo1D>(m,"MeshInfo1D")
-        .def(py::init<const int, const float>());
+        .def(py::init<const int, const float>())
+        .def("getNX", &MeshInfo1D::getNX)
+        .def("getLX", &MeshInfo1D::getLX)
+        .def("gethX", &MeshInfo1D::gethX);
 
   py::class_<MeshInfo2D>(m,"MeshInfo2D")
-        .def(py::init<const int, const int, const float, const float>());
+        .def(py::init<const int, const int, const float, const float>())
+        .def("getNX", &MeshInfo2D::getNX)
+        .def("getLX", &MeshInfo2D::getLX)
+        .def("gethX", &MeshInfo2D::gethX)
+        .def("getNY", &MeshInfo2D::getNY)
+        .def("getLY", &MeshInfo2D::getLY)
+        .def("gethY", &MeshInfo2D::gethY);
 
   py::class_<MeshInfo3D>(m,"MeshInfo3D")
-        .def(py::init<const int, const int, const int, const float, const float, const float>());
+        .def(py::init<const int, const int, const int, const float, const float, const float>())
+        .def("getNX", &MeshInfo3D::getNX)
+        .def("getLX", &MeshInfo3D::getLX)
+        .def("gethX", &MeshInfo3D::gethX)
+        .def("getNY", &MeshInfo3D::getNY)
+        .def("getLY", &MeshInfo3D::getLY)
+        .def("gethY", &MeshInfo3D::gethY)
+        .def("getNZ", &MeshInfo3D::getNZ)
+        .def("getLZ", &MeshInfo3D::getLZ)
+        .def("gethZ", &MeshInfo3D::gethZ);
 
   //=======================================
   // differentialOps
@@ -61,7 +79,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
   py::enum_<InterpolationType>(m, "InterpolationType")
     .value("INTERPOLATE_LINEAR", InterpolationType::INTERPOLATE_LINEAR)
     .value("INTERPOLATE_CUBIC_HERMITESPLINE", InterpolationType::INTERPOLATE_CUBIC_HERMITESPLINE)
-    .value("INTERPOLATE_CUBIC_BSPLINE", InterpolationType::INTERPOLATE_CUBIC_BSPLINE)
+//     .value("INTERPOLATE_CUBIC_BSPLINE", InterpolationType::INTERPOLATE_CUBIC_BSPLINE)
     .export_values();
 
   //=======================================

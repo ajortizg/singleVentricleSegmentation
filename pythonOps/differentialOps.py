@@ -6,6 +6,8 @@ from termcolor import colored
 
 import coreDefines
 import mesh
+# from .coreDefines import *
+# from .mesh import *
 
 # forward difference quotients in 1d
 class Nabla1D_Forward:      

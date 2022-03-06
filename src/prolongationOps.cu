@@ -224,13 +224,13 @@ torch::Tensor cuda_prolongate1d(
 {
   TORCH_CHECK(u.dim() == 1, "Expected 1d tensor");
 
-  const int NX = meshInfo._NX;
-  const float LX = meshInfo._LX;
-  const float hX = meshInfo._hX;
+  const int NX = meshInfo.getNX();
+  const float LX = meshInfo.getLX();
+  const float hX = meshInfo.gethX();
 
-  const int NX_Prolong = meshInfoProlongated._NX;
-  const float LX_Prolong = meshInfoProlongated._LX;
-  const float hX_Prolong = meshInfoProlongated._hX;
+  const int NX_Prolong = meshInfoProlongated.getNX();
+  const float LX_Prolong = meshInfoProlongated.getLX();
+  const float hX_Prolong = meshInfoProlongated.gethX();
 
   auto u_prolongated = torch::zeros({NX_Prolong}, u.options());
 
@@ -288,17 +288,17 @@ torch::Tensor cuda_prolongate2d(
 
   const int NY = u.size(0);
   const int NX = u.size(1);
-  const float LY = meshInfo._LY;
-  const float LX = meshInfo._LX;
-  const float hY = meshInfo._hY;
-  const float hX = meshInfo._hX;
+  const float LY = meshInfo.getLY();
+  const float LX = meshInfo.getLX();
+  const float hY = meshInfo.gethY();
+  const float hX = meshInfo.gethX();
 
-  const int NY_Prolong = meshInfoProlongated._NY;
-  const int NX_Prolong = meshInfoProlongated._NX;
-  const float LY_Prolong = meshInfoProlongated._LY;
-  const float LX_Prolong = meshInfoProlongated._LX;
-  const float hY_Prolong = meshInfoProlongated._hY;
-  const float hX_Prolong = meshInfoProlongated._hX;
+  const int NY_Prolong = meshInfoProlongated.getNY();
+  const int NX_Prolong = meshInfoProlongated.getNX();
+  const float LY_Prolong = meshInfoProlongated.getLY();
+  const float LX_Prolong = meshInfoProlongated.getLX();
+  const float hY_Prolong = meshInfoProlongated.gethY();
+  const float hX_Prolong = meshInfoProlongated.gethX();
 
   auto u_prolongated = torch::zeros({NY_Prolong,NX_Prolong}, u.options());
 
@@ -365,22 +365,22 @@ torch::Tensor cuda_prolongate3d(
   const int NZ = u.size(0);
   const int NY = u.size(1);
   const int NX = u.size(2);
-  const float LZ = meshInfo._LY;
-  const float LY = meshInfo._LY;
-  const float LX = meshInfo._LX;
-  const float hZ = meshInfo._hY;
-  const float hY = meshInfo._hY;
-  const float hX = meshInfo._hX;
+  const float LZ = meshInfo.getLZ();
+  const float LY = meshInfo.getLY();
+  const float LX = meshInfo.getLX();
+  const float hZ = meshInfo.gethZ();
+  const float hY = meshInfo.gethY();
+  const float hX = meshInfo.gethX();
 
-  const int NZ_Prolong = meshInfoProlongated._NZ;
-  const int NY_Prolong = meshInfoProlongated._NY;
-  const int NX_Prolong = meshInfoProlongated._NX;
-  const float LZ_Prolong = meshInfoProlongated._LZ;
-  const float LY_Prolong = meshInfoProlongated._LY;
-  const float LX_Prolong = meshInfoProlongated._LX;
-  const float hZ_Prolong = meshInfoProlongated._hZ;
-  const float hY_Prolong = meshInfoProlongated._hY;
-  const float hX_Prolong = meshInfoProlongated._hX;
+  const int NZ_Prolong = meshInfoProlongated.getNZ();
+  const int NY_Prolong = meshInfoProlongated.getNY();
+  const int NX_Prolong = meshInfoProlongated.getNX();
+  const float LZ_Prolong = meshInfoProlongated.getLZ();
+  const float LY_Prolong = meshInfoProlongated.getLY();
+  const float LX_Prolong = meshInfoProlongated.getLX();
+  const float hZ_Prolong = meshInfoProlongated.gethZ();
+  const float hY_Prolong = meshInfoProlongated.gethY();
+  const float hX_Prolong = meshInfoProlongated.gethX();
 
   auto u_prolongated = torch::zeros({NZ_Prolong,NY_Prolong,NX_Prolong}, u.options());
 

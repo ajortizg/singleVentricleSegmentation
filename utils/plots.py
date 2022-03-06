@@ -11,7 +11,11 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from skimage import measure
 from mpl_toolkits.mplot3d import axes3d
 import numpy as np
+import math
 
+##########################
+# pytorch input
+#########################
 
 def saveCurve1D(input, LX1D, saveDir, name):
     NX1D = input.shape[0]
@@ -28,6 +32,35 @@ def saveImage(input,saveDir,name):
     pathNameA = os.path.join(saveDir, name) 
     cv2.imwrite(pathNameA,input.cpu().detach().numpy())
 
+
+def save_slices(image3D, fileName, saveDir):
+    """
+    image3D:  pytorch array with shape [Z,Y,X]
+    """
+    numZSlices = image3D.shape[0]
+    aspect_ratio = 16./9.
+    numCols = int(numZSlices / aspect_ratio)
+    if( numZSlices % numCols > 0):
+        numCols += 1
+    numRows = math.ceil(numZSlices / numCols)
+
+    fig, axs = plt.subplots(numRows, numCols,constrained_layout=True,figsize=(16.,9.),dpi=4)
+    #fig.canvas.manager.set_window_title('4D Nifti Image')
+    fig.suptitle('4D_Nifti file: {} \n with {} slices in z-direction'.format(os.path.basename(fileName),numZSlices), fontsize=16)
+    for z, ax in enumerate(axs.flat):
+        if z < numZSlices:
+            ax.imshow(image3D[z,:,:].cpu().detach().numpy(),cmap='gray', interpolation=None)
+            ax.set_title("layer {}".format(z))
+            ax.axis('off')
+        else:
+            ax.axis('off')
+    pathName = os.path.join(saveDir, fileName)
+    plt.savefig(pathName,dpi=100)
+    plt.close('all')
+
+##########################
+# numpy input
+#########################
 def plot_slices(X, str="", block=True):
     """
     X:  numpy array with shape [Z,Y,X]
