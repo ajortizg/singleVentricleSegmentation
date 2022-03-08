@@ -28,9 +28,9 @@ public:
   _LX(LX), 
   _hX(LX/(_NX - 1)) {}
 
-  const int getNX() const { return _NX;}
-  const float getLX() const { return _LX;}
-  const float gethX() const { return _hX;}
+  int getNX() const { return _NX;}
+  float getLX() const { return _LX;}
+  float gethX() const { return _hX;}
 
 };
 
@@ -49,13 +49,13 @@ public:
   _LY(LY), _LX(LX),
   _hY(LY/(_NY - 1)), _hX(LX/(_NX - 1)) {}
 
-  const int getNX() const { return _NX;}
-  const float getLX() const { return _LX;}
-  const float gethX() const { return _hX;}
+  int getNX() const { return _NX;}
+  float getLX() const { return _LX;}
+  float gethX() const { return _hX;}
 
-  const int getNY() const { return _NY;}
-  const float getLY() const { return _LY;}
-  const float gethY() const { return _hY;}
+  int getNY() const { return _NY;}
+  float getLY() const { return _LY;}
+  float gethY() const { return _hY;}
 
 };
 
@@ -74,17 +74,17 @@ public:
    _LZ(LZ), _LY(LY), _LX(LX),
    _hZ(LZ/(_NZ - 1)), _hY(LY/(_NY - 1)), _hX(LX/(_NX - 1)) {}
 
-  const int getNX() const { return _NX;}
-  const float getLX() const { return _LX;}
-  const float gethX() const { return _hX;}
+  int getNX() const { return _NX;}
+  float getLX() const { return _LX;}
+  float gethX() const { return _hX;}
 
-  const int getNY() const { return _NY;}
-  const float getLY() const { return _LY;}
-  const float gethY() const { return _hY;}
+  int getNY() const { return _NY;}
+  float getLY() const { return _LY;}
+  float gethY() const { return _hY;}
 
-  const int getNZ() const { return _NZ;}
-  const float getLZ() const { return _LZ;}
-  const float gethZ() const { return _hZ;}
+  int getNZ() const { return _NZ;}
+  float getLZ() const { return _LZ;}
+  float gethZ() const { return _hZ;}
 
 
 };

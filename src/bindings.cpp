@@ -2,6 +2,7 @@
 #include "differentialOps.h"
 #include "prolongationOps.h"
 #include "warpingOps.h"
+#include "opticalFlowOps.h"
 
 namespace py = pybind11;
 
@@ -111,6 +112,13 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
   py::class_<Prolongation3D>(m,"Prolongation3D")
       .def(py::init<const MeshInfo3D&,const MeshInfo3D&>())
       .def("forward", &Prolongation3D::forward);
+
+
+
+  //=======================================
+  // optical flow
+  //=======================================
+  m.def("TVL1OF_threshold", &TVL1OF_threshold, "Update step for v");
 
 
 }

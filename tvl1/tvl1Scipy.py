@@ -7,10 +7,12 @@ from scipy import ndimage
 import torch
 import time
 from tqdm import tqdm
+
+
 sys.path.append("../utils")
 from utils.plots import *
 from utils.config import *
-
+from utils.flow_viz import *
 
 # sys.path.append("../pythonOps/")
 # from pythonOps.mesh import *
@@ -37,12 +39,12 @@ class TVL1Scipy:
 
     def compute(self, I0, I1):
         # Normalize the data between 0 and 1
-        I0 = self.normalize(I0)
-        I1 = self.normalize(I1)
+        # I0 = self.normalize(I0)
+        # I1 = self.normalize(I1)
 
         # Smooth volumes with a Gaussian filter
-        I0 = ndimage.gaussian_filter(I0, sigma=SIGMA)
-        I1 = ndimage.gaussian_filter(I1, sigma=SIGMA)
+        # I0 = ndimage.gaussian_filter(I0, sigma=SIGMA)
+        # I1 = ndimage.gaussian_filter(I1, sigma=SIGMA)
 
         plot_slices(I0,str="I0", block=False)
         plot_slices(I1,str="I1",block=True)
@@ -78,6 +80,17 @@ class TVL1Scipy:
         for s in range(NUM_SCALES-1, -1, -1):
             us[s], p1s[s], p2s[s], p3s[s] = self.step(
                 I0s[s], I1s[s], us[s], grids[s], p1s[s], p2s[s], p3s[s], pbar)
+
+            #save step
+            plotOpticalFlow(us[s], "u", OUTPUT_PATH, s)
+            save_slices(torch.from_numpy(I0s[s]).to(DEVICE),f"I0_it{s}.png", OUTPUT_PATH)
+            save_slices(torch.from_numpy(I1s[s]).to(DEVICE),f"I1_it{s}.png", OUTPUT_PATH)
+            xx, yy, zz = grids[s]
+            new_xx = us[s][:, :, :, 0] + xx
+            new_yy = us[s][:, :, :, 1] + yy
+            new_zz = us[s][:, :, :, 2] + zz
+            I1_warped = ndimage.map_coordinates(I1s[s], [new_zz, new_yy, new_xx], order=3, mode="reflect")
+            save_slices(torch.from_numpy(I1_warped).to(DEVICE), f"I1_warped_it{s}.png", OUTPUT_PATH)
 
             if s == 0:
                 break
@@ -117,12 +130,12 @@ class TVL1Scipy:
         LZ = NZ-1
         LY = NY-1
         LX = NX-1
-        meshInfo3D_python = MeshInfo3D(NZ,NY,NX,LZ,LY,LX)
+        meshInfo3D_python = mesh.MeshInfo3D(NZ,NY,NX,LZ,LY,LX)
 
         # Compute target image gradients
-        nabla_ctrl = Nabla3D_Central(meshInfo3D_python)
-        I1_grad = nabla_ctrl.forward(torch.from_numpy(
-            I1).to(DEVICE)).cpu().detach().numpy()
+        nabla_ctrl = differentialOps.Nabla3D_Central(meshInfo3D_python)
+        I1_grad = nabla_ctrl.forward(torch.from_numpy(I1).to(DEVICE)).cpu().detach().numpy()
+        print("Debug: I1_grad.norm = ", np.linalg.norm(I1_grad) )
 
         for w in range(MAX_WARPS):
             # Compute the warping of the target image and its derivatives
@@ -159,18 +172,18 @@ class TVL1Scipy:
                     + rho_c
 
                 # Proposition 3. Thresholding step to estimate v
-                I1w_grad = np.stack(
-                    (I1w_gradx, I1w_grady, I1w_gradz), axis=3)
+                I1w_grad = np.stack( (I1w_gradx, I1w_grady, I1w_gradz), axis=3)
                 v = self.thresholding(u, rho, I1w_grad, I1w_grad2)
+
+                #self.updateDualVariable(u,v,p1,p2,p3)
 
                 for m in range(MAX_INNER_ITERATIOS):
                     # Divergence of dual variables
-                    p1_div = nabla_ctrl.backward(torch.from_numpy(
-                        p1).to(DEVICE)).cpu().detach().numpy()
-                    p2_div = nabla_ctrl.backward(torch.from_numpy(
-                        p2).to(DEVICE)).cpu().detach().numpy()
-                    p3_div = nabla_ctrl.backward(torch.from_numpy(
-                        p2).to(DEVICE)).cpu().detach().numpy()
+                    p1_div = nabla_ctrl.backward(torch.from_numpy(p1).to(DEVICE)).cpu().detach().numpy()
+                    p2_div = nabla_ctrl.backward(torch.from_numpy(p2).to(DEVICE)).cpu().detach().numpy()
+                    #OLD: ERROR 
+                    # p3_div = nabla_ctrl.backward(torch.from_numpy(p2).to(DEVICE)).cpu().detach().numpy()
+                    p3_div = nabla_ctrl.backward(torch.from_numpy(p3).to(DEVICE)).cpu().detach().numpy()
                     p_div = np.stack((p1_div, p2_div, p3_div), axis=3)
 
                     # Compute the 3D optical flow Eq. 14
@@ -180,12 +193,9 @@ class TVL1Scipy:
                     # Compute the gradient of the optical flow using forward differences
                     # nabla_fwd = NablaForward()
                     u_torch = torch.from_numpy(u).to(DEVICE)
-                    u_gradx = nabla_ctrl.forward(u_torch[:, :, :, 0]).cpu(
-                    ).detach().numpy()  # gradient of u_x
-                    u_grady = nabla_ctrl.forward(u_torch[:, :, :, 1]).cpu(
-                    ).detach().numpy()  # gradient of u_y
-                    u_gradz = nabla_ctrl.forward(u_torch[:, :, :, 2]).cpu(
-                    ).detach().numpy()  # gradient of u_z
+                    u_gradx = nabla_ctrl.forward(u_torch[:, :, :, 0]).cpu().detach().numpy()  # gradient of u_x
+                    u_grady = nabla_ctrl.forward(u_torch[:, :, :, 1]).cpu().detach().numpy()  # gradient of u_y
+                    u_gradz = nabla_ctrl.forward(u_torch[:, :, :, 2]).cpu().detach().numpy()  # gradient of u_z
 
                     p1_tilde = p1 + (TAU / THETA) * u_gradx
                     p2_tilde = p2 + (TAU / THETA) * u_grady
@@ -216,8 +226,8 @@ class TVL1Scipy:
 
                     pbar.update(1)
 
-        plot_slices(I1, str="tgt", block=False)
-        plot_slices(I1w, str="tgt_w", block=True)
+        # plot_slices(I1, str="tgt", block=False)
+        # plot_slices(I1w, str="tgt_w", block=True)
 
         return u, p1, p2, p3
 
@@ -295,3 +305,51 @@ class TVL1Scipy:
         min = np.amin(x)
         max = np.amax(x)
         return x * 1.0 / max  # return 2.0 * x / max - 1.0
+
+
+    def updateDualVariable(self,u,v,p1,p2,p3,meshInfo3D_python):
+        nabla_ctrl = differentialOps.Nabla3D_Central(meshInfo3D_python)
+        for m in range(MAX_INNER_ITERATIOS):
+            # Divergence of dual variables
+            p1_div = nabla_ctrl.backward(torch.from_numpy(p1).to(DEVICE)).cpu().detach().numpy()
+            p2_div = nabla_ctrl.backward(torch.from_numpy(p2).to(DEVICE)).cpu().detach().numpy()
+            p3_div = nabla_ctrl.backward(torch.from_numpy(p3).to(DEVICE)).cpu().detach().numpy()
+            p_div = np.stack((p1_div, p2_div, p3_div), axis=3)
+            print("p_div.norm = ", np.linalg.norm(p_div) )
+
+            # Compute the 3D optical flow Eq. 14
+            u = v - THETA * p_div  # TODO! check sign
+
+            # Proposition 1
+            # Compute the gradient of the optical flow using forward differences
+            # nabla_fwd = NablaForward()
+            u_torch = torch.from_numpy(u).to(DEVICE)
+            u_gradx = nabla_ctrl.forward(u_torch[:, :, :, 0]).cpu().detach().numpy()  # gradient of u_x
+            u_grady = nabla_ctrl.forward(u_torch[:, :, :, 1]).cpu().detach().numpy()  # gradient of u_y
+            u_gradz = nabla_ctrl.forward(u_torch[:, :, :, 2]).cpu().detach().numpy()  # gradient of u_z
+
+            p1_tilde = p1 + (TAU / THETA) * u_gradx
+            p2_tilde = p2 + (TAU / THETA) * u_grady
+            p3_tilde = p3 + (TAU / THETA) * u_gradz
+
+            p1_tilde_norm = np.sqrt(p1_tilde[:, :, :, 0]**2 + p1_tilde[:, :, :, 1]**2 + p1_tilde[:, :, :, 2]**2)
+            p2_tilde_norm = np.sqrt(p2_tilde[:, :, :, 0]**2 + p2_tilde[:, :, :, 1]**2 + p2_tilde[:, :, :, 2]**2)
+            p3_tilde_norm = np.sqrt(p3_tilde[:, :, :, 0]**2 + p3_tilde[:, :, :, 1]**2 + p3_tilde[:, :, :, 2]**2)
+
+            den1 = np.maximum(1, p1_tilde_norm)
+            den2 = np.maximum(1, p2_tilde_norm)
+            den3 = np.maximum(1, p3_tilde_norm)
+
+            p1[:, :, :, 0] = p1_tilde[:, :, :, 0] / den1
+            p1[:, :, :, 1] = p1_tilde[:, :, :, 1] / den1
+            p1[:, :, :, 2] = p1_tilde[:, :, :, 2] / den1
+
+            p2[:, :, :, 0] = p2_tilde[:, :, :, 0] / den2
+            p2[:, :, :, 1] = p2_tilde[:, :, :, 1] / den2
+            p2[:, :, :, 2] = p2_tilde[:, :, :, 2] / den2
+
+            p3[:, :, :, 0] = p3_tilde[:, :, :, 0] / den3
+            p3[:, :, :, 1] = p3_tilde[:, :, :, 1] / den3
+            p3[:, :, :, 2] = p3_tilde[:, :, :, 2] / den3
+
+        return u

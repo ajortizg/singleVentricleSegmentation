@@ -10,7 +10,7 @@ if __name__ == "__main__":
     np.set_printoptions(precision=2, suppress=True)
 
     # Load 4D nifty [x,y,z,t]
-    vol = nib.load(os.path.sep.join([VOLUMES_PATH, "Adult_30.nii.gz"]))
+    vol = nib.load(os.path.sep.join([VOLUMES_PATH, PATIENT_FILE]))
     nii_data_xyzt = vol.get_fdata()
     print(f"Dims: {nii_data_xyzt.ndim}, shape: {nii_data_xyzt.shape}, type: {nii_data_xyzt.dtype}")
     NX = nii_data_xyzt.shape[0]
@@ -23,7 +23,8 @@ if __name__ == "__main__":
     totalMinValue = np.amin(nii_data_xyzt)
     totalMaxValue = np.amax(nii_data_xyzt)
     print(f"input (min,max) = {totalMinValue,totalMaxValue}")
-    scaleMaxValue = 255.
+    # scaleMaxValue = 255.
+    scaleMaxValue = 1.
     print("scaling of data to max value", scaleMaxValue)
     nii_data_xyzt *= scaleMaxValue / totalMaxValue
 

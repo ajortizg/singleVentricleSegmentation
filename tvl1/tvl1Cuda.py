@@ -12,6 +12,7 @@ from tqdm import tqdm
 sys.path.append("../utils")
 from utils.plots import *
 from utils.config import *
+from utils.flow_viz import *
 
 # sys.path.append("../pythonOps/")
 # from pythonOps.mesh import *
@@ -24,6 +25,10 @@ import differentialOps
 
 
 from opticalFlow_cuda_ext import opticalFlow
+
+
+InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_LINEAR
+# InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_CUBIC_HERMITESPLINE
 
 
 class TVL1OpticalFlowCuda:
@@ -77,7 +82,6 @@ class TVL1OpticalFlowCuda:
             LX_restr = NX_restr-1
             meshInfos.append(opticalFlow.MeshInfo3D(NZ_restr,NY_restr,NX_restr,LZ_restr,LY_restr,LX_restr))
 
-
         #lists for pyramid
         I0s = [I0]
         I1s = [I1]
@@ -87,27 +91,34 @@ class TVL1OpticalFlowCuda:
         # Create the pyramid
         for s in range(1, NUM_SCALES):
             prolongationOp_cuda = opticalFlow.Prolongation3D(meshInfos[s-1],meshInfos[s])
-            I0s.append(prolongationOp_cuda.forward(I0s[s-1],opticalFlow.InterpolationType.INTERPOLATE_LINEAR))
-            I1s.append(prolongationOp_cuda.forward(I1s[s-1],opticalFlow.InterpolationType.INTERPOLATE_LINEAR))
+            I0s.append(prolongationOp_cuda.forward(I0s[s-1],InterpolationTypeCuda))
+            I1s.append(prolongationOp_cuda.forward(I1s[s-1],InterpolationTypeCuda))
             us.append(torch.zeros([meshInfos[s].getNZ(),meshInfos[s].getNY(),meshInfos[s].getNX(),3]).float().to(DEVICE))
             ps.append(torch.zeros([meshInfos[s].getNZ(),meshInfos[s].getNY(),meshInfos[s].getNX(),3,3]).float().to(DEVICE))
-            #grids.append(self.create_grid(I0s[s]))
 
         # Compute the optical flow at scale s
         print("start to compute optical flow for pyramid")
         progress_bar = tqdm(total=NUM_SCALES*MAX_WARPS * MAX_OUTER_ITERATIONS * MAX_INNER_ITERATIOS)
         for s in range(NUM_SCALES-1, -1, -1):
             print("step = ", s)
-            us[s], ps[s]= self.computeOnSingleStep(meshInfos[s], I0s[s], I1s[s], us[s], ps[s], progress_bar)
+            us[s], ps[s] = self.computeOnSingleStep(I0s[s], I1s[s], us[s], ps[s], meshInfos[s], progress_bar)
+
+            #save step
+            plotOpticalFlow(us[s].cpu().detach().numpy(), "u", OUTPUT_PATH, s)
+            save_slices(I0s[s],f"I0_it{s}.png", OUTPUT_PATH)
+            save_slices(I1s[s],f"I1_it{s}.png", OUTPUT_PATH)
+            warpingOp = opticalFlow.Warping3D(meshInfos[s])
+            I1_warped = warpingOp.forward(I1s[s],us[s],InterpolationTypeCuda)
+            save_slices(I1_warped, f"I1_warped_it{s}.png", OUTPUT_PATH)
 
             if s == 0:
                 break
 
             # Prolongate the optical flow and dual variables for the next pyramid level
             prolongationOp_cuda = opticalFlow.Prolongation3D(meshInfos[s],meshInfos[s-1])
-            us[s-1][:,:,:,0] = prolongationOp_cuda.forward(us[s][:,:,:,0].contiguous(),opticalFlow.InterpolationType.INTERPOLATE_LINEAR)
-            us[s-1][:,:,:,1] = prolongationOp_cuda.forward(us[s][:,:,:,1].contiguous(),opticalFlow.InterpolationType.INTERPOLATE_LINEAR)
-            us[s-1][:,:,:,2] = prolongationOp_cuda.forward(us[s][:,:,:,2].contiguous(),opticalFlow.InterpolationType.INTERPOLATE_LINEAR)
+            us[s-1][:,:,:,0] = prolongationOp_cuda.forward(us[s][:,:,:,0].contiguous(),InterpolationTypeCuda)
+            us[s-1][:,:,:,1] = prolongationOp_cuda.forward(us[s][:,:,:,1].contiguous(),InterpolationTypeCuda)
+            us[s-1][:,:,:,2] = prolongationOp_cuda.forward(us[s][:,:,:,2].contiguous(),InterpolationTypeCuda)
             us[s-1] *= INV_ZOOM_FACTOR
 
             #TODO Dirichlet boundary
@@ -115,22 +126,22 @@ class TVL1OpticalFlowCuda:
             # p2s[s] = self.dirichlet(p2s[s])
             # p3s[s] = self.dirichlet(p3s[s])
 
-            ps[s-1][:,:,:,0,0] = prolongationOp_cuda.forward(ps[s][:,:,:,0,0].contiguous(),opticalFlow.InterpolationType.INTERPOLATE_LINEAR)
-            ps[s-1][:,:,:,0,1] = prolongationOp_cuda.forward(ps[s][:,:,:,0,1].contiguous(),opticalFlow.InterpolationType.INTERPOLATE_LINEAR)
-            ps[s-1][:,:,:,0,2] = prolongationOp_cuda.forward(ps[s][:,:,:,0,2].contiguous(),opticalFlow.InterpolationType.INTERPOLATE_LINEAR)
+            ps[s-1][:,:,:,0,0] = prolongationOp_cuda.forward(ps[s][:,:,:,0,0].contiguous(),InterpolationTypeCuda)
+            ps[s-1][:,:,:,0,1] = prolongationOp_cuda.forward(ps[s][:,:,:,0,1].contiguous(),InterpolationTypeCuda)
+            ps[s-1][:,:,:,0,2] = prolongationOp_cuda.forward(ps[s][:,:,:,0,2].contiguous(),InterpolationTypeCuda)
 
-            ps[s-1][:,:,:,1,0] = prolongationOp_cuda.forward(ps[s][:,:,:,1,0].contiguous(),opticalFlow.InterpolationType.INTERPOLATE_LINEAR)
-            ps[s-1][:,:,:,1,1] = prolongationOp_cuda.forward(ps[s][:,:,:,1,1].contiguous(),opticalFlow.InterpolationType.INTERPOLATE_LINEAR)
-            ps[s-1][:,:,:,1,2] = prolongationOp_cuda.forward(ps[s][:,:,:,1,2].contiguous(),opticalFlow.InterpolationType.INTERPOLATE_LINEAR)
+            ps[s-1][:,:,:,1,0] = prolongationOp_cuda.forward(ps[s][:,:,:,1,0].contiguous(),InterpolationTypeCuda)
+            ps[s-1][:,:,:,1,1] = prolongationOp_cuda.forward(ps[s][:,:,:,1,1].contiguous(),InterpolationTypeCuda)
+            ps[s-1][:,:,:,1,2] = prolongationOp_cuda.forward(ps[s][:,:,:,1,2].contiguous(),InterpolationTypeCuda)
 
-            ps[s-1][:,:,:,2,0] = prolongationOp_cuda.forward(ps[s][:,:,:,2,0].contiguous(),opticalFlow.InterpolationType.INTERPOLATE_LINEAR)
-            ps[s-1][:,:,:,2,1] = prolongationOp_cuda.forward(ps[s][:,:,:,2,1].contiguous(),opticalFlow.InterpolationType.INTERPOLATE_LINEAR)
-            ps[s-1][:,:,:,2,2] = prolongationOp_cuda.forward(ps[s][:,:,:,2,2].contiguous(),opticalFlow.InterpolationType.INTERPOLATE_LINEAR)
+            ps[s-1][:,:,:,2,0] = prolongationOp_cuda.forward(ps[s][:,:,:,2,0].contiguous(),InterpolationTypeCuda)
+            ps[s-1][:,:,:,2,1] = prolongationOp_cuda.forward(ps[s][:,:,:,2,1].contiguous(),InterpolationTypeCuda)
+            ps[s-1][:,:,:,2,2] = prolongationOp_cuda.forward(ps[s][:,:,:,2,2].contiguous(),InterpolationTypeCuda)
 
         progress_bar.close()
 
 
-    def computeOnSingleStep(self, meshInfo, I0, I1, u, p, progress_bar):
+    def computeOnSingleStep(self, I0, I1, u, p, meshInfo, progress_bar):
 
         print("start to compute optical flow for single step")
 
@@ -139,13 +150,14 @@ class TVL1OpticalFlowCuda:
         nablaOp = opticalFlow.Nabla3D_CD(meshInfo)
         warpingOp = opticalFlow.Warping3D(meshInfo)
         I1_grad = nablaOp.forward(I1)
+        print("I1_grad.norm = ", torch.norm(I1_grad).item() )
 
         for w in range(MAX_WARPS):
             # Compute the warping of the target image and its derivatives
-            I1_warped = warpingOp.forward(I1,u,opticalFlow.InterpolationType.INTERPOLATE_LINEAR)
-            I1_warped_gradx = warpingOp.forward(I1_grad[:,:,:,0].contiguous(),u,opticalFlow.InterpolationType.INTERPOLATE_LINEAR)
-            I1_warped_grady = warpingOp.forward(I1_grad[:,:,:,1].contiguous(),u,opticalFlow.InterpolationType.INTERPOLATE_LINEAR)
-            I1_warped_gradz = warpingOp.forward(I1_grad[:,:,:,2].contiguous(),u,opticalFlow.InterpolationType.INTERPOLATE_LINEAR)
+            I1_warped = warpingOp.forward(I1,u,InterpolationTypeCuda)
+            I1_warped_gradx = warpingOp.forward(I1_grad[:,:,:,0].contiguous(),u,InterpolationTypeCuda)
+            I1_warped_grady = warpingOp.forward(I1_grad[:,:,:,1].contiguous(),u,InterpolationTypeCuda)
+            I1_warped_gradz = warpingOp.forward(I1_grad[:,:,:,2].contiguous(),u,InterpolationTypeCuda)
 
             # Constant part of the rho function
             rho_c = I1_warped \
@@ -162,45 +174,52 @@ class TVL1OpticalFlowCuda:
                     + rho_c
 
                 # Proposition 3. Thresholding step to estimate v
-                v = self.thresholding(meshInfo,u, rho, I1_warped_gradx, I1_warped_grady, I1_warped_gradz)
+                # vPython = self.thresholding(u, rho, I1_warped_gradx, I1_warped_grady, I1_warped_gradz, meshInfo)
+                # ts = time.time()
+                # vCuda = opticalFlow.TVL1OF_threshold(u, rho, I1_warped_gradx, I1_warped_grady, I1_warped_gradz, LT, meshInfo )
+                # print('finished threshold - elapsed time cuda: ', (time.time()-ts))
+                # print("diff = ", torch.max(torch.abs(vPython - vCuda)).item())
+                v = opticalFlow.TVL1OF_threshold(u, rho, I1_warped_gradx, I1_warped_grady, I1_warped_gradz, LT, meshInfo )
+      
+                self.updateDualVariable(u,v,p,meshInfo)
 
-                for m in range(MAX_INNER_ITERATIOS):
-                    # Divergence of dual variables
-                    p_div_x = nablaOp.backward(p[:,:,:,:,0].contiguous())
-                    p_div_y = nablaOp.backward(p[:,:,:,:,1].contiguous())
-                    p_div_z = nablaOp.backward(p[:,:,:,:,2].contiguous())
-
-                    # Compute the 3D optical flow Eq. 14 # TODO! check sign
-                    u[:,:,:,0] = v[:,:,:,0] - THETA * p_div_x 
-                    u[:,:,:,1] = v[:,:,:,2] - THETA * p_div_y
-                    u[:,:,:,2] = v[:,:,:,2] - THETA * p_div_z 
-
-                    # Proposition 1
-                    # Compute the gradient of the optical flow using forward differences
-                    # nabla_fwd = NablaForward()
-                    u_gradx = nablaOp.forward(u[:, :, :, 0].contiguous())
-                    u_grady = nablaOp.forward(u[:, :, :, 1].contiguous())
-                    u_gradz = nablaOp.forward(u[:, :, :, 2].contiguous())
-
-                    p_tilde_x = p[:,:,:,:,0] + (TAU / THETA) * u_gradx
-                    p_tilde_y = p[:,:,:,:,1] + (TAU / THETA) * u_grady
-                    p_tilde_z = p[:,:,:,:,2] + (TAU / THETA) * u_gradz
-
-                    den_x = max(1., p_tilde_x.norm().item())
-                    den_y = max(1., p_tilde_y.norm().item())
-                    den_z = max(1., p_tilde_z.norm().item())
-
-                    p[:, :, :, :,0] = p_tilde_x / den_x
-                    p[:, :, :, :,1] = p_tilde_y / den_y
-                    p[:, :, :, :,2] = p_tilde_z / den_z
-
-                    progress_bar.update(1)
-
-
-        save_slices(I1,"I1.png", OUTPUT_PATH)
-        save_slices(I1_warped, "I1_warped.png", OUTPUT_PATH)
+                progress_bar.update(1)
 
         return u, p
+
+    def updateDualVariable(self,u,v,p,meshInfo):
+        nablaOp = opticalFlow.Nabla3D_CD(meshInfo)
+        for m in range(MAX_INNER_ITERATIOS):
+            # Divergence of dual variables
+            p_div_x = nablaOp.backward(p[:,:,:,:,0].contiguous())
+            p_div_y = nablaOp.backward(p[:,:,:,:,1].contiguous())
+            p_div_z = nablaOp.backward(p[:,:,:,:,2].contiguous())
+            print("p_div.norm = ", math.sqrt(torch.norm(p_div_x).item()**2 + torch.norm(p_div_y).item()**2 + torch.norm(p_div_z).item()**2) )
+
+            # Compute the 3D optical flow Eq. 14 # TODO! check sign
+            u[:,:,:,0] = v[:,:,:,0] - THETA * p_div_x 
+            u[:,:,:,1] = v[:,:,:,1] - THETA * p_div_y
+            u[:,:,:,2] = v[:,:,:,2] - THETA * p_div_z 
+
+            # Proposition 1
+            # Compute the gradient of the optical flow using forward differences
+            # nabla_fwd = NablaForward()
+            u_gradx = nablaOp.forward(u[:, :, :, 0].contiguous())
+            u_grady = nablaOp.forward(u[:, :, :, 1].contiguous())
+            u_gradz = nablaOp.forward(u[:, :, :, 2].contiguous())
+
+            p_tilde_x = p[:,:,:,:,0] + (TAU / THETA) * u_gradx
+            p_tilde_y = p[:,:,:,:,1] + (TAU / THETA) * u_grady
+            p_tilde_z = p[:,:,:,:,2] + (TAU / THETA) * u_gradz
+
+            den_x = max(1., p_tilde_x.norm().item())
+            den_y = max(1., p_tilde_y.norm().item())
+            den_z = max(1., p_tilde_z.norm().item())
+
+            p[:, :, :, :,0] = p_tilde_x / den_x
+            p[:, :, :, :,1] = p_tilde_y / den_y
+            p[:, :, :, :,2] = p_tilde_z / den_z
+
 
     # def dirichlet(self, x):
     #     x1 = x[:, :, :, 0]
@@ -222,39 +241,41 @@ class TVL1OpticalFlowCuda:
     #     x[-1, :, :] = 0
     #     return x
 
-    def thresholding(self, meshInfo, u, rho, I1_warped_gradx, I1_warped_grady, I1_warped_gradz):
-        """
-        Solution of the minimization task in Eq. 15
-        """
-        print("start threshold")
-        v = torch.zeros(u.shape).float().to(DEVICE)
+    # def thresholding(self, u, rho, I1_warped_gradx, I1_warped_grady, I1_warped_gradz, meshInfo):
+    #     """
+    #     Solution of the minimization task in Eq. 15
+    #     """
+    #     print("start threshold")
+    #     ts = time.time()
 
-        for x in range(meshInfo.getNX()):
-            for y in range(meshInfo.getNY()):
-                for z in range(meshInfo.getNZ()):
-                    r = rho[z, y, x]
-                    g2 = I1_warped_gradx[z,y,x].item()**2 + I1_warped_grady[z,y,x].item()**2 + I1_warped_gradz[z,y,x].item()**2
+    #     v = torch.zeros(u.shape).float().to(DEVICE)
 
-                    delta_x, delta_y, delta_z = 0.,0.,0.
-                    if (r < - LT * g2):
-                        delta_x = LT * I1_warped_gradx[z, y, x]
-                        delta_y = LT * I1_warped_grady[z, y, x]
-                        delta_z = LT * I1_warped_gradz[z, y, x]
-                    elif (r > LT * g2):
-                        delta_x = -LT * I1_warped_gradx[z, y, x]
-                        delta_y = -LT * I1_warped_grady[z, y, x]
-                        delta_z = -LT * I1_warped_gradz[z, y, x]
-                    elif (g2 > 1e-10):
-                        delta_x = - r * I1_warped_gradx[z, y, x] / g2
-                        delta_y = - r * I1_warped_grady[z, y, x] / g2
-                        delta_z = - r * I1_warped_gradz[z, y, x] / g2
+    #     for x in range(meshInfo.getNX()):
+    #         for y in range(meshInfo.getNY()):
+    #             for z in range(meshInfo.getNZ()):
+    #                 r = rho[z, y, x]
+    #                 g2 = I1_warped_gradx[z,y,x].item()**2 + I1_warped_grady[z,y,x].item()**2 + I1_warped_gradz[z,y,x].item()**2
 
-                    v[z, y, x, 0] = u[z, y, x, 0] + delta_x
-                    v[z, y, x, 1] = u[z, y, x, 1] + delta_y
-                    v[z, y, x, 2] = u[z, y, x, 2] + delta_z
+    #                 delta_x, delta_y, delta_z = 0.,0.,0.
+    #                 if (r < - LT * g2):
+    #                     delta_x = LT * I1_warped_gradx[z, y, x]
+    #                     delta_y = LT * I1_warped_grady[z, y, x]
+    #                     delta_z = LT * I1_warped_gradz[z, y, x]
+    #                 elif (r > LT * g2):
+    #                     delta_x = -LT * I1_warped_gradx[z, y, x]
+    #                     delta_y = -LT * I1_warped_grady[z, y, x]
+    #                     delta_z = -LT * I1_warped_gradz[z, y, x]
+    #                 elif (g2 > 1e-10):
+    #                     delta_x = - r * I1_warped_gradx[z, y, x] / g2
+    #                     delta_y = - r * I1_warped_grady[z, y, x] / g2
+    #                     delta_z = - r * I1_warped_gradz[z, y, x] / g2
 
-        print("finished threshold")
-        return v
+    #                 v[z, y, x, 0] = u[z, y, x, 0] + delta_x
+    #                 v[z, y, x, 1] = u[z, y, x, 1] + delta_y
+    #                 v[z, y, x, 2] = u[z, y, x, 2] + delta_z
+
+    #     print('finished threshold - elapsed time: ', (time.time()-ts))
+    #     return v
 
     # def create_grid(self, a):
     #     """
