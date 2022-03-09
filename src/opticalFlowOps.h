@@ -14,6 +14,11 @@ torch::Tensor cuda_TVL1OF_threshold( const torch::Tensor &u, const torch::Tensor
                                      const float LT,
                                      const MeshInfo3D &meshInfo);
 
+
+// void cuda_TVL1OF_updateDualVariable(torch::Tensor &u, const torch::Tensor &v, torch::Tensor &p,
+//                                  const float TAU, const float THETA
+//                                  const MeshInfo3D &meshInfo);
+
 //=======================================
 // C++ interface
 //=======================================
@@ -30,6 +35,14 @@ torch::Tensor cuda_TVL1OF_threshold( const torch::Tensor &u, const torch::Tensor
     return cuda_TVL1OF_threshold(u,rho,I1_warped_gradx,I1_warped_grady,I1_warped_gradz,LT,meshInfo);
   }
 
+  // void TVL1OF_updateDualVariable(torch::Tensor &u, const torch::Tensor &v, torch::Tensor &p,
+  //                                const float TAU, const float THETA
+  //                                const MeshInfo3D &meshInfo){
+  //   CHECK_INPUT(u);
+  //   CHECK_INPUT(v);
+  //   CHECK_INPUT(p);
+  //   cuda_TVL1OF_updateDualVariable(u,v,p,TAU,THETA,meshInfo);
+  // }
 
 // class Nabla1D_FD {
 // public:

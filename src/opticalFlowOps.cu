@@ -70,7 +70,7 @@ private:
 //=========================================================
 
 template <typename T>
-__global__ void cuda_nabla1d_fd_forward_kernel(
+__global__ void cuda_TVL1OF_threshold_kernel(
   const torch::PackedTensorAccessor32<T,4,torch::RestrictPtrTraits> u,
   const torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> rho,
   const torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> I1_warped_gradx,
@@ -109,12 +109,61 @@ __global__ void cuda_nabla1d_fd_forward_kernel(
     v[iz][iy][ix][0] = u[iz][iy][ix][0] + delta_x;
     v[iz][iy][ix][1] = u[iz][iy][ix][1] + delta_y;
     v[iz][iy][ix][2] = u[iz][iy][ix][2] + delta_z;
-
   }
-
-  
 }
 
+
+// template <typename T>
+// __global__ void cuda_TVL1OF_dualVariable_kernel(
+//   torch::PackedTensorAccessor32<T,4,torch::RestrictPtrTraits> u,
+//   const torch::PackedTensorAccessor32<T,4,torch::RestrictPtrTraits> v,
+//   torch::PackedTensorAccessor32<T,5,torch::RestrictPtrTraits> p,
+//   const int NZ, const int NY, const int NX,
+//   const float hZ, const float hY, const float hX,
+//   const float TAU, const float THETA,
+//   const int MAX_INNER_ITERATIONS )
+// {
+//   int ix = blockDim.x * blockIdx.x + threadIdx.x;
+//   int iy = blockDim.y * blockIdx.y + threadIdx.y;
+//   int iz = blockDim.z * blockIdx.z + threadIdx.z;
+
+//   if (ix < NX && iy < NY && iz < NZ)
+//   {
+    
+//         nablaOp = opticalFlow.Nabla3D_CD(meshInfo)
+//         for m in range(MAX_INNER_ITERATIONS):
+//             # Divergence of dual variables
+//             p_div_x = nablaOp.backward(p[:,:,:,:,0].contiguous())
+//             p_div_y = nablaOp.backward(p[:,:,:,:,1].contiguous())
+//             p_div_z = nablaOp.backward(p[:,:,:,:,2].contiguous())
+//             print("p_div.norm = ", math.sqrt(torch.norm(p_div_x).item()**2 + torch.norm(p_div_y).item()**2 + torch.norm(p_div_z).item()**2) )
+
+//             # Compute the 3D optical flow Eq. 14 # TODO! check sign
+//             u[:,:,:,0] = v[:,:,:,0] - THETA * p_div_x 
+//             u[:,:,:,1] = v[:,:,:,1] - THETA * p_div_y
+//             u[:,:,:,2] = v[:,:,:,2] - THETA * p_div_z 
+//             print("u.norm = ", torch.norm(u).item() )
+
+//             # Proposition 1
+//             # Compute the gradient of the optical flow using forward differences
+//             # nabla_fwd = NablaForward()
+//             u_gradx = nablaOp.forward(u[:, :, :, 0].contiguous())
+//             u_grady = nablaOp.forward(u[:, :, :, 1].contiguous())
+//             u_gradz = nablaOp.forward(u[:, :, :, 2].contiguous())
+
+//             p_tilde_x = p[:,:,:,:,0] + (TAU / THETA) * u_gradx
+//             p_tilde_y = p[:,:,:,:,1] + (TAU / THETA) * u_grady
+//             p_tilde_z = p[:,:,:,:,2] + (TAU / THETA) * u_gradz
+
+//             den_x = max(1., p_tilde_x.norm().item())
+//             den_y = max(1., p_tilde_y.norm().item())
+//             den_z = max(1., p_tilde_z.norm().item())
+
+//             p[:, :, :, :,0] = p_tilde_x / den_x
+//             p[:, :, :, :,1] = p_tilde_y / den_y
+//             p[:, :, :, :,2] = p_tilde_z / den_z
+//   }
+// }
 
 
 //=========================================================
@@ -152,7 +201,7 @@ torch::Tensor cuda_TVL1OF_threshold( const torch::Tensor &u, const torch::Tensor
 #endif
 
   AT_DISPATCH_FLOATING_TYPES(u.type(), "TVL1OF_threshold", ([&]{
-    cuda_nabla1d_fd_forward_kernel<scalar_t><<<numBlocks, blockSize>>>(
+    cuda_TVL1OF_threshold_kernel<scalar_t><<<numBlocks, blockSize>>>(
       u.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>(),
       rho.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>(),
       I1_warped_gradx.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>(),
@@ -172,3 +221,52 @@ torch::Tensor cuda_TVL1OF_threshold( const torch::Tensor &u, const torch::Tensor
 
   return v;
 }
+
+
+
+
+
+// void cuda_TVL1OF_updateDualVariable(torch::Tensor &u, const torch::Tensor &v, torch::Tensor &p,
+//                                  const float TAU, const float THETA
+//                                  const MeshInfo3D &meshInfo)
+
+// {
+//   TORCH_CHECK(u.dim() == 4, "Expected 4 tensor");
+
+//   const int NX = meshInfo.getNX();
+//   const int LX = meshInfo.getLX();
+//   const float hX = meshInfo.gethX();
+
+//   const int NY = meshInfo.getNY();
+//   const int LY = meshInfo.getLY();
+//   const float hY = meshInfo.gethY();
+
+//   const int NZ = meshInfo.getNZ();
+//   const int LZ = meshInfo.getLZ();
+//   const float hZ = meshInfo.gethZ();
+
+//   const dim3 blockSize(16, 16, 3); 
+//   const dim3 numBlocks((NX + blockSize.x - 1) / blockSize.x, (NY + blockSize.y - 1) / blockSize.y, (NZ + blockSize.z - 1) / blockSize.z );
+
+// #ifdef CUDA_TIMING
+//   CudaTimer cut;
+//   cut.start();
+// #endif
+
+//   AT_DISPATCH_FLOATING_TYPES(u.type(), "TVL1OF_updateDualVariable", ([&]{
+//     cuda_TVL1OF_updateDualVariable_kernel<scalar_t><<<numBlocks, blockSize>>>(
+//       u.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>(),
+//       v.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>(),
+//       p.packed_accessor32<scalar_t,5,torch::RestrictPtrTraits>(),
+//       NZ, NY, NX, 
+//       hZ, hY, hX,
+//       TAU, THETA);
+//   }));
+//   cudaSafeCall(cudaGetLastError());
+
+// #ifdef CUDA_TIMING
+//   cudaDeviceSynchronize();
+//   std::cout << "forward time " << cut.elapsed() << std::endl;
+// #endif
+
+// }

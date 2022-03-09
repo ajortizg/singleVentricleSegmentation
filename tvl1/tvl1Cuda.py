@@ -200,6 +200,7 @@ class TVL1OpticalFlowCuda:
             u[:,:,:,0] = v[:,:,:,0] - THETA * p_div_x 
             u[:,:,:,1] = v[:,:,:,1] - THETA * p_div_y
             u[:,:,:,2] = v[:,:,:,2] - THETA * p_div_z 
+            print("u.norm = ", torch.norm(u).item() )
 
             # Proposition 1
             # Compute the gradient of the optical flow using forward differences
@@ -212,13 +213,41 @@ class TVL1OpticalFlowCuda:
             p_tilde_y = p[:,:,:,:,1] + (TAU / THETA) * u_grady
             p_tilde_z = p[:,:,:,:,2] + (TAU / THETA) * u_gradz
 
-            den_x = max(1., p_tilde_x.norm().item())
-            den_y = max(1., p_tilde_y.norm().item())
-            den_z = max(1., p_tilde_z.norm().item())
+            # p_tilde_x_norm = np.sqrt(p_tilde_x[:, :, :, 0]**2 + p_tilde_x[:, :, :, 1]**2 + p_tilde_x[:, :, :, 2]**2)
+            # p_tilde_y_norm = np.sqrt(p_tilde_y[:, :, :, 0]**2 + p_tilde_y[:, :, :, 1]**2 + p_tilde_y[:, :, :, 2]**2)
+            # p_tilde_z_norm = np.sqrt(p_tilde_z[:, :, :, 0]**2 + p_tilde_z[:, :, :, 1]**2 + p_tilde_z[:, :, :, 2]**2)
 
-            p[:, :, :, :,0] = p_tilde_x / den_x
-            p[:, :, :, :,1] = p_tilde_y / den_y
-            p[:, :, :, :,2] = p_tilde_z / den_z
+            p_tilde_x_norm = torch.norm(p_tilde_x, dim=3)
+            p_tilde_y_norm = torch.norm(p_tilde_y, dim=3)
+            p_tilde_z_norm = torch.norm(p_tilde_z, dim=3)
+
+            print("shape p_tilde_x_norm = ", p_tilde_x_norm.size() )
+
+            # den_x = max(1., p_tilde_x.norm().item())
+            # den_y = max(1., p_tilde_y.norm().item())
+            # den_z = max(1., p_tilde_z.norm().item())
+
+            den_x = torch.clamp(p_tilde_x_norm, min=1.)
+            den_y = torch.clamp(p_tilde_y_norm, min=1.)
+            den_z = torch.clamp(p_tilde_z_norm, min=1.)
+
+            print("shape den_x = ", den_x.size() )
+
+            # p[:, :, :, :,0] = p_tilde_x / den_x
+            # p[:, :, :, :,1] = p_tilde_y / den_y
+            # p[:, :, :, :,2] = p_tilde_z / den_z
+
+            p[:, :, :, 0,0] = p_tilde_x[:, :, :, 0] / den_x
+            p[:, :, :, 1,0] = p_tilde_x[:, :, :, 1] / den_x
+            p[:, :, :, 2,0] = p_tilde_x[:, :, :, 2] / den_x
+
+            p[:, :, :, 0,1] = p_tilde_y[:, :, :, 0] / den_y
+            p[:, :, :, 1,1] = p_tilde_y[:, :, :, 1] / den_y
+            p[:, :, :, 2,1] = p_tilde_y[:, :, :, 2] / den_y
+
+            p[:, :, :, 0,2] = p_tilde_z[:, :, :, 0] / den_z
+            p[:, :, :, 1,2] = p_tilde_z[:, :, :, 1] / den_z
+            p[:, :, :, 2,2] = p_tilde_z[:, :, :, 2] / den_z
 
 
     # def dirichlet(self, x):

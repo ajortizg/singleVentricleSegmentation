@@ -319,6 +319,7 @@ class TVL1Scipy:
 
             # Compute the 3D optical flow Eq. 14
             u = v - THETA * p_div  # TODO! check sign
+            print("u.norm = ", np.linalg.norm(u) )
 
             # Proposition 1
             # Compute the gradient of the optical flow using forward differences
