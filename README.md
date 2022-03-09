@@ -14,5 +14,5 @@
 * pip install tqdm
 
 to install setup file:
- pip install . 
+* pip install . 
 
