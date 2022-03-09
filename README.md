@@ -16,3 +16,6 @@
 to install setup file:
 * pip install . 
 
+to use config file link data and result folder: 
+* ln -s /home/.../singleVentricleData/ /home/.../singleVentricleSegmentation/
+* ln -s /home/.../results /home/.../singleVentricleSegmentation/
