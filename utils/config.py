@@ -4,7 +4,7 @@ import os
 BASE_PATH = "singleVentricleData"
 VOLUMES_PATH = os.path.sep.join([BASE_PATH, "NIFTI_4D_Datasets"])
 SEGMENTATIONS_PATH = os.path.sep.join([BASE_PATH, "NIFTI Single Ventricle Segmentations"])
-OUTPUT_PATH = "/home/stefan/results/opticalFlow"
+OUTPUT_PATH = "results"
 PATIENT_FILE = "Adult_30.nii.gz"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 # PIN_MEMORY = True if DEVICE == "cuda" else False
