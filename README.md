@@ -9,7 +9,7 @@
 * pip install matplotlib
 * pip install tikzplotlib
 * pip install termcolor
-* pip install skipy
+* pip install scipy
 * conda install scikit-image
 * pip install tqdm
 
