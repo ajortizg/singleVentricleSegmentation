@@ -26,7 +26,8 @@ from opticalFlow_cuda_ext import opticalFlow
 
 
 class TVL1Scipy:
-    def __init__(self):
+    def __init__(self,saveDir):
+        self.saveDir = saveDir
         # binomial filter for restriction operator
         # self.binomial = (1.0 / 256.0) * np.array([[[1, 4, 6, 4, 1],
         #                                          [4, 16, 24, 16, 4],
@@ -82,15 +83,15 @@ class TVL1Scipy:
                 I0s[s], I1s[s], us[s], grids[s], p1s[s], p2s[s], p3s[s], pbar)
 
             #save step
-            plotOpticalFlow(us[s], "u", OUTPUT_PATH, s)
-            save_slices(torch.from_numpy(I0s[s]).to(DEVICE),f"I0_it{s}.png", OUTPUT_PATH)
-            save_slices(torch.from_numpy(I1s[s]).to(DEVICE),f"I1_it{s}.png", OUTPUT_PATH)
+            plotOpticalFlow(us[s], "u", self.saveDir, s)
+            save_slices(torch.from_numpy(I0s[s]).to(DEVICE),f"I0_it{s}.png", self.saveDir)
+            save_slices(torch.from_numpy(I1s[s]).to(DEVICE),f"I1_it{s}.png", self.saveDir)
             xx, yy, zz = grids[s]
             new_xx = us[s][:, :, :, 0] + xx
             new_yy = us[s][:, :, :, 1] + yy
             new_zz = us[s][:, :, :, 2] + zz
             I1_warped = ndimage.map_coordinates(I1s[s], [new_zz, new_yy, new_xx], order=3, mode="reflect")
-            save_slices(torch.from_numpy(I1_warped).to(DEVICE), f"I1_warped_it{s}.png", OUTPUT_PATH)
+            save_slices(torch.from_numpy(I1_warped).to(DEVICE), f"I1_warped_it{s}.png", self.saveDir)
 
             if s == 0:
                 break
@@ -108,20 +109,6 @@ class TVL1Scipy:
             p3s[s-1] = self.prolongation(p3s[s])
 
         pbar.close()
-        # print(us[0])
-        # for i, s in enumerate(srcs):
-        #     print(f"scale: {i}", s.shape, uvws[i].shape)
-        #     block = False
-        #     if i == len(srcs) - 1:
-        #         block = True
-        #     plot_slices(s, block)
-        # for s in range(NUM_SCALES):
-        #     xx, yy, zz = grids[s]
-        #     warp = ndimage.map_coordinates(
-        #         srcs[s], [zz, yy, xx], order=3, mode="constant")
-
-        #     plot_slices(srcs[s], str="I", block=False)
-        #     plot_slices(warp, str="W", block=True)
 
     def step(self, I0, I1, u, grid, p1, p2, p3, pbar):
         NZ = I0.shape[0]
@@ -135,7 +122,6 @@ class TVL1Scipy:
         # Compute target image gradients
         nabla_ctrl = differentialOps.Nabla3D_Central(meshInfo3D_python)
         I1_grad = nabla_ctrl.forward(torch.from_numpy(I1).to(DEVICE)).cpu().detach().numpy()
-        print("Debug: I1_grad.norm = ", np.linalg.norm(I1_grad) )
 
         for w in range(MAX_WARPS):
             # Compute the warping of the target image and its derivatives
@@ -315,11 +301,9 @@ class TVL1Scipy:
             p2_div = nabla_ctrl.backward(torch.from_numpy(p2).to(DEVICE)).cpu().detach().numpy()
             p3_div = nabla_ctrl.backward(torch.from_numpy(p3).to(DEVICE)).cpu().detach().numpy()
             p_div = np.stack((p1_div, p2_div, p3_div), axis=3)
-            print("p_div.norm = ", np.linalg.norm(p_div) )
 
             # Compute the 3D optical flow Eq. 14
             u = v - THETA * p_div  # TODO! check sign
-            print("u.norm = ", np.linalg.norm(u) )
 
             # Proposition 1
             # Compute the gradient of the optical flow using forward differences

@@ -27,12 +27,13 @@ import differentialOps
 from opticalFlow_cuda_ext import opticalFlow
 
 
-InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_LINEAR
-# InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_CUBIC_HERMITESPLINE
+#InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_LINEAR
+InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_CUBIC_HERMITESPLINE
 
 
 class TVL1OpticalFlowCuda:
-    # def __init__(self):
+    def __init__(self,saveDir):
+        self.saveDir = saveDir
         # binomial filter for restriction operator
         # self.binomial = (1.0 / 256.0) * np.array([[[1, 4, 6, 4, 1],
         #                                          [4, 16, 24, 16, 4],
@@ -104,12 +105,12 @@ class TVL1OpticalFlowCuda:
             us[s], ps[s] = self.computeOnSingleStep(I0s[s], I1s[s], us[s], ps[s], meshInfos[s], progress_bar)
 
             #save step
-            plotOpticalFlow(us[s].cpu().detach().numpy(), "u", OUTPUT_PATH, s)
-            save_slices(I0s[s],f"I0_it{s}.png", OUTPUT_PATH)
-            save_slices(I1s[s],f"I1_it{s}.png", OUTPUT_PATH)
+            plotOpticalFlow(us[s].cpu().detach().numpy(), "u", self.saveDir, s)
+            save_slices(I0s[s],f"I0_it{s}.png", self.saveDir)
+            save_slices(I1s[s],f"I1_it{s}.png", self.saveDir)
             warpingOp = opticalFlow.Warping3D(meshInfos[s])
             I1_warped = warpingOp.forward(I1s[s],us[s],InterpolationTypeCuda)
-            save_slices(I1_warped, f"I1_warped_it{s}.png", OUTPUT_PATH)
+            save_slices(I1_warped, f"I1_warped_it{s}.png", self.saveDir)
 
             if s == 0:
                 break
@@ -150,7 +151,6 @@ class TVL1OpticalFlowCuda:
         nablaOp = opticalFlow.Nabla3D_CD(meshInfo)
         warpingOp = opticalFlow.Warping3D(meshInfo)
         I1_grad = nablaOp.forward(I1)
-        print("I1_grad.norm = ", torch.norm(I1_grad).item() )
 
         for w in range(MAX_WARPS):
             # Compute the warping of the target image and its derivatives
@@ -194,13 +194,11 @@ class TVL1OpticalFlowCuda:
             p_div_x = nablaOp.backward(p[:,:,:,:,0].contiguous())
             p_div_y = nablaOp.backward(p[:,:,:,:,1].contiguous())
             p_div_z = nablaOp.backward(p[:,:,:,:,2].contiguous())
-            print("p_div.norm = ", math.sqrt(torch.norm(p_div_x).item()**2 + torch.norm(p_div_y).item()**2 + torch.norm(p_div_z).item()**2) )
 
             # Compute the 3D optical flow Eq. 14 # TODO! check sign
             u[:,:,:,0] = v[:,:,:,0] - THETA * p_div_x 
             u[:,:,:,1] = v[:,:,:,1] - THETA * p_div_y
             u[:,:,:,2] = v[:,:,:,2] - THETA * p_div_z 
-            print("u.norm = ", torch.norm(u).item() )
 
             # Proposition 1
             # Compute the gradient of the optical flow using forward differences
@@ -221,21 +219,9 @@ class TVL1OpticalFlowCuda:
             p_tilde_y_norm = torch.norm(p_tilde_y, dim=3)
             p_tilde_z_norm = torch.norm(p_tilde_z, dim=3)
 
-            print("shape p_tilde_x_norm = ", p_tilde_x_norm.size() )
-
-            # den_x = max(1., p_tilde_x.norm().item())
-            # den_y = max(1., p_tilde_y.norm().item())
-            # den_z = max(1., p_tilde_z.norm().item())
-
             den_x = torch.clamp(p_tilde_x_norm, min=1.)
             den_y = torch.clamp(p_tilde_y_norm, min=1.)
             den_z = torch.clamp(p_tilde_z_norm, min=1.)
-
-            print("shape den_x = ", den_x.size() )
-
-            # p[:, :, :, :,0] = p_tilde_x / den_x
-            # p[:, :, :, :,1] = p_tilde_y / den_y
-            # p[:, :, :, :,2] = p_tilde_z / den_z
 
             p[:, :, :, 0,0] = p_tilde_x[:, :, :, 0] / den_x
             p[:, :, :, 1,0] = p_tilde_x[:, :, :, 1] / den_x

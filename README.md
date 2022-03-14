@@ -12,6 +12,8 @@
 * pip install scipy
 * conda install scikit-image
 * pip install tqdm
+* pip install pandas
+* pip install openpyxl
 
 to install setup file:
 * pip install . 

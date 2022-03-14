@@ -12,6 +12,7 @@
 torch::Tensor cuda_warp1d( const torch::Tensor &u, const torch::Tensor &phi, const MeshInfo1D& meshInfo, const InterpolationType interpolation = INTERPOLATE_LINEAR);
 torch::Tensor cuda_warp2d( const torch::Tensor &u, const torch::Tensor &phi, const MeshInfo2D& meshInfo, const InterpolationType interpolation = INTERPOLATE_LINEAR);
 torch::Tensor cuda_warp3d( const torch::Tensor &u, const torch::Tensor &phi, const MeshInfo3D& meshInfo, const InterpolationType interpolation = INTERPOLATE_LINEAR);
+torch::Tensor cuda_warpVectorField3d( const torch::Tensor &u, const torch::Tensor &phi, const MeshInfo3D& meshInfo, const InterpolationType interpolation = INTERPOLATE_LINEAR);
 
 //=======================================
 // C++ interface
@@ -65,6 +66,13 @@ public:
     CHECK_INPUT(phi);
     return cuda_warp3d(u,phi,_meshInfo,interpolation);
   }
+
+  torch::Tensor forwardVectorField(const torch::Tensor &u, const torch::Tensor &phi, const InterpolationType interpolation = INTERPOLATE_LINEAR) const {
+    CHECK_INPUT(u);
+    CHECK_INPUT(phi);
+    return cuda_warpVectorField3d(u,phi,_meshInfo,interpolation);
+  }
+
   // torch::Tensor backward(const torch::Tensor &b) const{
   //   CHECK_INPUT(b);
   // }

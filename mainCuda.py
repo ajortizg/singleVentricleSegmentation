@@ -42,8 +42,14 @@ if __name__ == "__main__":
     u = torch.zeros([NZ,NY,NX,3]).float().to(DEVICE)
     p = torch.zeros([NZ,NY,NX,3,3]).float().to(DEVICE)
 
+    #
+    timestr = time.strftime("%Y%m%d-%H%M%S")
+    saveDir = os.path.sep.join([OUTPUT_PATH, timestr])
+    if not os.path.exists(saveDir):
+      os.makedirs(saveDir)
+
     # Compute the optical flow
-    alg = TVL1OpticalFlowCuda()
+    alg = TVL1OpticalFlowCuda(saveDir)
     alg.computeOnPyramid(I0, I1, u, p)
 
 

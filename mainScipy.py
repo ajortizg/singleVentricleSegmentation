@@ -1,5 +1,6 @@
 import nibabel as nib
 import numpy as np
+import time
 import os
 
 from utils.config import *
@@ -45,7 +46,12 @@ if __name__ == "__main__":
     I0 = nii_data[:, :, :, t0]
     I1 = nii_data[:, :, :, t1]
 
+    #
+    timestr = time.strftime("%Y%m%d-%H%M%S")
+    saveDir = os.path.sep.join([OUTPUT_PATH, timestr])
+    if not os.path.exists(saveDir):
+      os.makedirs(saveDir)
 
     # Compute the optical flow
-    alg = TVL1Scipy()
+    alg = TVL1Scipy(saveDir)
     alg.compute(I0, I1)
