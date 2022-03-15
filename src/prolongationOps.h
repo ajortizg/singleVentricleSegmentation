@@ -11,6 +11,8 @@
 
 torch::Tensor cuda_prolongate1d( const torch::Tensor &u, const MeshInfo1D& meshInfo, const MeshInfo1D& meshInfoProlongated, const InterpolationType interpolation = INTERPOLATE_LINEAR);
 torch::Tensor cuda_prolongate2d( const torch::Tensor &u, const MeshInfo2D& meshInfo, const MeshInfo2D& meshInfoProlongated, const InterpolationType interpolation = INTERPOLATE_LINEAR);
+torch::Tensor cuda_prolongateVectorField2d( const torch::Tensor &u, const MeshInfo2D& meshInfo, const MeshInfo2D& meshInfoProlongated, const InterpolationType interpolation = INTERPOLATE_LINEAR);
+torch::Tensor cuda_prolongateMatrixField2d( const torch::Tensor &u, const MeshInfo2D& meshInfo, const MeshInfo2D& meshInfoProlongated, const InterpolationType interpolation = INTERPOLATE_LINEAR);
 torch::Tensor cuda_prolongate3d( const torch::Tensor &u, const MeshInfo3D& meshInfo, const MeshInfo3D& meshInfoProlongated, const InterpolationType interpolation = INTERPOLATE_LINEAR);
 torch::Tensor cuda_prolongateVectorField3d( const torch::Tensor &u, const MeshInfo3D& meshInfo, const MeshInfo3D& meshInfoProlongated, const InterpolationType interpolation = INTERPOLATE_LINEAR);
 torch::Tensor cuda_prolongateMatrixField3d( const torch::Tensor &u, const MeshInfo3D& meshInfo, const MeshInfo3D& meshInfoProlongated, const InterpolationType interpolation = INTERPOLATE_LINEAR);
@@ -49,6 +51,17 @@ public:
     CHECK_INPUT(u);
     return cuda_prolongate2d(u,_meshInfo,_meshInfoProlongated,interpolation);
   }
+
+  torch::Tensor forwardVectorField(const torch::Tensor &u, const InterpolationType interpolation = INTERPOLATE_LINEAR) const {
+    CHECK_INPUT(u);
+    return cuda_prolongateVectorField2d(u,_meshInfo,_meshInfoProlongated,interpolation);
+  }
+
+  torch::Tensor forwardMatrixField(const torch::Tensor &u, const InterpolationType interpolation = INTERPOLATE_LINEAR) const {
+    CHECK_INPUT(u);
+    return cuda_prolongateMatrixField2d(u,_meshInfo,_meshInfoProlongated,interpolation);
+  }
+
   // torch::Tensor backward(const torch::Tensor &b) const{
   //   CHECK_INPUT(b);
   // }

@@ -69,48 +69,48 @@ private:
 // CUDA kernels
 //=========================================================
 
-template <typename T>
-__global__ void cuda_TVL1OF_threshold_kernel(
-  const torch::PackedTensorAccessor32<T,4,torch::RestrictPtrTraits> u,
-  const torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> rho,
-  const torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> I1_warped_gradx,
-  const torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> I1_warped_grady,
-  const torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> I1_warped_gradz,
-  const int NZ, const int NY, const int NX,
-  const float hZ, const float hY, const float hX,
-  const float LT,
-  torch::PackedTensorAccessor32<T,4,torch::RestrictPtrTraits> v)
-{
-  int ix = blockDim.x * blockIdx.x + threadIdx.x;
-  int iy = blockDim.y * blockIdx.y + threadIdx.y;
-  int iz = blockDim.z * blockIdx.z + threadIdx.z;
+// template <typename T>
+// __global__ void cuda_TVL1OF_threshold_kernel(
+//   const torch::PackedTensorAccessor32<T,4,torch::RestrictPtrTraits> u,
+//   const torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> rho,
+//   const torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> I1_warped_gradx,
+//   const torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> I1_warped_grady,
+//   const torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> I1_warped_gradz,
+//   const int NZ, const int NY, const int NX,
+//   const float hZ, const float hY, const float hX,
+//   const float LT,
+//   torch::PackedTensorAccessor32<T,4,torch::RestrictPtrTraits> v)
+// {
+//   int ix = blockDim.x * blockIdx.x + threadIdx.x;
+//   int iy = blockDim.y * blockIdx.y + threadIdx.y;
+//   int iz = blockDim.z * blockIdx.z + threadIdx.z;
 
-  if (ix < NX && iy < NY && iz < NZ)
-  {
+//   if (ix < NX && iy < NY && iz < NZ)
+//   {
     
-    const T r = rho[iz][iy][ix];
-    const T g2 = I1_warped_gradx[iz][iy][ix]*I1_warped_gradx[iz][iy][ix] + I1_warped_grady[iz][iy][ix]*I1_warped_grady[iz][iy][ix] + I1_warped_gradz[iz][iy][ix]*I1_warped_gradz[iz][iy][ix];
+//     const T r = rho[iz][iy][ix];
+//     const T g2 = I1_warped_gradx[iz][iy][ix]*I1_warped_gradx[iz][iy][ix] + I1_warped_grady[iz][iy][ix]*I1_warped_grady[iz][iy][ix] + I1_warped_gradz[iz][iy][ix]*I1_warped_gradz[iz][iy][ix];
 
-    T delta_x = 0., delta_y = 0., delta_z = 0.;
-    if (r < - LT * g2){
-        delta_x = LT * I1_warped_gradx[iz][iy][ix];
-        delta_y = LT * I1_warped_grady[iz][iy][ix];
-        delta_z = LT * I1_warped_gradz[iz][iy][ix];
-    } else if(r > LT * g2){
-        delta_x = -LT * I1_warped_gradx[iz][iy][ix];
-        delta_y = -LT * I1_warped_grady[iz][iy][ix];
-        delta_z = -LT * I1_warped_gradz[iz][iy][ix];
-    }else if(g2 > 1e-10){
-        delta_x = - r * I1_warped_gradx[iz][iy][ix] / g2;
-        delta_y = - r * I1_warped_grady[iz][iy][ix] / g2;
-        delta_z = - r * I1_warped_gradz[iz][iy][ix] / g2;
-    }
+//     T delta_x = 0., delta_y = 0., delta_z = 0.;
+//     if (r < - LT * g2){
+//         delta_x = LT * I1_warped_gradx[iz][iy][ix];
+//         delta_y = LT * I1_warped_grady[iz][iy][ix];
+//         delta_z = LT * I1_warped_gradz[iz][iy][ix];
+//     } else if(r > LT * g2){
+//         delta_x = -LT * I1_warped_gradx[iz][iy][ix];
+//         delta_y = -LT * I1_warped_grady[iz][iy][ix];
+//         delta_z = -LT * I1_warped_gradz[iz][iy][ix];
+//     }else if(g2 > 1e-10){
+//         delta_x = - r * I1_warped_gradx[iz][iy][ix] / g2;
+//         delta_y = - r * I1_warped_grady[iz][iy][ix] / g2;
+//         delta_z = - r * I1_warped_gradz[iz][iy][ix] / g2;
+//     }
 
-    v[iz][iy][ix][0] = u[iz][iy][ix][0] + delta_x;
-    v[iz][iy][ix][1] = u[iz][iy][ix][1] + delta_y;
-    v[iz][iy][ix][2] = u[iz][iy][ix][2] + delta_z;
-  }
-}
+//     v[iz][iy][ix][0] = u[iz][iy][ix][0] + delta_x;
+//     v[iz][iy][ix][1] = u[iz][iy][ix][1] + delta_y;
+//     v[iz][iy][ix][2] = u[iz][iy][ix][2] + delta_z;
+//   }
+// }
 
 
 // template <typename T>
@@ -165,13 +165,106 @@ __global__ void cuda_TVL1OF_threshold_kernel(
 //   }
 // }
 
+
+
+
+
+
+
 template <typename T>
-__global__ void cuda_TVL1OF_proxPrimal_kernel(
+__global__ void cuda_TVL1OF2D_proxPrimal_kernel(
+  const torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> primalVariable,
+  const torch::PackedTensorAccessor32<T,2,torch::RestrictPtrTraits> rho,
+  const torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> I1_warped_grad,
+  const int NY, const int NX,
+  const float hY, const float hX,
+  const float factor,
+  torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> output)
+{
+  int ix = blockDim.x * blockIdx.x + threadIdx.x;
+  int iy = blockDim.y * blockIdx.y + threadIdx.y;
+
+  if (ix < NX && iy < NY)
+  {
+    const T r = rho[iy][ix];
+
+    T g2 = 0.;
+    for(int comp=0; comp<2;++comp)
+    {
+      g2 += I1_warped_grad[iy][ix][comp]*I1_warped_grad[iy][ix][comp];
+    }
+
+    T delta[2];
+    if (r < - factor * g2){
+      for(int comp=0; comp<2;++comp)
+      {
+       delta[comp] = factor * I1_warped_grad[iy][ix][comp];
+      }
+    }else if(r > factor * g2){
+      for(int comp=0; comp<2;++comp)
+      {
+       delta[comp] = -factor * I1_warped_grad[iy][ix][comp];
+      }
+    }else if(g2 > 1e-10){
+      for(int comp=0; comp<2;++comp)
+      {
+       delta[comp] = -r * I1_warped_grad[iy][ix][comp] / g2;
+      }
+    }else{
+      for(int comp=0; comp<2;++comp)
+      {
+       delta[comp] = 0.;
+      }
+    }
+
+    for(int comp=0; comp<2;++comp)
+    {
+      output[iy][ix][comp] = primalVariable[iy][ix][comp] + delta[comp];
+    }
+  }
+}
+
+
+
+template <typename T>
+__global__ void cuda_TVL1OF2D_proxDual_kernel(
+  const torch::PackedTensorAccessor32<T,4,torch::RestrictPtrTraits> dualVariable,
+  const int NY, const int NX,
+  const float hY, const float hX,
+  const float dualFctWeight_TV,
+  torch::PackedTensorAccessor32<T,4,torch::RestrictPtrTraits> output )
+{
+  int ix = blockDim.x * blockIdx.x + threadIdx.x;
+  int iy = blockDim.y * blockIdx.y + threadIdx.y;
+
+  if (ix < NX && iy < NY)
+  {
+    for( int il=0; il<2; ++il )
+    {
+      T normSqr = 0.;
+      for( int ik=0; ik<2; ++ik)
+      {
+        normSqr += dualVariable[iy][ix][ik][il] * dualVariable[iy][ix][ik][il];
+      }
+      const T den = max(dualFctWeight_TV,  sqrtf(normSqr) );
+      for( int ik=0; ik<2; ++ik)
+      {
+        output[iy][ix][ik][il] = dualVariable[iy][ix][ik][il] / den;
+      }
+    }
+  }
+}
+
+
+
+
+
+
+template <typename T>
+__global__ void cuda_TVL1OF3D_proxPrimal_kernel(
   const torch::PackedTensorAccessor32<T,4,torch::RestrictPtrTraits> primalVariable,
   const torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> rho,
   const torch::PackedTensorAccessor32<T,4,torch::RestrictPtrTraits> I1_warped_grad,
-  // const torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> I1_warped_grady,
-  // const torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> I1_warped_gradz,
   const int NZ, const int NY, const int NX,
   const float hZ, const float hY, const float hX,
   const float factor,
@@ -180,32 +273,6 @@ __global__ void cuda_TVL1OF_proxPrimal_kernel(
   int ix = blockDim.x * blockIdx.x + threadIdx.x;
   int iy = blockDim.y * blockIdx.y + threadIdx.y;
   int iz = blockDim.z * blockIdx.z + threadIdx.z;
-
-  // if (ix < NX && iy < NY && iz < NZ)
-  // {
-    
-  //   const T r = rho[iz][iy][ix];
-  //   const T g2 = I1_warped_gradx[iz][iy][ix]*I1_warped_gradx[iz][iy][ix] + I1_warped_grady[iz][iy][ix]*I1_warped_grady[iz][iy][ix] + I1_warped_gradz[iz][iy][ix]*I1_warped_gradz[iz][iy][ix];
-
-  //   T delta_x = 0., delta_y = 0., delta_z = 0.;
-  //   if (r < - factor * g2){
-  //       delta_x = factor * I1_warped_gradx[iz][iy][ix];
-  //       delta_y = factor * I1_warped_grady[iz][iy][ix];
-  //       delta_z = factor * I1_warped_gradz[iz][iy][ix];
-  //   } else if(r > factor * g2){
-  //       delta_x = -factor * I1_warped_gradx[iz][iy][ix];
-  //       delta_y = -factor * I1_warped_grady[iz][iy][ix];
-  //       delta_z = -factor * I1_warped_gradz[iz][iy][ix];
-  //   }else if(g2 > 1e-10){
-  //       delta_x = - r * I1_warped_gradx[iz][iy][ix] / g2;
-  //       delta_y = - r * I1_warped_grady[iz][iy][ix] / g2;
-  //       delta_z = - r * I1_warped_gradz[iz][iy][ix] / g2;
-  //   }
-
-  //   output[iz][iy][ix][0] = primalVariable[iz][iy][ix][0] + delta_x;
-  //   output[iz][iy][ix][1] = primalVariable[iz][iy][ix][1] + delta_y;
-  //   output[iz][iy][ix][2] = primalVariable[iz][iy][ix][2] + delta_z;
-  // }
 
   if (ix < NX && iy < NY && iz < NZ)
   {
@@ -250,7 +317,7 @@ __global__ void cuda_TVL1OF_proxPrimal_kernel(
 
 
 template <typename T>
-__global__ void cuda_TVL1OF_proxDual_kernel(
+__global__ void cuda_TVL1OF3D_proxDual_kernel(
   const torch::PackedTensorAccessor32<T,5,torch::RestrictPtrTraits> dualVariable,
   const int NZ, const int NY, const int NX,
   const float hZ, const float hY, const float hX,
@@ -263,8 +330,6 @@ __global__ void cuda_TVL1OF_proxDual_kernel(
 
   if (ix < NX && iy < NY && iz < NZ)
   {
-    
-     
     for( int il=0; il<3; ++il )
     {
       T normSqr = 0.;
@@ -287,57 +352,57 @@ __global__ void cuda_TVL1OF_proxDual_kernel(
 // C++ kernel calls
 //=========================================================
 
-torch::Tensor cuda_TVL1OF_threshold( const torch::Tensor &u, const torch::Tensor &rho, 
-                                     const torch::Tensor &I1_warped_gradx, const torch::Tensor &I1_warped_grady, const torch::Tensor &I1_warped_gradz,  
-                                     const float LT,
-                                     const MeshInfo3D &meshInfo)
+// torch::Tensor cuda_TVL1OF3D_threshold( const torch::Tensor &u, const torch::Tensor &rho, 
+//                                        const torch::Tensor &I1_warped_gradx, const torch::Tensor &I1_warped_grady, const torch::Tensor &I1_warped_gradz,  
+//                                        const float LT,
+//                                        const MeshInfo3D &meshInfo)
 
-{
-  TORCH_CHECK(u.dim() == 4, "Expected 4 tensor");
+// {
+//   TORCH_CHECK(u.dim() == 4, "Expected 4 tensor");
 
-  const int NX = meshInfo.getNX();
-  const int LX = meshInfo.getLX();
-  const float hX = meshInfo.gethX();
+//   const int NX = meshInfo.getNX();
+//   const int LX = meshInfo.getLX();
+//   const float hX = meshInfo.gethX();
 
-  const int NY = meshInfo.getNY();
-  const int LY = meshInfo.getLY();
-  const float hY = meshInfo.gethY();
+//   const int NY = meshInfo.getNY();
+//   const int LY = meshInfo.getLY();
+//   const float hY = meshInfo.gethY();
 
-  const int NZ = meshInfo.getNZ();
-  const int LZ = meshInfo.getLZ();
-  const float hZ = meshInfo.gethZ();
+//   const int NZ = meshInfo.getNZ();
+//   const int LZ = meshInfo.getLZ();
+//   const float hZ = meshInfo.gethZ();
 
-  auto v = torch::zeros({NZ,NY,NX,3}, u.options());
+//   auto v = torch::zeros({NZ,NY,NX,3}, u.options());
 
-  const dim3 blockSize(16, 16, 3); 
-  const dim3 numBlocks((NX + blockSize.x - 1) / blockSize.x, (NY + blockSize.y - 1) / blockSize.y, (NZ + blockSize.z - 1) / blockSize.z );
+//   const dim3 blockSize(16, 16, 3); 
+//   const dim3 numBlocks((NX + blockSize.x - 1) / blockSize.x, (NY + blockSize.y - 1) / blockSize.y, (NZ + blockSize.z - 1) / blockSize.z );
 
-#ifdef CUDA_TIMING
-  CudaTimer cut;
-  cut.start();
-#endif
+// #ifdef CUDA_TIMING
+//   CudaTimer cut;
+//   cut.start();
+// #endif
 
-  AT_DISPATCH_FLOATING_TYPES(u.type(), "TVL1OF_threshold", ([&]{
-    cuda_TVL1OF_threshold_kernel<scalar_t><<<numBlocks, blockSize>>>(
-      u.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>(),
-      rho.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>(),
-      I1_warped_gradx.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>(),
-      I1_warped_grady.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>(),
-      I1_warped_gradz.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>(),
-      NZ, NY, NX, 
-      hZ, hY, hX,
-      LT,
-      v.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>());
-  }));
-  cudaSafeCall(cudaGetLastError());
+//   AT_DISPATCH_FLOATING_TYPES(u.type(), "TVL1OF_threshold", ([&]{
+//     cuda_TVL1OF3D_threshold_kernel<scalar_t><<<numBlocks, blockSize>>>(
+//       u.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>(),
+//       rho.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>(),
+//       I1_warped_gradx.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>(),
+//       I1_warped_grady.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>(),
+//       I1_warped_gradz.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>(),
+//       NZ, NY, NX, 
+//       hZ, hY, hX,
+//       LT,
+//       v.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>());
+//   }));
+//   cudaSafeCall(cudaGetLastError());
 
-#ifdef CUDA_TIMING
-  cudaDeviceSynchronize();
-  std::cout << "forward time " << cut.elapsed() << std::endl;
-#endif
+// #ifdef CUDA_TIMING
+//   cudaDeviceSynchronize();
+//   std::cout << "forward time " << cut.elapsed() << std::endl;
+// #endif
 
-  return v;
-}
+//   return v;
+// }
 
 
 
@@ -390,12 +455,116 @@ torch::Tensor cuda_TVL1OF_threshold( const torch::Tensor &u, const torch::Tensor
 
 
 
-torch::Tensor cuda_TVL1OF_proxPrimal( const torch::Tensor &primalVariable,
+
+
+
+torch::Tensor cuda_TVL1OF2D_proxPrimal( const torch::Tensor &primalVariable,
                                       const float primalStepSize_tau, 
                                       const float primalFctWeight_Matching,
                                       const torch::Tensor &rho, 
                                       const torch::Tensor &I1_warped_grad,
-                                      //  const torch::Tensor &I1_warped_grady, const torch::Tensor &I1_warped_gradz,  
+                                      const float weightNorm,
+                                      const MeshInfo2D &meshInfo)
+{
+  TORCH_CHECK(primalVariable.dim() == 3, "Expected 3 tensor");
+
+  const int NX = meshInfo.getNX();
+  const int LX = meshInfo.getLX();
+  const float hX = meshInfo.gethX();
+
+  const int NY = meshInfo.getNY();
+  const int LY = meshInfo.getLY();
+  const float hY = meshInfo.gethY();
+
+  const float factor = primalStepSize_tau * primalFctWeight_Matching * weightNorm;
+
+  auto output = torch::zeros({NY,NX,2}, primalVariable.options());
+
+  const dim3 blockSize(32, 32, 1); 
+  const dim3 numBlocks((NX + blockSize.x - 1) / blockSize.x, (NY + blockSize.y - 1) / blockSize.y );
+
+#ifdef CUDA_TIMING
+  CudaTimer cut;
+  cut.start();
+#endif
+
+  AT_DISPATCH_FLOATING_TYPES(primalVariable.type(), "TVL1OF2D_proxPrimal", ([&]{
+    cuda_TVL1OF2D_proxPrimal_kernel<scalar_t><<<numBlocks, blockSize>>>(
+      primalVariable.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>(),
+      rho.packed_accessor32<scalar_t,2,torch::RestrictPtrTraits>(),
+      I1_warped_grad.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>(),
+      NY, NX, 
+      hY, hX,
+      factor,
+      output.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>());
+  }));
+  cudaSafeCall(cudaGetLastError());
+
+#ifdef CUDA_TIMING
+  cudaDeviceSynchronize();
+  std::cout << "forward time " << cut.elapsed() << std::endl;
+#endif
+
+  return output;
+}
+
+
+torch::Tensor cuda_TVL1OF2D_proxDual( const torch::Tensor &dualVariable,
+                                    const float dualStepSize_sigma,
+                                    const float dualFctWeight_TV,
+                                    const MeshInfo2D &meshInfo ) 
+{
+
+  TORCH_CHECK(dualVariable.dim() == 4, "Expected 4 tensor");
+
+  const int NX = meshInfo.getNX();
+  const int LX = meshInfo.getLX();
+  const float hX = meshInfo.gethX();
+
+  const int NY = meshInfo.getNY();
+  const int LY = meshInfo.getLY();
+  const float hY = meshInfo.gethY();
+
+  auto output = torch::zeros({NY,NX,2,2}, dualVariable.options());
+
+  const dim3 blockSize(32, 32, 1); 
+  const dim3 numBlocks((NX + blockSize.x - 1) / blockSize.x, (NY + blockSize.y - 1) / blockSize.y );
+
+#ifdef CUDA_TIMING
+  CudaTimer cut;
+  cut.start();
+#endif
+
+  AT_DISPATCH_FLOATING_TYPES(dualVariable.type(), "TVL1OF2D_proxDual", ([&]{
+    cuda_TVL1OF2D_proxDual_kernel<scalar_t><<<numBlocks, blockSize>>>(
+      dualVariable.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>(),
+      NY, NX, 
+      hY, hX,
+      dualFctWeight_TV,
+      output.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>());
+  }));
+  cudaSafeCall(cudaGetLastError());
+
+#ifdef CUDA_TIMING
+  cudaDeviceSynchronize();
+  std::cout << "forward time " << cut.elapsed() << std::endl;
+#endif
+
+  return output;                             
+};
+
+
+
+
+
+
+
+
+torch::Tensor cuda_TVL1OF3D_proxPrimal( const torch::Tensor &primalVariable,
+                                      const float primalStepSize_tau, 
+                                      const float primalFctWeight_Matching,
+                                      const torch::Tensor &rho, 
+                                      const torch::Tensor &I1_warped_grad,
                                       const float weightNorm,
                                       const MeshInfo3D &meshInfo)
 {
@@ -425,13 +594,11 @@ torch::Tensor cuda_TVL1OF_proxPrimal( const torch::Tensor &primalVariable,
   cut.start();
 #endif
 
-  AT_DISPATCH_FLOATING_TYPES(primalVariable.type(), "TVL1OF_proxPrimal", ([&]{
-    cuda_TVL1OF_proxPrimal_kernel<scalar_t><<<numBlocks, blockSize>>>(
+  AT_DISPATCH_FLOATING_TYPES(primalVariable.type(), "TVL1OF3D_proxPrimal", ([&]{
+    cuda_TVL1OF3D_proxPrimal_kernel<scalar_t><<<numBlocks, blockSize>>>(
       primalVariable.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>(),
       rho.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>(),
       I1_warped_grad.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>(),
-      // I1_warped_grady.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>(),
-      // I1_warped_gradz.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>(),
       NZ, NY, NX, 
       hZ, hY, hX,
       factor,
@@ -448,7 +615,7 @@ torch::Tensor cuda_TVL1OF_proxPrimal( const torch::Tensor &primalVariable,
 }
 
 
-torch::Tensor cuda_TVL1OF_proxDual( const torch::Tensor &dualVariable,
+torch::Tensor cuda_TVL1OF3D_proxDual( const torch::Tensor &dualVariable,
                                     const float dualStepSize_sigma,
                                     const float dualFctWeight_TV,
                                     const MeshInfo3D &meshInfo ) 
@@ -478,8 +645,8 @@ torch::Tensor cuda_TVL1OF_proxDual( const torch::Tensor &dualVariable,
   cut.start();
 #endif
 
-  AT_DISPATCH_FLOATING_TYPES(dualVariable.type(), "TVL1OF_proxDual", ([&]{
-    cuda_TVL1OF_proxDual_kernel<scalar_t><<<numBlocks, blockSize>>>(
+  AT_DISPATCH_FLOATING_TYPES(dualVariable.type(), "TVL1OF3D_proxDual", ([&]{
+    cuda_TVL1OF3D_proxDual_kernel<scalar_t><<<numBlocks, blockSize>>>(
       dualVariable.packed_accessor32<scalar_t,5,torch::RestrictPtrTraits>(),
       NZ, NY, NX, 
       hZ, hY, hX,

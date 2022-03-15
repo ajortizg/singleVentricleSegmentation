@@ -108,8 +108,65 @@ __global__ void cuda_prolongate2d_bilinear_kernel(
     const T coord_y = coord_y_prolongated * LY / LY_Prolong;
     u_prolongated[iy][ix] = cuda_interpolate2d_bilinear(u, NY, NX, LY, LX, hY, hX, coord_y, coord_x);
   }
-
 }
+
+
+template <typename T>
+__global__ void cuda_prolongateVectorField2d_bilinear_kernel(
+  const torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> u,
+  const int NY, const int NX,
+  const float LY, const float LX,
+  const float hY, const float hX,
+  const int NY_Prolong, const int NX_Prolong,
+  const float LY_Prolong, const float LX_Prolong,
+  const float hY_Prolong, const float hX_Prolong,
+  torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> u_prolongated)
+{
+  int ix = blockDim.x * blockIdx.x + threadIdx.x;
+  int iy = blockDim.y * blockIdx.y + threadIdx.y;
+
+  if (ix < NX_Prolong && iy < NY_Prolong )
+  {
+    const T coord_x_prolongated = ix * hX_Prolong;
+    const T coord_x = coord_x_prolongated * LX / LX_Prolong;
+    const T coord_y_prolongated = iy * hY_Prolong;
+    const T coord_y = coord_y_prolongated * LY / LY_Prolong;
+    for(int comp=0; comp<2; ++comp)
+    {
+      u_prolongated[iy][ix][comp] = cuda_interpolateVectorField2d_bilinear(u, NY, NX, LY, LX, hY, hX, coord_y, coord_x, comp);
+    }
+  }
+}
+
+
+template <typename T>
+__global__ void cuda_prolongateMatrixField2d_bilinear_kernel(
+  const torch::PackedTensorAccessor32<T,4,torch::RestrictPtrTraits> u,
+  const int NY, const int NX,
+  const float LY, const float LX,
+  const float hY, const float hX,
+  const int NY_Prolong, const int NX_Prolong,
+  const float LY_Prolong, const float LX_Prolong,
+  const float hY_Prolong, const float hX_Prolong,
+  torch::PackedTensorAccessor32<T,4,torch::RestrictPtrTraits> u_prolongated)
+{
+  int ix = blockDim.x * blockIdx.x + threadIdx.x;
+  int iy = blockDim.y * blockIdx.y + threadIdx.y;
+
+  if (ix < NX_Prolong && iy < NY_Prolong )
+  {
+    const T coord_x_prolongated = ix * hX_Prolong;
+    const T coord_x = coord_x_prolongated * LX / LX_Prolong;
+    const T coord_y_prolongated = iy * hY_Prolong;
+    const T coord_y = coord_y_prolongated * LY / LY_Prolong;
+    for(int comp_i=0; comp_i<2; ++comp_i)
+      for(int comp_j=0; comp_j<2; ++comp_j)
+      {
+        u_prolongated[iy][ix][comp_i][comp_j] = cuda_interpolateMatrixField2d_bilinear(u, NY, NX, LY, LX, hY, hX, coord_y, coord_x, comp_i, comp_j);
+      }
+  }
+}
+
 
 template <typename T>
 __global__ void cuda_prolongate3d_trilinear_kernel(
@@ -244,8 +301,65 @@ __global__ void cuda_prolongate2d_bicubicHermiteSpline_kernel(
     const T coord_y = coord_y_prolongated * LY / LY_Prolong;
     u_prolongated[iy][ix] = cuda_interpolate2d_bicubicHermiteSpline(u, NY, NX, LY, LX, hY, hX, coord_y, coord_x);
   }
-
 }
+
+template <typename T>
+__global__ void cuda_prolongateVectorField2d_bicubicHermiteSpline_kernel(
+  const torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> u,
+  const int NY, const int NX,
+  const float LY, const float LX,
+  const float hY, const float hX,
+  const int NY_Prolong, const int NX_Prolong,
+  const float LY_Prolong, const float LX_Prolong,
+  const float hY_Prolong, const float hX_Prolong,
+  torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> u_prolongated)
+{
+  int ix = blockDim.x * blockIdx.x + threadIdx.x;
+  int iy = blockDim.y * blockIdx.y + threadIdx.y;
+
+  if (ix < NX_Prolong && iy < NY_Prolong )
+  {
+    const T coord_x_prolongated = ix * hX_Prolong;
+    const T coord_x = coord_x_prolongated * LX / LX_Prolong;
+    const T coord_y_prolongated = iy * hY_Prolong;
+    const T coord_y = coord_y_prolongated * LY / LY_Prolong;
+    for(int comp=0; comp<2; ++comp)
+    {
+       u_prolongated[iy][ix][comp] = cuda_interpolateVectorField2d_bicubicHermiteSpline(u, NY, NX, LY, LX, hY, hX, coord_y, coord_x, comp);
+    }    
+  }
+}
+
+template <typename T>
+__global__ void cuda_prolongateMatrixField2d_bicubicHermiteSpline_kernel(
+  const torch::PackedTensorAccessor32<T,4,torch::RestrictPtrTraits> u,
+  const int NY, const int NX,
+  const float LY, const float LX,
+  const float hY, const float hX,
+  const int NY_Prolong, const int NX_Prolong,
+  const float LY_Prolong, const float LX_Prolong,
+  const float hY_Prolong, const float hX_Prolong,
+  torch::PackedTensorAccessor32<T,4,torch::RestrictPtrTraits> u_prolongated)
+{
+  int ix = blockDim.x * blockIdx.x + threadIdx.x;
+  int iy = blockDim.y * blockIdx.y + threadIdx.y;
+
+  if (ix < NX_Prolong && iy < NY_Prolong )
+  {
+    const T coord_x_prolongated = ix * hX_Prolong;
+    const T coord_x = coord_x_prolongated * LX / LX_Prolong;
+    const T coord_y_prolongated = iy * hY_Prolong;
+    const T coord_y = coord_y_prolongated * LY / LY_Prolong;
+    for(int comp_i=0; comp_i<2; ++comp_i)
+      for(int comp_j=0; comp_j<2; ++comp_j)
+      {
+        u_prolongated[iy][ix][comp_i][comp_j] = cuda_interpolateMatrixField2d_bicubicHermiteSpline(u, NY, NX, LY, LX, hY, hX, coord_y, coord_x, comp_i, comp_j );
+      }
+  }
+}
+
+
+
 
 template <typename T>
 __global__ void cuda_prolongate3d_tricubicHermiteSpline_kernel(
@@ -476,6 +590,152 @@ torch::Tensor cuda_prolongate2d(
   return u_prolongated;
 }
 
+torch::Tensor cuda_prolongateVectorField2d(
+  const torch::Tensor &u,
+  const MeshInfo2D& meshInfo,
+  const MeshInfo2D& meshInfoProlongated,
+  const InterpolationType interpolation = INTERPOLATE_LINEAR )
+{
+  TORCH_CHECK(u.dim() == 3, "Expected 3d tensor");
+
+  const int NY = u.size(0);
+  const int NX = u.size(1);
+  const float LY = meshInfo.getLY();
+  const float LX = meshInfo.getLX();
+  const float hY = meshInfo.gethY();
+  const float hX = meshInfo.gethX();
+
+  const int NY_Prolong = meshInfoProlongated.getNY();
+  const int NX_Prolong = meshInfoProlongated.getNX();
+  const float LY_Prolong = meshInfoProlongated.getLY();
+  const float LX_Prolong = meshInfoProlongated.getLX();
+  const float hY_Prolong = meshInfoProlongated.gethY();
+  const float hX_Prolong = meshInfoProlongated.gethX();
+
+  auto u_prolongated = torch::zeros({NY_Prolong,NX_Prolong,2}, u.options());
+
+  const dim3 blockSize(32, 32, 1); 
+  const dim3 numBlocks((NX_Prolong + blockSize.x - 1) / blockSize.x, (NY_Prolong + blockSize.y - 1) / blockSize.y );
+
+#ifdef CUDA_TIMING
+  CudaTimer cut;
+  cut.start();
+#endif
+
+  switch(interpolation)
+  {
+  case INTERPOLATE_LINEAR: // fallthrough intended
+    AT_DISPATCH_FLOATING_TYPES(u.type(), "prolongateVectorField2d_bilinear", ([&]{
+      cuda_prolongateVectorField2d_bilinear_kernel<scalar_t><<<numBlocks, blockSize>>>(
+        u.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>(),
+        NY, NX,
+        LY, LX,
+        hY, hX,
+        NY_Prolong, NX_Prolong,
+        LY_Prolong, LX_Prolong,
+        hY_Prolong, hX_Prolong,
+        u_prolongated.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>());
+    }));
+    cudaSafeCall(cudaGetLastError());
+    break;
+
+  case INTERPOLATE_CUBIC_HERMITESPLINE:
+    AT_DISPATCH_FLOATING_TYPES(u.type(), "prolongateVectorField2d_bicubic", ([&]{
+      cuda_prolongateVectorField2d_bicubicHermiteSpline_kernel<scalar_t><<<numBlocks, blockSize>>>(
+        u.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>(),
+        NY, NX,
+        LY, LX,
+        hY, hX,
+        NY_Prolong, NX_Prolong,
+        LY_Prolong, LX_Prolong,
+        hY_Prolong, hX_Prolong,
+        u_prolongated.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>());
+    }));
+    cudaSafeCall(cudaGetLastError());
+    break;
+
+  }
+
+#ifdef CUDA_TIMING
+  cudaDeviceSynchronize();
+  std::cout << "forward time " << cut.elapsed() << std::endl;
+#endif
+
+  return u_prolongated;
+}
+
+torch::Tensor cuda_prolongateMatrixField2d(
+  const torch::Tensor &u,
+  const MeshInfo2D& meshInfo,
+  const MeshInfo2D& meshInfoProlongated,
+  const InterpolationType interpolation = INTERPOLATE_LINEAR )
+{
+  TORCH_CHECK(u.dim() == 4, "Expected 4d tensor");
+
+  const int NY = u.size(0);
+  const int NX = u.size(1);
+  const float LY = meshInfo.getLY();
+  const float LX = meshInfo.getLX();
+  const float hY = meshInfo.gethY();
+  const float hX = meshInfo.gethX();
+
+  const int NY_Prolong = meshInfoProlongated.getNY();
+  const int NX_Prolong = meshInfoProlongated.getNX();
+  const float LY_Prolong = meshInfoProlongated.getLY();
+  const float LX_Prolong = meshInfoProlongated.getLX();
+  const float hY_Prolong = meshInfoProlongated.gethY();
+  const float hX_Prolong = meshInfoProlongated.gethX();
+
+  auto u_prolongated = torch::zeros({NY_Prolong,NX_Prolong,2,2}, u.options());
+
+  const dim3 blockSize(32, 32, 1); 
+  const dim3 numBlocks((NX_Prolong + blockSize.x - 1) / blockSize.x, (NY_Prolong + blockSize.y - 1) / blockSize.y );
+
+#ifdef CUDA_TIMING
+  CudaTimer cut;
+  cut.start();
+#endif
+
+  switch(interpolation)
+  {
+  case INTERPOLATE_LINEAR: // fallthrough intended
+    AT_DISPATCH_FLOATING_TYPES(u.type(), "prolongateMatrixField2d_bilinear", ([&]{
+      cuda_prolongateMatrixField2d_bilinear_kernel<scalar_t><<<numBlocks, blockSize>>>(
+        u.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>(),
+        NY, NX,
+        LY, LX,
+        hY, hX,
+        NY_Prolong, NX_Prolong,
+        LY_Prolong, LX_Prolong,
+        hY_Prolong, hX_Prolong,
+        u_prolongated.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>());
+    }));
+    cudaSafeCall(cudaGetLastError());
+    break;
+
+  case INTERPOLATE_CUBIC_HERMITESPLINE:
+    AT_DISPATCH_FLOATING_TYPES(u.type(), "prolongateMatrixField2d_bicubic", ([&]{
+      cuda_prolongateMatrixField2d_bicubicHermiteSpline_kernel<scalar_t><<<numBlocks, blockSize>>>(
+        u.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>(),
+        NY, NX,
+        LY, LX,
+        hY, hX,
+        NY_Prolong, NX_Prolong,
+        LY_Prolong, LX_Prolong,
+        hY_Prolong, hX_Prolong,
+        u_prolongated.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>());
+    }));
+    cudaSafeCall(cudaGetLastError());
+    break;
+  }
+
+#ifdef CUDA_TIMING
+  cudaDeviceSynchronize();
+  std::cout << "forward time " << cut.elapsed() << std::endl;
+#endif
+
+  return u_prolongated;
+}
 
 
 torch::Tensor cuda_prolongate3d(

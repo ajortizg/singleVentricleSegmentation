@@ -80,6 +80,90 @@ __device__ T cuda_interpolate2d_bilinear(const torch::PackedTensorAccessor32<T,2
 
 
 template <typename T>
+__device__ T cuda_interpolateVectorField2d_bilinear(const torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> u,
+                                         const int NY, const int NX,
+                                         const float LY, const float LX,
+                                         const float hY, const float hX,
+                                         const T coord_y_warped, const T coord_x_warped,
+                                         const int comp) {
+  const int ix_f = floorf(coord_x_warped / hX );
+  const int ix_c = ix_f + 1;
+  const T wx = coord_x_warped / hX - ix_f;
+
+  const int iy_f = floorf(coord_y_warped / hY );
+  const int iy_c = iy_f + 1;
+  const T wy = coord_y_warped / hY - iy_f;
+
+  T u_ff = 0, u_fc = 0;
+  if (ix_f >= 0 && ix_f < NX) {
+    if (iy_f >= 0 && iy_f < NY)
+      u_ff = u[iy_f][ix_f][comp];
+
+    if (iy_c >= 0 && iy_c < NY)
+      u_fc = u[iy_c][ix_f][comp];
+  }
+
+  T u_cf = 0, u_cc = 0;
+  if (ix_c >= 0 && ix_c < NX) {
+    if (iy_f >= 0 && iy_f < NY)
+      u_cf = u[iy_f][ix_c][comp];
+
+    if (iy_c >= 0 && iy_c < NY)
+      u_cc = u[iy_c][ix_c][comp];
+  }
+
+  T out = (1 - wy) * (1 - wx) * u_ff;
+  out += (1 - wy) * wx * u_cf;
+  out += wy * (1 - wx) * u_fc;
+  out += wy * wx * u_cc;
+
+  return out;
+}
+
+
+template <typename T>
+__device__ T cuda_interpolateMatrixField2d_bilinear(const torch::PackedTensorAccessor32<T,4,torch::RestrictPtrTraits> u,
+                                         const int NY, const int NX,
+                                         const float LY, const float LX,
+                                         const float hY, const float hX,
+                                         const T coord_y_warped, const T coord_x_warped,
+                                         const int comp_i, const int comp_j ) {
+  const int ix_f = floorf(coord_x_warped / hX );
+  const int ix_c = ix_f + 1;
+  const T wx = coord_x_warped / hX - ix_f;
+
+  const int iy_f = floorf(coord_y_warped / hY );
+  const int iy_c = iy_f + 1;
+  const T wy = coord_y_warped / hY - iy_f;
+
+  T u_ff = 0, u_fc = 0;
+  if (ix_f >= 0 && ix_f < NX) {
+    if (iy_f >= 0 && iy_f < NY)
+      u_ff = u[iy_f][ix_f][comp_i][comp_j];
+
+    if (iy_c >= 0 && iy_c < NY)
+      u_fc = u[iy_c][ix_f][comp_i][comp_j];
+  }
+
+  T u_cf = 0, u_cc = 0;
+  if (ix_c >= 0 && ix_c < NX) {
+    if (iy_f >= 0 && iy_f < NY)
+      u_cf = u[iy_f][ix_c][comp_i][comp_j];
+
+    if (iy_c >= 0 && iy_c < NY)
+      u_cc = u[iy_c][ix_c][comp_i][comp_j];
+  }
+
+  T out = (1 - wy) * (1 - wx) * u_ff;
+  out += (1 - wy) * wx * u_cf;
+  out += wy * (1 - wx) * u_fc;
+  out += wy * wx * u_cc;
+
+  return out;
+}
+
+
+template <typename T>
 __device__ T cuda_interpolate3d_trilinear(const torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> u,
                                           const int NZ, const int NY, const int NX,
                                           const float LZ, const float LY, const float LX,
@@ -385,6 +469,92 @@ __device__ T cuda_interpolate2d_bicubicHermiteSpline(const torch::PackedTensorAc
         const int c_ix_x = ix_f + dx;
         if (c_ix_x >= 0 && c_ix_x < NX)
           buff_x[dx + 1] = u[c_ix_y][c_ix_x];
+        else
+          buff_x[dx + 1] = 0;
+      }
+      buff_y[dy + 1] = cuda_interpolate1d_cubicHermiteSpline_local<T>(buff_x, wx + 1);
+    }
+    else
+      buff_y[dy + 1] = 0;
+  }
+
+  T out = cuda_interpolate1d_cubicHermiteSpline_local<T>(buff_y, wy + 1);
+
+  return out;
+}
+
+
+template <typename T>
+__device__ T cuda_interpolateVectorField2d_bicubicHermiteSpline(const torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> u, 
+                                        const int NY, const int NX,
+                                        const float LY, const float LX,
+                                        const float hY, const float hX,
+                                        const T coord_y_warped, const T coord_x_warped,
+                                        const int comp) {
+
+  const int ix_f = floorf(coord_x_warped / hX);
+  const T wx = coord_x_warped / hX - ix_f;
+
+  const int iy_f = floorf(coord_y_warped / hY);
+  const T wy = coord_y_warped / hY - iy_f;
+
+  T buff_y[4];
+  T buff_x[4];
+
+  for (int dy = -1; dy < 3; ++dy)
+  {
+    const int c_ix_y = iy_f + dy;
+
+    if (c_ix_y >= 0 && c_ix_y < NY)
+    {
+      for (int dx = -1; dx < 3; ++dx)
+      {
+        const int c_ix_x = ix_f + dx;
+        if (c_ix_x >= 0 && c_ix_x < NX)
+          buff_x[dx + 1] = u[c_ix_y][c_ix_x][comp];
+        else
+          buff_x[dx + 1] = 0;
+      }
+      buff_y[dy + 1] = cuda_interpolate1d_cubicHermiteSpline_local<T>(buff_x, wx + 1);
+    }
+    else
+      buff_y[dy + 1] = 0;
+  }
+
+  T out = cuda_interpolate1d_cubicHermiteSpline_local<T>(buff_y, wy + 1);
+
+  return out;
+}
+
+
+template <typename T>
+__device__ T cuda_interpolateMatrixField2d_bicubicHermiteSpline(const torch::PackedTensorAccessor32<T,4,torch::RestrictPtrTraits> u, 
+                                        const int NY, const int NX,
+                                        const float LY, const float LX,
+                                        const float hY, const float hX,
+                                        const T coord_y_warped, const T coord_x_warped,
+                                        const int comp_i, const int comp_j) {
+
+  const int ix_f = floorf(coord_x_warped / hX);
+  const T wx = coord_x_warped / hX - ix_f;
+
+  const int iy_f = floorf(coord_y_warped / hY);
+  const T wy = coord_y_warped / hY - iy_f;
+
+  T buff_y[4];
+  T buff_x[4];
+
+  for (int dy = -1; dy < 3; ++dy)
+  {
+    const int c_ix_y = iy_f + dy;
+
+    if (c_ix_y >= 0 && c_ix_y < NY)
+    {
+      for (int dx = -1; dx < 3; ++dx)
+      {
+        const int c_ix_x = ix_f + dx;
+        if (c_ix_x >= 0 && c_ix_x < NX)
+          buff_x[dx + 1] = u[c_ix_y][c_ix_x][comp_i][comp_j];
         else
           buff_x[dx + 1] = 0;
       }

@@ -66,7 +66,9 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
   py::class_<Nabla2D_CD>(m,"Nabla2D_CD")
         .def(py::init<const MeshInfo2D&>())
         .def("forward", &Nabla2D_CD::forward)
-        .def("backward", &Nabla2D_CD::backward);
+        .def("backward", &Nabla2D_CD::backward)
+        .def("forwardVectorField", &Nabla2D_CD::forwardVectorField)
+        .def("backwardVectorField", &Nabla2D_CD::backwardVectorField);
 
   py::class_<Nabla3D_CD>(m,"Nabla3D_CD")
         .def(py::init<const MeshInfo3D&>())
@@ -94,7 +96,8 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
 
   py::class_<Warping2D>(m,"Warping2D")
       .def(py::init<const MeshInfo2D&>())
-      .def("forward", &Warping2D::forward);
+      .def("forward", &Warping2D::forward)
+      .def("forwardVectorField", &Warping2D::forwardVectorField);
 
   py::class_<Warping3D>(m,"Warping3D")
       .def(py::init<const MeshInfo3D&>())
@@ -110,7 +113,9 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
 
   py::class_<Prolongation2D>(m,"Prolongation2D")
       .def(py::init<const MeshInfo2D&,const MeshInfo2D&>())
-      .def("forward", &Prolongation2D::forward);
+      .def("forward", &Prolongation2D::forward)
+      .def("forwardVectorField", &Prolongation2D::forwardVectorField)
+      .def("forwardMatrixField", &Prolongation2D::forwardMatrixField);
 
   py::class_<Prolongation3D>(m,"Prolongation3D")
       .def(py::init<const MeshInfo3D&,const MeshInfo3D&>())
@@ -123,8 +128,10 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
   //=======================================
   // optical flow
   //=======================================
-  m.def("TVL1OF_threshold", &TVL1OF_threshold, "Update step for v");
-  m.def("TVL1OF_proxPrimal", &TVL1OF_proxPrimal, "primal prox step");
-  m.def("TVL1OF_proxDual", &TVL1OF_proxDual, "dual prox step");
+  //m.def("TVL1OF_threshold", &TVL1OF_threshold, "Update step for v");
+  m.def("TVL1OF2D_proxPrimal", &TVL1OF2D_proxPrimal, "primal prox step in 2D");
+  m.def("TVL1OF2D_proxDual", &TVL1OF2D_proxDual, "dual prox step in 2D");
+  m.def("TVL1OF3D_proxPrimal", &TVL1OF3D_proxPrimal, "primal prox step in 3D");
+  m.def("TVL1OF3D_proxDual", &TVL1OF3D_proxDual, "dual prox step in 3D");
 
 }

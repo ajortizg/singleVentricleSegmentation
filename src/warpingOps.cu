@@ -105,7 +105,31 @@ __global__ void cuda_warp2d_bilinear_kernel(
     const T coord_y_warped = iy * hY + dy;
     u_warped[iy][ix] = cuda_interpolate2d_bilinear(u, NY, NX, LY, LX, hY, hX, coord_y_warped, coord_x_warped);
   }
+}
 
+template <typename T>
+__global__ void cuda_warpVectorField2d_bilinear_kernel(
+  const torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> u,
+  const torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> phi,
+  const int NY, const int NX,
+  const float LY, const float LX,
+  const float hY, const float hX,
+  torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> u_warped)
+{
+  int ix = blockDim.x * blockIdx.x + threadIdx.x;
+  int iy = blockDim.y * blockIdx.y + threadIdx.y;
+
+  if (ix < NX && iy < NY )
+  {
+    const T dx = phi[iy][ix][0];
+    const T dy = phi[iy][ix][1];
+    const T coord_x_warped = ix * hX + dx;
+    const T coord_y_warped = iy * hY + dy;
+    for(int comp=0; comp<2; ++comp)
+    {
+      u_warped[iy][ix][comp] = cuda_interpolateVectorField2d_bilinear(u, NY, NX, LY, LX, hY, hX, coord_y_warped, coord_x_warped, comp);
+    }
+  }
 }
 
 template <typename T>
@@ -200,8 +224,35 @@ __global__ void cuda_warp2d_bicubicHermiteSpline_kernel(
     const T coord_y_warped = iy * hY + dy;
     u_warped[iy][ix] = cuda_interpolate2d_bicubicHermiteSpline(u, NY, NX, LY, LX, hY, hX, coord_y_warped, coord_x_warped);
   }
-
 }
+
+
+template <typename T>
+__global__ void cuda_warpVectorField2d_bicubicHermiteSpline_kernel(
+  const torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> u,
+  const torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> phi,
+  const int NY, const int NX,
+  const float LY, const float LX,
+  const float hY, const float hX,
+  torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> u_warped)
+{
+  int ix = blockDim.x * blockIdx.x + threadIdx.x;
+  int iy = blockDim.y * blockIdx.y + threadIdx.y;
+
+  if (ix < NX && iy < NY )
+  {
+    const T dx = phi[iy][ix][0];
+    const T dy = phi[iy][ix][1];
+    const T coord_x_warped = ix * hX + dx;
+    const T coord_y_warped = iy * hY + dy;
+    for(int comp=0; comp<2; ++comp)
+    {
+      u_warped[iy][ix][comp] = cuda_interpolateVectorField2d_bicubicHermiteSpline(u, NY, NX, LY, LX, hY, hX, coord_y_warped, coord_x_warped, comp);
+    }
+  }
+}
+
+
 
 template <typename T>
 __global__ void cuda_warp3d_tricubicHermiteSpline_kernel(
@@ -383,6 +434,73 @@ torch::Tensor cuda_warp2d(
 
   return u_warped;
 }
+
+
+
+torch::Tensor cuda_warpVectorField2d(
+  const torch::Tensor &u,
+  const torch::Tensor &phi,
+  const MeshInfo2D& meshInfo,
+  const InterpolationType interpolation = INTERPOLATE_LINEAR )
+{
+  TORCH_CHECK(u.dim() == 3, "Expected 3d tensor");
+  TORCH_CHECK(phi.dim() == 3, "Expected 3d tensor")
+
+  const int NY = u.size(0);
+  const int NX = u.size(1);
+  const float LY = meshInfo.getLY();
+  const float LX = meshInfo.getLX();
+  const float hY = meshInfo.gethY();
+  const float hX = meshInfo.gethX();
+
+  auto u_warped = torch::zeros({NY,NX,2}, u.options());
+
+  const dim3 blockSize(32, 32, 1); 
+  const dim3 numBlocks((NX + blockSize.x - 1) / blockSize.x, (NY + blockSize.y - 1) / blockSize.y );
+
+#ifdef CUDA_TIMING
+  CudaTimer cut;
+  cut.start();
+#endif
+
+  switch(interpolation)
+  {
+  case INTERPOLATE_LINEAR: // fallthrough intended
+    AT_DISPATCH_FLOATING_TYPES(u.type(), "warpVectorField2d_bilinear", ([&]{
+      cuda_warpVectorField2d_bilinear_kernel<scalar_t><<<numBlocks, blockSize>>>(
+        u.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>(),
+        phi.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>(),
+        NY, NX,
+        LY, LX,
+        hY, hX,
+        u_warped.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>());
+    }));
+    cudaSafeCall(cudaGetLastError());
+    break;
+
+  case INTERPOLATE_CUBIC_HERMITESPLINE:
+    AT_DISPATCH_FLOATING_TYPES(u.type(), "warpVectorField2d_bicubic", ([&]{
+      cuda_warpVectorField2d_bicubicHermiteSpline_kernel<scalar_t><<<numBlocks, blockSize>>>(
+        u.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>(),
+        phi.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>(),
+        NY, NX,
+        LY, LX,
+        hY, hX,
+        u_warped.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>());
+    }));
+    cudaSafeCall(cudaGetLastError());
+    break;
+
+  }
+
+#ifdef CUDA_TIMING
+  cudaDeviceSynchronize();
+  std::cout << "forward time " << cut.elapsed() << std::endl;
+#endif
+
+  return u_warped;
+}
+
 
 
 

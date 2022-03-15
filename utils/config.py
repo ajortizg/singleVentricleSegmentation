@@ -5,9 +5,9 @@ BASE_PATH = "singleVentricleData"
 VOLUMES_PATH = os.path.sep.join([BASE_PATH, "NIFTI_4D_Datasets"])
 SEGMENTATIONS_PATH = os.path.sep.join([BASE_PATH, "NIFTI_Single_Ventricle_Segmentations"])
 SEGMENTATIONS_FILE = os.path.sep.join([BASE_PATH, "Segmentation_volumes.xlsx"])
-# PATIENT_NAME = "Adult_45"
+PATIENT_NAME = "Adult_30"
 # PATIENT_NAME = "Adolescent_87"
-PATIENT_NAME = "Child_10"
+#PATIENT_NAME = "Child_10"
 OUTPUT_PATH = "results"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 # PIN_MEMORY = True if DEVICE == "cuda" else False
@@ -27,3 +27,10 @@ LAMBDA = 25
 THETA = 0.01
 LT = LAMBDA * THETA
 TAU = 0.25
+
+
+
+##2D##
+IMAGE_PATH = os.path.sep.join([BASE_PATH, "2DImages"])
+Image0_PATH = os.path.sep.join([IMAGE_PATH, "stefan_2.jpg"])
+Image1_PATH = os.path.sep.join([IMAGE_PATH, "stefan_3.jpg"])

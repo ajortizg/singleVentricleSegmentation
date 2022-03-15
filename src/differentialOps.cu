@@ -336,6 +336,79 @@ __global__ void cuda_divergence2d_cd_backward_kernel(
 
 
 template <typename T>
+__global__ void cuda_nabla2d_cd_forwardVectorField_kernel(
+  const torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> b,
+  const int NY, const int NX,
+  const float hY, const float hX,
+  torch::PackedTensorAccessor32<T,4,torch::RestrictPtrTraits> Db)
+{
+  int ix = blockDim.x * blockIdx.x + threadIdx.x;
+  int iy = blockDim.y * blockIdx.y + threadIdx.y;
+
+  if (ix < NX && iy < NY )
+  {
+    for(int comp=0; comp<3; ++comp )
+    {
+      Db[iy][ix][comp][0] = (ix > 0) ? 
+                            (ix < NX-1) ? 
+                              0.5*(b[iy][ix+1][comp] - b[iy][ix-1][comp])/hX
+                              : 
+                              0.5*(b[iy][ix][comp] - b[iy][ix-1][comp])/hX
+                            : 
+                            0.5*(b[iy][ix+1][comp] - b[iy][ix][comp])/hX;
+
+      Db[iy][ix][comp][1] = (iy > 0) ? 
+                            (iy < NY-1) ? 
+                              0.5*(b[iy+1][ix][comp] - b[iy-1][ix][comp])/hY
+                              : 
+                              0.5*(b[iy][ix][comp] - b[iy-1][ix][comp]) /hY
+                            : 
+                            0.5*(b[iy+1][ix][comp] - b[iy][ix][comp])/hY;
+    }
+  }
+}
+
+
+template <typename T>
+__global__ void cuda_divergence2d_cd_backwardVectorField_kernel(
+  const torch::PackedTensorAccessor32<T,4,torch::RestrictPtrTraits> p,
+  const int NY, const int NX,
+  const float hY, const float hX,
+  torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> divp)
+{
+  int ix = blockDim.x * blockIdx.x + threadIdx.x;
+  int iy = blockDim.y * blockIdx.y + threadIdx.y;
+
+  if (ix < NX && iy < NY )
+  {
+    for(int comp=0; comp<3; ++comp )
+    {
+      T divp_x = (ix > 0) ? 
+                            (ix < NX - 1 ) ? 
+                               0.5*(p[iy][ix-1][comp][0] - p[iy][ix+1][comp][0]) 
+                               : 
+                               0.5*(p[iy][ix-1][comp][0] + p[iy][ix][comp][0]) 
+                              :
+                              0.5*(-p[iy][ix][comp][0] - p[iy][ix+1][comp][0]);
+
+      T divp_y = (iy > 0) ? 
+                            (iy < NY - 1 ) ? 
+                               0.5*(p[iy-1][ix][comp][1] - p[iy+1][ix][comp][1]) 
+                               : 
+                               0.5*(p[iy-1][ix][comp][1] + p[iy][ix][comp][1]) 
+                              :
+                              0.5*(-p[iy][ix][comp][1] - p[iy+1][ix][comp][1]);
+
+      divp[iy][ix][comp] = divp_x/hX + divp_y/hY;
+    }
+  }
+  
+}
+
+
+
+
+template <typename T>
 __global__ void cuda_nabla3d_cd_forward_kernel(
   const torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> b,
   const int NZ, const int NY, const int NX,
@@ -895,6 +968,93 @@ torch::Tensor cuda_divergence2d_cd_backward(
   return divp;
 }
 
+
+torch::Tensor cuda_nabla2d_cd_forwardVectorField(
+  const torch::Tensor &b, const MeshInfo2D &meshInfo)
+{
+  TORCH_CHECK(b.dim() == 3, "Expected 3d tensor");
+
+  const int NY = b.size(0);
+  const int NX = b.size(1);
+  const float hY = meshInfo.gethY();
+  const float hX = meshInfo.gethX();
+
+  auto Db = torch::zeros({NY, NX, 2, 2}, b.options());
+
+  const dim3 blockSize(32, 32, 1); 
+  const dim3 numBlocks((NX + blockSize.x - 1) / blockSize.x, (NY + blockSize.y - 1) / blockSize.y );
+
+#ifdef CUDA_TIMING
+  CudaTimer cut;
+  cut.start();
+#endif
+
+  AT_DISPATCH_FLOATING_TYPES(b.type(), "nabla2d_cd_forwardVectorField", ([&]{
+    cuda_nabla2d_cd_forwardVectorField_kernel<scalar_t><<<numBlocks, blockSize>>>(
+      b.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>(),
+      NY, NX,
+      hY, hX,
+      Db.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>());
+  }));
+  cudaSafeCall(cudaGetLastError());
+
+#ifdef CUDA_TIMING
+  cudaDeviceSynchronize();
+  std::cout << "forward time " << cut.elapsed() << std::endl;
+#endif
+
+  return Db;
+}
+
+
+torch::Tensor cuda_divergence2d_cd_backwardVectorField(
+  const torch::Tensor &p, const MeshInfo2D &meshInfo)
+{
+  TORCH_CHECK(p.dim() == 4, "Expected 4d tensor");
+
+  const int NY = p.size(0);
+  const int NX = p.size(1);
+  const float hY = meshInfo.gethY();
+  const float hX = meshInfo.gethX();
+
+  auto divp = torch::zeros({NY,NX,2}, p.options());
+
+  const dim3 blockSize(32, 32, 1); 
+  const dim3 numBlocks((NX + blockSize.x - 1) / blockSize.x, (NY + blockSize.y - 1) / blockSize.y );
+
+#ifdef CUDA_TIMING
+  CudaTimer cut;
+  cut.start();
+#endif
+
+  AT_DISPATCH_FLOATING_TYPES(p.type(), "divergence2d_cd_backwardVectorField", ([&]{
+    cuda_divergence2d_cd_backwardVectorField_kernel<scalar_t><<<numBlocks, blockSize>>>(
+      p.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>(),
+      NY, NX,
+      hY, hX,
+      divp.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>());
+  }));
+  cudaSafeCall(cudaGetLastError());
+
+#ifdef CUDA_TIMING
+  cudaDeviceSynchronize();
+  std::cout << "forward time " << cut.elapsed() << std::endl;
+#endif
+
+  return divp;
+}
+
+
+
+
+
+
+
+
+
+
+
+
 torch::Tensor cuda_nabla3d_cd_forward(
   const torch::Tensor &b, const MeshInfo3D &meshInfo)
 {
@@ -976,15 +1136,6 @@ torch::Tensor cuda_divergence3d_cd_backward(
 
   return divp;
 }
-
-
-
-
-
-
-
-
-
 
 torch::Tensor cuda_nabla3d_cd_forwardVectorField(
   const torch::Tensor &b, const MeshInfo3D &meshInfo)

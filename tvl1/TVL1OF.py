@@ -1,6 +1,6 @@
 #==================================
 import sys
-
+import os
 import math
 import numpy as np
 from scipy import ndimage
@@ -27,8 +27,8 @@ sys.path.append(pythonOps_lib_path)
 from opticalFlow_cuda_ext import opticalFlow
 
 
-#InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_LINEAR
-InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_CUBIC_HERMITESPLINE
+InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_LINEAR
+#InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_CUBIC_HERMITESPLINE
 
 
 class TVL1OpticalFlow:
@@ -142,7 +142,7 @@ class TVL1OpticalFlow:
                 pold = p
                 u_grad = nablaOp.forwardVectorField(z)
                 dualVariable = p + sigma * u_grad
-                p = opticalFlow.TVL1OF_proxDual( dualVariable, sigma, dualFctWeight_TV, meshInfo)
+                p = opticalFlow.TVL1OF3D_proxDual( dualVariable, sigma, dualFctWeight_TV, meshInfo)
                 #print("|p-pold| = ", torch.norm(p-pold).item() )
 
                 # update of primal variable
@@ -151,7 +151,7 @@ class TVL1OpticalFlow:
                 #print("rho.norm = ", torch.norm(rho).item() )
                 p_div = nablaOp.backwardVectorField(p)
                 primalVariable = u - tau * p_div
-                u = opticalFlow.TVL1OF_proxPrimal(primalVariable, tau, primalFctWeight_Matching, rho, I1_warped_grad, weightNorm, meshInfo )
+                u = opticalFlow.TVL1OF3D_proxPrimal(primalVariable, tau, primalFctWeight_Matching, rho, I1_warped_grad, weightNorm, meshInfo )
 
                 # overrelaxation
                 zold = z
@@ -165,19 +165,27 @@ class TVL1OpticalFlow:
 
     def saveSingleStepToFile(self,step,I0,I1,u,p,meshInfo):
         
-        plotOpticalFlow(u.cpu().detach().numpy(), "u", self.saveDir, step)
-        save_slices(I0,f"I0_it{step}.png", self.saveDir)
-        save_slices(I1,f"I1_it{step}.png", self.saveDir)
+        saveDirStep = os.path.sep.join([self.saveDir, f"it{step}"])
+        if not os.path.exists(saveDirStep):
+            os.makedirs(saveDirStep)
+
+        plotOpticalFlow(u.cpu().detach().numpy(), "u", saveDirStep, step)
+        save_slices(I0,f"I0_it{step}.png", saveDirStep)
+        save_slices(I1,f"I1_it{step}.png", saveDirStep)
         warpingOp = opticalFlow.Warping3D(meshInfo)
         I1_warped = warpingOp.forward(I1,u,InterpolationTypeCuda)
-        save_slices(I1_warped, f"I1_warped_it{step}.png", self.saveDir)
+        save_slices(I1_warped, f"I1_warped_it{step}.png", saveDirStep)
+        save_slices(torch.abs(I1_warped-I0), f"Diff_I1warped_to_I0_it{step}.png", saveDirStep)
+
+        save_single_zslices(I0, saveDirStep, "I0Slices", 1., 0)
+        save_single_zslices(I1_warped, saveDirStep, "I1WarpedSlices", 1., 0)
         
         flowName = f"flow_it{step}.pt"
-        fileNameFlow = os.path.join(self.saveDir, flowName) 
+        fileNameFlow = os.path.join(saveDirStep, flowName) 
         torch.save(u, fileNameFlow)
 
         dualName = f"dual_it{step}.pt"
-        fileNameDual = os.path.join(self.saveDir, dualName) 
+        fileNameDual = os.path.join(saveDirStep, dualName) 
         torch.save(p, fileNameDual)
 
     # def updateDualVariable(self,u,v,p,meshInfo):

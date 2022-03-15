@@ -23,6 +23,8 @@ torch::Tensor cuda_divergence1d_cd_backward( const torch::Tensor &b, const MeshI
 
 torch::Tensor cuda_nabla2d_cd_forward( const torch::Tensor &b, const MeshInfo2D &meshInfo);
 torch::Tensor cuda_divergence2d_cd_backward( const torch::Tensor &b, const MeshInfo2D &meshInfo);
+torch::Tensor cuda_nabla2d_cd_forwardVectorField( const torch::Tensor &b, const MeshInfo2D &meshInfo);
+torch::Tensor cuda_divergence2d_cd_backwardVectorField( const torch::Tensor &b, const MeshInfo2D &meshInfo);
 
 torch::Tensor cuda_nabla3d_cd_forward( const torch::Tensor &b, const MeshInfo3D &meshInfo);
 torch::Tensor cuda_divergence3d_cd_backward( const torch::Tensor &b, const MeshInfo3D &meshInfo);
@@ -116,6 +118,14 @@ public:
   torch::Tensor backward(const torch::Tensor &b) const{
     CHECK_INPUT(b);
     return cuda_divergence2d_cd_backward(b,_meshInfo);
+  }
+  torch::Tensor forwardVectorField(const torch::Tensor &b) const {
+    CHECK_INPUT(b);
+    return cuda_nabla2d_cd_forwardVectorField(b,_meshInfo);
+  }
+  torch::Tensor backwardVectorField(const torch::Tensor &b) const{
+    CHECK_INPUT(b);
+    return cuda_divergence2d_cd_backwardVectorField(b,_meshInfo);
   }
 };
 

@@ -33,7 +33,29 @@ def saveImage(input,saveDir,name):
     cv2.imwrite(pathNameA,input.cpu().detach().numpy())
 
 
-def save_slices(image3D, fileName, saveDir):
+def save_single_zslices(image3D, saveDir, subdir, max_gray_value=1, color_channel = -1):
+
+    saveDirSlices = os.path.sep.join([saveDir, subdir])
+    if not os.path.exists(saveDirSlices):
+        os.makedirs(saveDirSlices)
+    factor_gray_value = 255. / max_gray_value
+    numZSlices = image3D.shape[0]
+    for z in range(numZSlices):
+        img = image3D[z,:,:].cpu().detach().numpy()
+        imgName = f"img_z{z}.png"
+        pathName = os.path.join(saveDirSlices, imgName) 
+        #matplotlib.image.imsave(pathName,img,cmap='gray')
+        cv2.imwrite(pathName,factor_gray_value * img)
+
+        if color_channel in range(0,3):
+            imgColor = np.zeros((img.shape[0], img.shape[1], 3))
+            imgColor[:,:,color_channel] = img[:,:]
+            imgNameColor = f"colorimg_z{z}.png"
+            pathNameColor = os.path.join(saveDirSlices, imgNameColor) 
+            cv2.imwrite(pathNameColor,factor_gray_value * imgColor)
+
+
+def save_slices(image3D, fileName, saveDir, max_gray_value=1):
     """
     image3D:  pytorch array with shape [Z,Y,X]
     """
@@ -49,7 +71,7 @@ def save_slices(image3D, fileName, saveDir):
     fig.suptitle('4D_Nifti file: {} \n with {} slices in z-direction'.format(os.path.basename(fileName),numZSlices), fontsize=16)
     for z, ax in enumerate(axs.flat):
         if z < numZSlices:
-            ax.imshow(image3D[z,:,:].cpu().detach().numpy(),cmap='gray', interpolation=None)
+            ax.imshow(image3D[z,:,:].cpu().detach().numpy(), cmap='gray', vmin=0, vmax=max_gray_value, interpolation=None)
             ax.set_title("layer {}".format(z))
             ax.axis('off')
         else:
