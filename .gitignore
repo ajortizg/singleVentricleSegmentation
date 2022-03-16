@@ -134,6 +134,7 @@ dmypy.json
 
 #data folder
 singleVentricleData
+MiddleburyOpticalFlow
 
 #results folder
 results

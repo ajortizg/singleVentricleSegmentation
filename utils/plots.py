@@ -26,14 +26,17 @@ def saveCurve1D(input, LX1D, saveDir, name):
     plt.savefig(pathName,dpi=100)
     plt.close('all')
 
-def saveImage(input,saveDir,name):
+def saveImage(input,saveDir,name,max_gray_value=1.):
+    factor_gray_value = 255. / max_gray_value
     NY2D = input.shape[0]
     NX2D = input.shape[1]
     pathNameA = os.path.join(saveDir, name) 
-    cv2.imwrite(pathNameA,input.cpu().detach().numpy())
+    img_yx = input.cpu().detach().numpy()
+    img = np.swapaxes(img_yx, 0, 1)
+    cv2.imwrite(pathNameA,factor_gray_value * img)
 
 
-def save_single_zslices(image3D, saveDir, subdir, max_gray_value=1, color_channel = -1):
+def save_single_zslices(image3D, saveDir, subdir, max_gray_value=1., color_channel = -1):
 
     saveDirSlices = os.path.sep.join([saveDir, subdir])
     if not os.path.exists(saveDirSlices):

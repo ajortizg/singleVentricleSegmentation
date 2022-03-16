@@ -84,10 +84,11 @@ class TVL1OpticalFlow:
 
         I0s, I1s, us, ps, meshInfos = self.generatePyramid(I0,I1,u,p)
 
-        # Compute the optical flow at scale s
         print("start to compute optical flow for pyramid")
         for s in range(NUM_SCALES-1, -1, -1):
             print("step = ", s)
+
+            # Compute the optical flow at scale s
             us[s], ps[s] = self.computeOnSingleStep(I0s[s], I1s[s], us[s], ps[s], meshInfos[s])
 
             #save step
@@ -96,11 +97,13 @@ class TVL1OpticalFlow:
             if s == 0:
                 break
 
-            # Prolongate the optical flow and dual variables for the next pyramid level
+            # Prolongate the optical flow and dual variables to the next pyramid level
             prolongationOp_cuda = opticalFlow.Prolongation3D(meshInfos[s],meshInfos[s-1])
             us[s-1] = prolongationOp_cuda.forwardVectorField(us[s],InterpolationTypeCuda)
-            #TODO factor LX/LXNew, ...
-            us[s-1] *= INV_ZOOM_FACTOR
+            #factor LXNew/LXOld, ...
+            us[s-1][:,:,:,0] *= meshInfos[s-1].getLX() / meshInfos[s].getLX()
+            us[s-1][:,:,:,1] *= meshInfos[s-1].getLY() / meshInfos[s].getLY()
+            us[s-1][:,:,:,2] *= meshInfos[s-1].getLZ() / meshInfos[s].getLZ()
 
             #TODO Dirichlet boundary condition for p?
             # ps[s] = self.dirichlet(ps[s])
@@ -112,10 +115,6 @@ class TVL1OpticalFlow:
 
     def computeOnSingleStep(self, I0, I1, u, p, meshInfo):
 
-        primalFctWeight_Matching = 1.
-        dualFctWeight_TV = 25.
-        weightNorm = 0.01
-
         print("start to compute optical flow for single step")
         progress_bar = tqdm(total=MAX_WARPS * MAX_OUTER_ITERATIONS)
 
@@ -126,8 +125,6 @@ class TVL1OpticalFlow:
         I1_grad = nablaOp.forward(I1)
 
         z = u
-        sigma = 0.5
-        tau = 0.5
 
         for w in range(MAX_WARPS):
             # Compute the warping of the target image and its derivatives
@@ -136,6 +133,10 @@ class TVL1OpticalFlow:
             # Constant part of the rho function
             rho_c = I1_warped - u[:, :, :, 0] * I1_warped_grad[:, :, :, 0] - u[:, :, :, 1] * I1_warped_grad[:, :, :, 1] - u[:, :, :, 2] * I1_warped_grad[:, :, :, 2] - I0
 
+            breakConditionVecPrimal = torch.zeros([MAX_OUTER_ITERATIONS])
+            breakConditionVecDual = torch.zeros([MAX_OUTER_ITERATIONS])
+            breakConditionVecUpdate = torch.zeros([MAX_OUTER_ITERATIONS])
+
             for n in range(MAX_OUTER_ITERATIONS):
 
                 # update of dual variable
@@ -143,22 +144,35 @@ class TVL1OpticalFlow:
                 u_grad = nablaOp.forwardVectorField(z)
                 dualVariable = p + sigma * u_grad
                 p = opticalFlow.TVL1OF3D_proxDual( dualVariable, sigma, dualFctWeight_TV, meshInfo)
-                #print("|p-pold| = ", torch.norm(p-pold).item() )
+                breakConditionVecDual[n] = torch.norm(p-pold).item()
 
                 # update of primal variable
+                uold = u
                 # Compute the fidelity data term \rho(u)
                 rho = rho_c + u[:, :, :, 0] * I1_warped_grad[:, :, :, 0] + u[:, :, :, 1] * I1_warped_grad[:, :, :, 1] + u[:, :, :, 2] * I1_warped_grad[:, :, :, 2]
                 #print("rho.norm = ", torch.norm(rho).item() )
                 p_div = nablaOp.backwardVectorField(p)
                 primalVariable = u - tau * p_div
                 u = opticalFlow.TVL1OF3D_proxPrimal(primalVariable, tau, primalFctWeight_Matching, rho, I1_warped_grad, weightNorm, meshInfo )
+                breakConditionVecPrimal[n] = torch.norm(u-uold).item()
+
+                #update of stepsizes
+		#if ChambollePockType == 1:
+		#if ChambollePockType == 2:
+	        #   theta = 1. / std::sqrt( 1. + 2. * gamma * StepSizePrimal );
+	        #   tau *= theta;
+		#   sigma /= theta;
 
                 # overrelaxation
                 zold = z
                 z = u
-                #print("|z-zold| = ", torch.norm(z-zold).item() )
+                breakConditionVecUpdate[n] = torch.norm(z-zold).item()
 
                 progress_bar.update(1)
+
+            saveCurve1D(breakConditionVecPrimal, MAX_OUTER_ITERATIONS, self.saveDir, f"CPErrorPrimal_it{s}_warp{w}")
+            saveCurve1D(breakConditionVecDual, MAX_OUTER_ITERATIONS, self.saveDir, f"CPErrorDual_it{s}_warp{w}")
+            saveCurve1D(breakConditionVecUpdate, MAX_OUTER_ITERATIONS, self.saveDir, f"CPErrorUpdate_it{s}_warp{w}")
 
         return u, p
 

@@ -134,8 +134,22 @@ def flow_to_image(flow_uv, clip_flow=None, convert_to_bgr=False):
     return flow_uv_to_colors(u, v, convert_to_bgr)
 
 
+def plotOpticalFlow2D(flo, name, resultsDir, iteration):
+    # img = img[0].permute(1,2,0).cpu().numpy()
+    # flo = flo[0].permute(1,2,0).cpu().numpy()
+    
+     # map flow to rgb image
+     floImg = flow_to_image(flo)
+     # img_flo = np.concatenate([img, flo], axis=0)
 
-def plotOpticalFlow(flo, name, resultsDir, iteration):
+     #import matplotlib.pyplot as plt
+     imgName = f"{name}_it{iteration}.png"
+     fileName = os.path.join(resultsDir, imgName) 
+     cv2.imwrite(fileName, floImg)
+     # cv2.imwrite(fileName,img_flo[:, :, [2,1,0]])
+
+
+def plotOpticalFlow3D(flo, name, resultsDir, iteration):
     # img = img[0].permute(1,2,0).cpu().numpy()
     # flo = flo[0].permute(1,2,0).cpu().numpy()
     
@@ -151,3 +165,8 @@ def plotOpticalFlow(flo, name, resultsDir, iteration):
         fileName = os.path.join(resultsDir, imgName) 
         cv2.imwrite(fileName, floImg)
         # cv2.imwrite(fileName,img_flo[:, :, [2,1,0]])
+
+
+
+
+

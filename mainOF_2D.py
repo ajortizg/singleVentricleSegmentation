@@ -22,7 +22,7 @@ if __name__ == "__main__":
 
     # create save directory
     timestr = time.strftime("%Y%m%d-%H%M%S")
-    saveDir = os.path.sep.join([OUTPUT_PATH, timestr])
+    saveDir = os.path.sep.join([OUTPUT_PATH, "TVL1OF2D_" + timestr])
     if not os.path.exists(saveDir):
       os.makedirs(saveDir)
     print("save results to directory: ", saveDir, "\n")
@@ -38,9 +38,9 @@ if __name__ == "__main__":
     image1 = Image.open(Image1_PATH)
     
     # summarize some details about the image
-    print(image0.format)
-    print(image0.size)
-    print(image0.mode)
+    #print(image0.format)
+    #print(image0.size)
+    #print(image0.mode)
 
     NX = nii_data_xyzt.shape[0]
     NY = nii_data_xyzt.shape[1]
