@@ -92,7 +92,11 @@ def checkDiffOpPytorchVsCuda( nameDiffOp,  dimVec, diffOpPython, diffOpCuda ):
     # check adjointness
     #############
     diffOpPython.check_adjointness(testVecForward.shape,testVecBackward.shape)
-
+    print("check adjointness in cuda ", end=" ")
+    lhs_cuda =  D_testVecForward_cuda.reshape(-1).dot(testVecBackward.reshape(-1))
+    rhs_cuda =  div_testVecBackward_cuda.reshape(-1).dot(testVecForward.reshape(-1))
+    diff_cuda = torch.max(torch.abs(lhs_cuda-rhs_cuda)).item()
+    printColoredError(diff_cuda)
 
 print("""
 ==================================
@@ -120,9 +124,12 @@ meshInfo2D_python = mesh.MeshInfo2D(NY2D,NX2D,LY2D,LX2D)
 meshInfo2D_cuda = opticalFlow.MeshInfo2D(NY2D,NX2D,LY2D,LX2D)
 dimVec2D = torch.Size([NY2D,NX2D])
 
-NZ3D = 17
-NY3D = 129
-NX3D = 257
+NZ3D = 3
+NY3D = 4
+NX3D = 5
+# NZ3D = 17
+# NY3D = 129
+# NX3D = 257
 LZ3D = 0.5
 LY3D = 8.
 LX3D = 2.
@@ -160,3 +167,40 @@ checkDiffOpPytorchVsCuda( "2D central difference quotients", dimVec2D, nabla2DCD
 nabla3DCDOp = differentialOps.Nabla3D_Central(meshInfo3D_python)
 nabla3DCDOpCuda = opticalFlow.Nabla3D_CD(meshInfo3D_cuda)
 checkDiffOpPytorchVsCuda( "3D central difference quotients", dimVec3D, nabla3DCDOp, nabla3DCDOpCuda )
+
+
+####################################
+# central difference quotients for vector valued functions
+####################################
+print("====================================")
+print("check diff ops for vector fields in cuda:")
+print("====================================")
+
+print("check adjointness in cuda for 2d cd", end=" ")
+testVecForwardVectorField = torch.randn([NY2D,NX2D,2]).cuda()
+D_testVecForwardVectorField_cuda = nabla2DCDOpCuda.forwardVectorField(testVecForwardVectorField)
+testVecBackwardVectorField = torch.randn(D_testVecForwardVectorField_cuda.shape).cuda()
+div_testVecBackwardVectorField_cuda = nabla2DCDOpCuda.backwardVectorField(testVecBackwardVectorField)
+lhs_cuda =  D_testVecForwardVectorField_cuda.reshape(-1).dot(testVecBackwardVectorField.reshape(-1))
+rhs_cuda =  div_testVecBackwardVectorField_cuda.reshape(-1).dot(testVecForwardVectorField.reshape(-1))
+diff_cuda = torch.max(torch.abs(lhs_cuda-rhs_cuda)).item()
+printColoredError(diff_cuda)
+
+print("check adjointness in cuda for 3d cd", end=" ")
+testVecForwardVectorField3D = torch.randn([NZ3D,NY3D,NX3D,3]).cuda()
+D_testVecForwardVectorField3D_cuda = nabla3DCDOpCuda.forwardVectorField(testVecForwardVectorField3D)
+testVecBackwardVectorField3D = torch.randn(D_testVecForwardVectorField3D_cuda.shape).cuda()
+div_testVecBackwardVectorField3D_cuda = nabla3DCDOpCuda.backwardVectorField(testVecBackwardVectorField3D)
+lhs3D_cuda = D_testVecForwardVectorField3D_cuda.reshape(-1).dot(testVecBackwardVectorField3D.reshape(-1))
+rhs3D_cuda = div_testVecBackwardVectorField3D_cuda.reshape(-1).dot(testVecForwardVectorField3D.reshape(-1))
+diff3D_cuda = torch.max(torch.abs(lhs3D_cuda-rhs3D_cuda)).item()
+printColoredError(diff3D_cuda)
+
+
+# print("test:")
+# testVecDim0 = torch.tensor(0.)
+# print(testVecDim0)
+# print(testVecDim0.shape)
+# testVecDim1 = torch.zeros([1])
+# print(testVecDim1)
+# print(testVecDim1.shape)

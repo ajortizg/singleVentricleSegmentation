@@ -89,7 +89,7 @@ class TVL1OpticalFlow:
             print("step = ", s)
 
             # Compute the optical flow at scale s
-            us[s], ps[s] = self.computeOnSingleStep(I0s[s], I1s[s], us[s], ps[s], meshInfos[s])
+            us[s], ps[s] = self.computeOnSingleStep(s, I0s[s], I1s[s], us[s], ps[s], meshInfos[s])
 
             #save step
             self.saveSingleStepToFile(s,I0s[s],I1s[s],us[s],ps[s],meshInfos[s])
@@ -113,7 +113,7 @@ class TVL1OpticalFlow:
             #TODO prolongation factor for p?
 
 
-    def computeOnSingleStep(self, I0, I1, u, p, meshInfo):
+    def computeOnSingleStep(self, s, I0, I1, u, p, meshInfo):
 
         print("start to compute optical flow for single step")
         progress_bar = tqdm(total=MAX_WARPS * MAX_OUTER_ITERATIONS)
@@ -131,7 +131,8 @@ class TVL1OpticalFlow:
             I1_warped = warpingOp.forward(I1,u,InterpolationTypeCuda)
             I1_warped_grad = warpingOp.forwardVectorField(I1_grad,u,InterpolationTypeCuda)
             # Constant part of the rho function
-            rho_c = I1_warped - u[:, :, :, 0] * I1_warped_grad[:, :, :, 0] - u[:, :, :, 1] * I1_warped_grad[:, :, :, 1] - u[:, :, :, 2] * I1_warped_grad[:, :, :, 2] - I0
+            #rho_c = I1_warped - u[:, :, :, 0] * I1_warped_grad[:, :, :, 0] - u[:, :, :, 1] * I1_warped_grad[:, :, :, 1] - u[:, :, :, 2] * I1_warped_grad[:, :, :, 2] - I0
+            rho_c = I1_warped - torch.sum(u * I1_warped_grad, dim=3) - I0
 
             breakConditionVecPrimal = torch.zeros([MAX_OUTER_ITERATIONS])
             breakConditionVecDual = torch.zeros([MAX_OUTER_ITERATIONS])
@@ -141,27 +142,32 @@ class TVL1OpticalFlow:
 
                 # update of dual variable
                 pold = p
-                u_grad = nablaOp.forwardVectorField(z)
-                dualVariable = p + sigma * u_grad
+                z_grad = nablaOp.forwardVectorField(z)
+                dualVariable = p + sigma * z_grad
                 p = opticalFlow.TVL1OF3D_proxDual( dualVariable, sigma, dualFctWeight_TV, meshInfo)
                 breakConditionVecDual[n] = torch.norm(p-pold).item()
+                if dualFctWeight_TV == 0.:
+                   p = torch.zeros([meshInfo.getNZ(),meshInfo.getNY(),meshInfo.getNX(),3,3]).float().to(DEVICE)
 
                 # update of primal variable
                 uold = u
                 # Compute the fidelity data term \rho(u)
-                rho = rho_c + u[:, :, :, 0] * I1_warped_grad[:, :, :, 0] + u[:, :, :, 1] * I1_warped_grad[:, :, :, 1] + u[:, :, :, 2] * I1_warped_grad[:, :, :, 2]
+                #rho = rho_c + u[:, :, :, 0] * I1_warped_grad[:, :, :, 0] + u[:, :, :, 1] * I1_warped_grad[:, :, :, 1] + u[:, :, :, 2] * I1_warped_grad[:, :, :, 2]
+                rho = rho_c + torch.sum(u * I1_warped_grad, dim=3)
                 #print("rho.norm = ", torch.norm(rho).item() )
                 p_div = nablaOp.backwardVectorField(p)
                 primalVariable = u - tau * p_div
-                u = opticalFlow.TVL1OF3D_proxPrimal(primalVariable, tau, primalFctWeight_Matching, rho, I1_warped_grad, weightNorm, meshInfo )
+                u = opticalFlow.TVL1OF3D_proxPrimal(primalVariable, tau, primalFctWeight_Matching, rho, I1_warped_grad, meshInfo )
                 breakConditionVecPrimal[n] = torch.norm(u-uold).item()
+                # if primalFctWeight_Matching == 0.:
+                #     u = torch.zeros([meshInfo.getNZ(),meshInfo.getNY(),meshInfo.getNX(),3]).float().to(DEVICE)
 
                 #update of stepsizes
-		#if ChambollePockType == 1:
-		#if ChambollePockType == 2:
-	        #   theta = 1. / std::sqrt( 1. + 2. * gamma * StepSizePrimal );
-	        #   tau *= theta;
-		#   sigma /= theta;
+                #if ChambollePockType == 1:
+                #if ChambollePockType == 2:
+                    #   theta = 1. / std::sqrt( 1. + 2. * gamma * StepSizePrimal );
+                    #   tau *= theta;
+                #   sigma /= theta;
 
                 # overrelaxation
                 zold = z
@@ -170,9 +176,9 @@ class TVL1OpticalFlow:
 
                 progress_bar.update(1)
 
-            saveCurve1D(breakConditionVecPrimal, MAX_OUTER_ITERATIONS, self.saveDir, f"CPErrorPrimal_it{s}_warp{w}")
-            saveCurve1D(breakConditionVecDual, MAX_OUTER_ITERATIONS, self.saveDir, f"CPErrorDual_it{s}_warp{w}")
-            saveCurve1D(breakConditionVecUpdate, MAX_OUTER_ITERATIONS, self.saveDir, f"CPErrorUpdate_it{s}_warp{w}")
+            saveCurve1D(breakConditionVecPrimal, MAX_OUTER_ITERATIONS, self.saveDir, f"CPErrorPrimal_it{s}_warp{w}", "loglog")
+            saveCurve1D(breakConditionVecDual, MAX_OUTER_ITERATIONS, self.saveDir, f"CPErrorDual_it{s}_warp{w}", "loglog")
+            saveCurve1D(breakConditionVecUpdate, MAX_OUTER_ITERATIONS, self.saveDir, f"CPErrorUpdate_it{s}_warp{w}", "loglog")
 
         return u, p
 
@@ -183,7 +189,7 @@ class TVL1OpticalFlow:
         if not os.path.exists(saveDirStep):
             os.makedirs(saveDirStep)
 
-        plotOpticalFlow(u.cpu().detach().numpy(), "u", saveDirStep, step)
+        plotOpticalFlow3D(u.cpu().detach().numpy(), "u", saveDirStep, step)
         save_slices(I0,f"I0_it{step}.png", saveDirStep)
         save_slices(I1,f"I1_it{step}.png", saveDirStep)
         warpingOp = opticalFlow.Warping3D(meshInfo)

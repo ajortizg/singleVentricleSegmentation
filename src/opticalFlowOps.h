@@ -23,12 +23,16 @@
 
 //new: CP
 
+
+// float cuda_TVL1OF2D_PrimalFct( const float primalFctWeight_Matching,
+//                                const torch::Tensor &rho, 
+//                                const MeshInfo2D &meshInfo);
+
 torch::Tensor cuda_TVL1OF2D_proxPrimal( const torch::Tensor &primalVariable,
                                       const float primalStepSize_tau, 
                                       const float primalFctWeight_Matching,
                                       const torch::Tensor &rho, 
                                       const torch::Tensor &I1_warped_grad, 
-                                      const float weightNorm,
                                       const MeshInfo2D &meshInfo);
                                       
 torch::Tensor cuda_TVL1OF2D_proxDual( const torch::Tensor &dualVariable, 
@@ -37,12 +41,15 @@ torch::Tensor cuda_TVL1OF2D_proxDual( const torch::Tensor &dualVariable,
                                     const MeshInfo2D &meshInfo);
 
 
+// torch::Tensor cuda_TVL1OF3D_PrimalFct( const float primalFctWeight_Matching,
+//                                const torch::Tensor &rho, 
+//                                const MeshInfo3D &meshInfo);
+
 torch::Tensor cuda_TVL1OF3D_proxPrimal( const torch::Tensor &primalVariable,
                                       const float primalStepSize_tau, 
                                       const float primalFctWeight_Matching,
                                       const torch::Tensor &rho, 
                                       const torch::Tensor &I1_warped_grad,  
-                                      const float weightNorm,
                                       const MeshInfo3D &meshInfo);
                                       
 torch::Tensor cuda_TVL1OF3D_proxDual( const torch::Tensor &dualVariable, 
@@ -81,30 +88,22 @@ torch::Tensor cuda_TVL1OF3D_proxDual( const torch::Tensor &dualVariable,
 
 //new: CP
 
-// torch::Tensor TVL1OF_proxPrimal( const torch::Tensor &primalVariable,
-//                                       const float primalStepSize_tau, 
-//                                       const float primalFctWeight_Matching,
-//                                       const torch::Tensor &rho, 
-//                                       const torch::Tensor &I1_warped_gradx, const torch::Tensor &I1_warped_grady, const torch::Tensor &I1_warped_gradz,  
-//                                       const float weightNorm,
-//                                       const MeshInfo3D &meshInfo){
-
-//   CHECK_INPUT(primalVariable);     
-//   return cuda_TVL1OF_proxPrimal( primalVariable, primalStepSize_tau, primalFctWeight_Matching, rho, I1_warped_gradx, I1_warped_grady, I1_warped_gradz, weightNorm, meshInfo);                          
+// float TVL1OF2D_PrimalFct( const float primalFctWeight_Matching,
+//                           const torch::Tensor &rho,
+//                           const MeshInfo2D &meshInfo ){
+//   CHECK_INPUT(rho);     
+//   return cuda_TVL1OF2D_PrimalFct( primalFctWeight_Matching, rho, meshInfo);                          
 // };
-
-
 
 torch::Tensor TVL1OF2D_proxPrimal( const torch::Tensor &primalVariable,
                                       const float primalStepSize_tau, 
                                       const float primalFctWeight_Matching,
                                       const torch::Tensor &rho, 
                                       const torch::Tensor &I1_warped_grad,
-                                      const float weightNorm,
                                       const MeshInfo2D &meshInfo){
 
   CHECK_INPUT(primalVariable);     
-  return cuda_TVL1OF2D_proxPrimal( primalVariable, primalStepSize_tau, primalFctWeight_Matching, rho, I1_warped_grad, weightNorm, meshInfo);                          
+  return cuda_TVL1OF2D_proxPrimal( primalVariable, primalStepSize_tau, primalFctWeight_Matching, rho, I1_warped_grad, meshInfo);                          
 };
 
 
@@ -118,23 +117,30 @@ torch::Tensor TVL1OF2D_proxDual( const torch::Tensor &dualVariable,
 };
 
 
+
+// torch::Tensor TVL1OF3D_PrimalFct( const float primalFctWeight_Matching,
+//                                   const torch::Tensor &rho,
+//                                   const MeshInfo3D &meshInfo ){
+//   CHECK_INPUT(rho);     
+//   return cuda_TVL1OF3D_PrimalFct( primalFctWeight_Matching, rho, meshInfo);                          
+// };
+
 torch::Tensor TVL1OF3D_proxPrimal( const torch::Tensor &primalVariable,
                                       const float primalStepSize_tau, 
                                       const float primalFctWeight_Matching,
                                       const torch::Tensor &rho, 
                                       const torch::Tensor &I1_warped_grad,
-                                      const float weightNorm,
                                       const MeshInfo3D &meshInfo){
 
   CHECK_INPUT(primalVariable);     
-  return cuda_TVL1OF3D_proxPrimal( primalVariable, primalStepSize_tau, primalFctWeight_Matching, rho, I1_warped_grad, weightNorm, meshInfo);                          
+  return cuda_TVL1OF3D_proxPrimal( primalVariable, primalStepSize_tau, primalFctWeight_Matching, rho, I1_warped_grad, meshInfo);                          
 };
 
 
 torch::Tensor TVL1OF3D_proxDual( const torch::Tensor &dualVariable, 
-                                    const float dualStepSize_sigma,
-                                    const float dualFctWeight_TV,
-                                    const MeshInfo3D &meshInfo){
+                                 const float dualStepSize_sigma,
+                                 const float dualFctWeight_TV,
+                                 const MeshInfo3D &meshInfo){
 
  CHECK_INPUT(dualVariable);    
  return cuda_TVL1OF3D_proxDual(dualVariable,dualStepSize_sigma,dualFctWeight_TV,meshInfo);                                

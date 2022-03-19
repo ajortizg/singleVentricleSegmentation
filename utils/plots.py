@@ -17,10 +17,15 @@ import math
 # pytorch input
 #########################
 
-def saveCurve1D(input, LX1D, saveDir, name):
+def saveCurve1D(input, LX1D, saveDir, name, type="plot"):
     NX1D = input.shape[0]
     grid1D = torch.linspace(0, LX1D, steps=NX1D).cuda()
-    plt.plot(grid1D.cpu().detach().numpy(), input.cpu().detach().numpy())
+    if type == "plot":
+       plt.plot(grid1D.cpu().detach().numpy(), input.cpu().detach().numpy())
+    elif type == "loglog":
+       plt.loglog(grid1D.cpu().detach().numpy(), input.cpu().detach().numpy())
+    else:
+       print("wrong type for saveCurve1D")
     plt.ylabel(name)
     pathName = os.path.join(saveDir, name)
     plt.savefig(pathName,dpi=100)

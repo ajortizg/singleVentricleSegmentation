@@ -2,9 +2,10 @@ import nibabel as nib
 import numpy as np
 import os
 import pandas
+import configparser
 from PIL import Image
 
-from utils.config import *
+# from utils.config import *
 from tvl1.TVL1OF_2D import *
 
 from opticalFlow_cuda_ext import opticalFlow
@@ -13,28 +14,43 @@ from opticalFlow_cuda_ext import opticalFlow
 if __name__ == "__main__":
 
     print("\n\n")
-    print("==================================================")
-    print("==================================================")
+    print("=======================================================")
+    print("=======================================================")
     print("        compute TV-L1 optical flow in 2D:")
-    print("==================================================")
-    print("==================================================")
+    print("=======================================================")
+    print("=======================================================")
     print("\n\n")
+
+    config = configparser.ConfigParser()
+    config.read('parser/configTVL1OF2D.ini')
+
+    cuda_availabe = config.get('DEVICE', 'cuda_availabe')
+    DEVICE = "cuda" if cuda_availabe else "cpu"
+    #TODO include check from torch
+    #DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
     # create save directory
     timestr = time.strftime("%Y%m%d-%H%M%S")
+    OUTPUT_PATH = config.get('DATA', 'OUTPUT_PATH')
     saveDir = os.path.sep.join([OUTPUT_PATH, "TVL1OF2D_" + timestr])
     if not os.path.exists(saveDir):
       os.makedirs(saveDir)
     print("save results to directory: ", saveDir, "\n")
     #np.set_printoptions(precision=2, suppress=True)
+    #save config file to save directory
+    conifgOutput = os.path.sep.join([OUTPUT_PATH, "config.ini"])
+    with open(conifgOutput, 'w') as configfile:
+      config.write(configfile)
 
-    # Load 2D images [x,y,z,t]
-    print("=======================================")
-    # print("load data for patient: ", PATIENT_NAME)
-    vol = nib.load(os.path.sep.join([VOLUMES_PATH, PATIENT_NAME + ".nii.gz"]))
-    nii_data_xyzt = vol.get_fdata()
-
+    # Load 2D images [x,y]
+    print("============================================")
+    print("   * load data")
+    BASE_PATH_2D = config.get('DATA', 'BASE_PATH_2D')
+    Image0_SUB_PATH = config.get('DATA', 'Image0_SUB_PATH')
+    Image0_PATH = os.path.sep.join([BASE_PATH_2D, Image0_SUB_PATH])
     image0 = Image.open(Image0_PATH)
+    Image1_SUB_PATH = config.get('DATA', 'Image1_SUB_PATH')
+    Image1_PATH = os.path.sep.join([BASE_PATH_2D, Image1_SUB_PATH])
     image1 = Image.open(Image1_PATH)
     
     # summarize some details about the image
@@ -42,8 +58,8 @@ if __name__ == "__main__":
     #print(image0.size)
     #print(image0.mode)
 
-    NX = nii_data_xyzt.shape[0]
-    NY = nii_data_xyzt.shape[1]
+    NX = image0.size[0]
+    NY = image0.size[1]
 
     # #==================================
     # #scaling of data 
@@ -75,7 +91,7 @@ if __name__ == "__main__":
     p = torch.zeros([NY,NX,2,2]).float().to(DEVICE)
 
     # Compute the optical flow
-    alg = TVL1OpticalFlow2D(saveDir)
+    alg = TVL1OpticalFlow2D(saveDir,config)
     alg.computeOnPyramid(I0, I1, u, p)
     #alg.computeOnPyramid(I1, I0, u, p)
 

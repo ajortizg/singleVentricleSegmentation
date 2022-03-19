@@ -21,7 +21,7 @@ if __name__ == "__main__":
 
     # create save directory
     timestr = time.strftime("%Y%m%d-%H%M%S")
-    saveDir = os.path.sep.join([OUTPUT_PATH, timestr])
+    saveDir = os.path.sep.join([OUTPUT_PATH, "TVL1OF3D_" + timestr])
     if not os.path.exists(saveDir):
       os.makedirs(saveDir)
     print("save results to directory: ", saveDir, "\n")

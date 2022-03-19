@@ -129,6 +129,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
   // optical flow
   //=======================================
   //m.def("TVL1OF_threshold", &TVL1OF_threshold, "Update step for v");
+  //m.def("TVL1OF2D_PrimalFct", &TVL1OF2D_PrimalFct, "primal fct in 2D");
   m.def("TVL1OF2D_proxPrimal", &TVL1OF2D_proxPrimal, "primal prox step in 2D");
   m.def("TVL1OF2D_proxDual", &TVL1OF2D_proxDual, "dual prox step in 2D");
   m.def("TVL1OF3D_proxPrimal", &TVL1OF3D_proxPrimal, "primal prox step in 3D");

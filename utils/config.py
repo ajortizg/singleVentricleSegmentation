@@ -35,14 +35,14 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 ## new
 NUM_SCALES = 3
 MAX_WARPS = 25
-MAX_OUTER_ITERATIONS = 100
+MAX_OUTER_ITERATIONS = 1000
 
 #primalFctWeight_Matching = 1.
 #dualFctWeight_TV = 25.
-weightNorm = 0.01
-primalFctWeight_Matching = 1.
+primalFctWeight_Matching = 100.
 dualFctWeight_TV = 0.
 
+ChambollePockType = 2
 sigma = 0.5
 tau = 0.5
 theta = 0.25

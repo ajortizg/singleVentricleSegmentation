@@ -90,6 +90,10 @@ def flow_uv_to_colors(u, v, convert_to_bgr=False):
     rad = np.sqrt(np.square(u) + np.square(v))
     a = np.arctan2(-v, -u)/np.pi
     fk = (a+1) / 2*(ncols-1)
+    # print("u = ", a)
+    # print("v = ", a)
+    # print("a = ", a)
+    # print("fk= ", fk)
     k0 = np.floor(fk).astype(np.int32)
     k1 = k0 + 1
     k1[k1 == ncols] = 0

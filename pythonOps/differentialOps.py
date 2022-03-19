@@ -32,8 +32,8 @@ class Nabla1D_Forward:
     
     def check_adjointness(self, size_in, size_out):
         print("check adjointness of Nabla1D_Forward:", end=" " )
-        u = torch.randn(*size_in)
-        p = torch.randn(*size_out)
+        u = torch.randn(*size_in).cuda()
+        p = torch.randn(*size_out).cuda()
         lhs = self.forward(u).reshape(-1).dot(p.reshape(-1))
         rhs = self.backward(p).reshape(-1).dot(u.reshape(-1))
         diff = torch.max(torch.abs(lhs-rhs)).item()
@@ -70,8 +70,8 @@ class Nabla2D_Forward:
     
     def check_adjointness(self, size_in, size_out):
         print("check adjointness of Nabla2D_Forward", end=" ")
-        u = torch.randn(*size_in)
-        p = torch.randn(*size_out)
+        u = torch.randn(*size_in).cuda()
+        p = torch.randn(*size_out).cuda()
         lhs = self.forward(u).reshape(-1).dot(p.reshape(-1))
         rhs = self.backward(p).reshape(-1).dot(u.reshape(-1))
         diff = torch.max(torch.abs(lhs-rhs)).item()
@@ -113,8 +113,8 @@ class Nabla3D_Forward:
     
     def check_adjointness(self, size_in, size_out):
         print("check adjointness of Nabla3D_Forward:", end=" ")
-        u = torch.randn(*size_in)
-        p = torch.randn(*size_out)
+        u = torch.randn(*size_in).cuda()
+        p = torch.randn(*size_out).cuda()
         lhs = self.forward(u).reshape(-1).dot(p.reshape(-1))
         rhs = self.backward(p).reshape(-1).dot(u.reshape(-1))
         diff = torch.max(torch.abs(lhs-rhs)).item()
@@ -149,8 +149,8 @@ class Nabla1D_Central:
     
     def check_adjointness(self, size_in, size_out):
         print("check adjointness of Nabla1D_Central:", end=" ")
-        u = torch.randn(*size_in)
-        p = torch.randn(*size_out)
+        u = torch.randn(*size_in).cuda()
+        p = torch.randn(*size_out).cuda()
         lhs = self.forward(u).reshape(-1).dot(p.reshape(-1))
         rhs = self.backward(p).reshape(-1).dot(u.reshape(-1))
         diff = torch.max(torch.abs(lhs-rhs)).item()
@@ -198,8 +198,8 @@ class Nabla2D_Central:
     
     def check_adjointness(self, size_in, size_out):
         print("check adjointness of Nabla2D_Central:", end=" ")
-        u = torch.randn(*size_in)
-        p = torch.randn(*size_out)
+        u = torch.randn(*size_in).cuda()
+        p = torch.randn(*size_out).cuda()
         lhs = self.forward(u).reshape(-1).dot(p.reshape(-1))
         rhs = self.backward(p).reshape(-1).dot(u.reshape(-1))
         diff = torch.max(torch.abs(lhs-rhs)).item()
@@ -258,8 +258,8 @@ class Nabla3D_Central:
     
     def check_adjointness(self, size_in, size_out):
         print("check adjointness of Nabla3D_Central:", end=" ")
-        u = torch.randn(*size_in)
-        p = torch.randn(*size_out)
+        u = torch.randn(*size_in).cuda()
+        p = torch.randn(*size_out).cuda()
         lhs = self.forward(u).reshape(-1).dot(p.reshape(-1))
         rhs = self.backward(p).reshape(-1).dot(u.reshape(-1))
         diff = torch.max(torch.abs(lhs-rhs)).item()

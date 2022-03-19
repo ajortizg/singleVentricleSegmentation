@@ -242,7 +242,7 @@ __global__ void cuda_nabla1d_cd_forward_kernel(
                               : 
                               0.5*(b[ix] - b[ix-1])/hX
                             : 
-                            0.5*(b[ix+1]-b[ix])/hX;
+                            0.5*(b[ix+1] - b[ix])/hX;
   }
   
 }
@@ -287,15 +287,15 @@ __global__ void cuda_nabla2d_cd_forward_kernel(
                               : 
                               0.5*(b[iy][ix] - b[iy][ix-1])/hX
                             : 
-                            0.5*(b[iy][ix+1]-b[iy][ix])/hX;
+                            0.5*(b[iy][ix+1] - b[iy][ix])/hX;
 
       Db[iy][ix][1] = (iy > 0) ? 
                             (iy < NY-1) ? 
                               0.5*(b[iy+1][ix] - b[iy-1][ix])/hY
                               : 
-                              0.5*(b[iy][ix] - b[iy-1][ix]) /hY
+                              0.5*(b[iy][ix] - b[iy-1][ix])/hY
                             : 
-                            0.5*(b[iy+1][ix]-b[iy][ix])/hY;
+                            0.5*(b[iy+1][ix] - b[iy][ix])/hY;
   }
   
 }
@@ -347,7 +347,7 @@ __global__ void cuda_nabla2d_cd_forwardVectorField_kernel(
 
   if (ix < NX && iy < NY )
   {
-    for(int comp=0; comp<3; ++comp )
+    for(int comp=0; comp<2; ++comp )
     {
       Db[iy][ix][comp][0] = (ix > 0) ? 
                             (ix < NX-1) ? 
@@ -361,7 +361,7 @@ __global__ void cuda_nabla2d_cd_forwardVectorField_kernel(
                             (iy < NY-1) ? 
                               0.5*(b[iy+1][ix][comp] - b[iy-1][ix][comp])/hY
                               : 
-                              0.5*(b[iy][ix][comp] - b[iy-1][ix][comp]) /hY
+                              0.5*(b[iy][ix][comp] - b[iy-1][ix][comp])/hY
                             : 
                             0.5*(b[iy+1][ix][comp] - b[iy][ix][comp])/hY;
     }
@@ -381,7 +381,7 @@ __global__ void cuda_divergence2d_cd_backwardVectorField_kernel(
 
   if (ix < NX && iy < NY )
   {
-    for(int comp=0; comp<3; ++comp )
+    for(int comp=0; comp<2; ++comp )
     {
       T divp_x = (ix > 0) ? 
                             (ix < NX - 1 ) ? 
@@ -512,7 +512,7 @@ __global__ void cuda_nabla3d_cd_forwardVectorField_kernel(
                               : 
                               0.5*(b[iz][iy][ix][comp] - b[iz][iy][ix-1][comp])/hX
                             : 
-                            0.5*(b[iz][iy][ix+1][comp]-b[iz][iy][ix][comp])/hX;
+                            0.5*(b[iz][iy][ix+1][comp] - b[iz][iy][ix][comp])/hX;
 
       Db[iz][iy][ix][comp][1] = (iy > 0) ? 
                             (iy < NY-1) ? 
@@ -520,7 +520,7 @@ __global__ void cuda_nabla3d_cd_forwardVectorField_kernel(
                               : 
                               0.5*(b[iz][iy][ix][comp] - b[iz][iy-1][ix][comp])/hY
                             : 
-                            0.5*(b[iz][iy+1][ix][comp]-b[iz][iy][ix][comp])/hY;
+                            0.5*(b[iz][iy+1][ix][comp] - b[iz][iy][ix][comp])/hY;
 
       Db[iz][iy][ix][comp][2] = (iz > 0) ? 
                             (iz < NZ-1) ? 
@@ -528,7 +528,7 @@ __global__ void cuda_nabla3d_cd_forwardVectorField_kernel(
                               : 
                               0.5*(b[iz][iy][ix][comp] - b[iz-1][iy][ix][comp])/hZ
                             : 
-                            0.5*(b[iz+1][iy][ix][comp]-b[iz][iy][ix][comp])/hZ;
+                            0.5*(b[iz+1][iy][ix][comp] - b[iz][iy][ix][comp])/hZ;
     }
   }
   
