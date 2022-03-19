@@ -3,8 +3,8 @@ import numpy as np
 import os
 import pandas
 
-from utils.config import *
-from tvl1.TVL1OF import *
+# from utils.config import *
+from tvl1.TVL1OF3D import *
 
 from opticalFlow_cuda_ext import opticalFlow
 
@@ -19,16 +19,33 @@ if __name__ == "__main__":
     print("==================================================")
     print("\n\n")
 
+    # load config parser
+    config = configparser.ConfigParser()
+    config.read('parser/configTVL1OF3D.ini')
+    cuda_availabe = config.get('DEVICE', 'cuda_availabe')
+    DEVICE = "cuda" if cuda_availabe else "cpu"
+    #TODO include check from torch
+    #DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
     # create save directory
     timestr = time.strftime("%Y%m%d-%H%M%S")
+    OUTPUT_PATH = config.get('DATA', 'OUTPUT_PATH')
     saveDir = os.path.sep.join([OUTPUT_PATH, "TVL1OF3D_" + timestr])
     if not os.path.exists(saveDir):
       os.makedirs(saveDir)
     print("save results to directory: ", saveDir, "\n")
-    #np.set_printoptions(precision=2, suppress=True)
+
+    #save config file to save directory
+    conifgOutput = os.path.sep.join([saveDir, "config.ini"])
+    with open(conifgOutput, 'w') as configfile:
+      config.write(configfile)
 
     # Load 4D nifty [x,y,z,t]
     print("=======================================")
+    BASE_PATH_3D = config.get('DATA', 'BASE_PATH_3D')
+    PATIENT_NAME = config.get('DATA', 'PATIENT_NAME')
+    VOLUMES_SUBDIR_PATH = config.get('DATA', 'VOLUMES_SUBDIR_PATH')
+    VOLUMES_PATH = os.path.sep.join([BASE_PATH_3D, VOLUMES_SUBDIR_PATH])
     print("load data for patient: ", PATIENT_NAME)
     vol = nib.load(os.path.sep.join([VOLUMES_PATH, PATIENT_NAME + ".nii.gz"]))
     nii_data_xyzt = vol.get_fdata()
@@ -53,6 +70,8 @@ if __name__ == "__main__":
     print( f"   * dimensions: (Z,Y,X,T) = {nii_data.shape}")
 
     #read time steps for diastole and systole
+    SEGMENTATIONS_FILE_NAME = config.get('DATA', 'SEGMENTATIONS_FILE_NAME')
+    SEGMENTATIONS_FILE = os.path.sep.join([BASE_PATH_3D, SEGMENTATIONS_FILE_NAME])
     df = pandas.read_excel(SEGMENTATIONS_FILE)
     rowPatient = df[df['Name'] == PATIENT_NAME]
     indexPatient = rowPatient.index[0]
@@ -79,7 +98,7 @@ if __name__ == "__main__":
       p = torch.zeros([NZ,NY,NX,3,3]).float().to(DEVICE)
 
       # Compute the optical flow
-      alg = TVL1OpticalFlow(saveDirTimeStep)
+      alg = TVL1OpticalFlow3D(saveDirTimeStep,config)
       alg.computeOnPyramid(I0, I1, u, p)
       #alg.computeOnPyramid(I1, I0, u, p)
 
@@ -87,6 +106,8 @@ if __name__ == "__main__":
     # warp the input mask with the computed optical flow 
     saveDirTimeSystole = os.path.sep.join([saveDir, f"time{tSystole}"])
     saveDirStep = os.path.sep.join([saveDirTimeSystole, f"it0"])
+    SEGMENTATIONS_SUBDIR_PATH = config.get('DATA', 'SEGMENTATIONS_SUBDIR_PATH')
+    SEGMENTATIONS_PATH = os.path.sep.join([BASE_PATH_3D, SEGMENTATIONS_SUBDIR_PATH])
     nii_mask_load = nib.load(os.path.sep.join([SEGMENTATIONS_PATH, PATIENT_NAME, PATIENT_NAME + "_Diastole_Labelmap.nii"]))
     nii_mask_xyz = nii_mask_load.get_fdata()
     ## swap from nibabel (X,Y,Z) to cuda-compatible (Z,Y,X):
@@ -106,8 +127,13 @@ if __name__ == "__main__":
     LZ, LY, LX = NZ-1, NY-1, NX-1
     meshInfo3D_cuda = opticalFlow.MeshInfo3D(NZ,NY,NX,LZ,LY,LX)
     warpingOp = opticalFlow.Warping3D(meshInfo3D_cuda)
-    mask_warped = warpingOp.forward(mask,u,opticalFlow.InterpolationType.INTERPOLATE_LINEAR)
-    #mask_warped = warpingOp.forward(mask,u,opticalFlow.InterpolationType.INTERPOLATE_CUBIC_HERMITESPLINE)
+    interType = config.get('PARAMETERS', 'InterpolationType')
+    InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_LINEAR
+    if interType == "LINEAR":
+      InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_LINEAR
+    elif interType == "CUBIC_HERMITESPLINE":
+      InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_CUBIC_HERMITESPLINE
+    mask_warped = warpingOp.forward(mask,u,InterpolationTypeCuda)
 
     save_slices(mask_warped, f"mask_warped_time{t0}.png", saveDirStep)
     save_single_zslices(mask_warped, saveDirStep, "mask_warped_slices", 1., 2)

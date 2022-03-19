@@ -1,12 +1,11 @@
-import nibabel as nib
+# import nibabel as nib
 import numpy as np
 import os
-import pandas
+# import pandas
 import configparser
 from PIL import Image
 
-# from utils.config import *
-from tvl1.TVL1OF_2D import *
+from tvl1.TVL1OF2D import *
 
 from opticalFlow_cuda_ext import opticalFlow
 
@@ -21,9 +20,9 @@ if __name__ == "__main__":
     print("=======================================================")
     print("\n\n")
 
+    # load config parser
     config = configparser.ConfigParser()
     config.read('parser/configTVL1OF2D.ini')
-
     cuda_availabe = config.get('DEVICE', 'cuda_availabe')
     DEVICE = "cuda" if cuda_availabe else "cpu"
     #TODO include check from torch
@@ -36,9 +35,9 @@ if __name__ == "__main__":
     if not os.path.exists(saveDir):
       os.makedirs(saveDir)
     print("save results to directory: ", saveDir, "\n")
-    #np.set_printoptions(precision=2, suppress=True)
+
     #save config file to save directory
-    conifgOutput = os.path.sep.join([OUTPUT_PATH, "config.ini"])
+    conifgOutput = os.path.sep.join([saveDir, "config.ini"])
     with open(conifgOutput, 'w') as configfile:
       config.write(configfile)
 

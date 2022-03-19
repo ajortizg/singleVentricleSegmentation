@@ -3,15 +3,16 @@ import sys
 import os
 import math
 import numpy as np
-from scipy import ndimage
+# from scipy import ndimage
 import torch
 import time
 from tqdm import tqdm
+import configparser
 
 
 sys.path.append("../utils")
 from utils.plots import *
-from utils.config import *
+# from utils.config import *
 from utils.flow_viz import *
 
 # sys.path.append("../pythonOps/")
@@ -27,13 +28,35 @@ sys.path.append(pythonOps_lib_path)
 from opticalFlow_cuda_ext import opticalFlow
 
 
-InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_LINEAR
+#InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_LINEAR
 #InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_CUBIC_HERMITESPLINE
 
 
-class TVL1OpticalFlow:
-    def __init__(self,saveDir):
+class TVL1OpticalFlow3D:
+    def __init__(self,saveDir,config):
         self.saveDir = saveDir
+        self.NUM_SCALES = config.getint('PARAMETERS', 'NUM_SCALES')
+        self.MAX_WARPS = config.getint('PARAMETERS', 'MAX_WARPS')
+        self.MAX_OUTER_ITERATIONS = config.getint('PARAMETERS', 'MAX_OUTER_ITERATIONS')
+        self.primalFctWeight_Matching = config.getfloat('PARAMETERS', 'primalFctWeight_Matching')
+        self.dualFctWeight_TV = config.getfloat('PARAMETERS', 'dualFctWeight_TV')
+        self.PRIMALDUAL_ALGO_TYPE = config.getint('PARAMETERS', 'PRIMALDUAL_ALGO_TYPE')
+        self.sigma = config.getfloat('PARAMETERS', 'sigma')
+        self.tau = config.getfloat('PARAMETERS', 'tau')
+        self.theta = config.getfloat('PARAMETERS', 'theta')
+        self.gamma = config.getfloat('PARAMETERS', 'gamma')
+        interType = config.get('PARAMETERS', 'InterpolationType')
+        self.InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_LINEAR
+        if interType == "LINEAR":
+            self.InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_LINEAR
+        elif interType == "CUBIC_HERMITESPLINE":
+            self.InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_CUBIC_HERMITESPLINE
+        cuda_availabe = config.get('DEVICE', 'cuda_availabe')
+        self.DEVICE = "cuda" if cuda_availabe else "cpu"
+        self.saveDirDebug = os.path.sep.join([self.saveDir, "debug"])
+        self.useDebugOutput = config.getboolean("DEBUG","useDebugOutput")
+        if self.useDebugOutput:
+            os.makedirs(self.saveDirDebug)
 
     def generatePyramid(self, I0, I1, u, p):
 
@@ -57,7 +80,7 @@ class TVL1OpticalFlow:
         #meshes for pyramid
         meshInfos = [meshInfo3D_cuda]
         NZ_restr, NY_restr, NX_restr = NZ, NY, NX
-        for s in range(1, NUM_SCALES):
+        for s in range(1, self.NUM_SCALES):
             NZ_restr, NY_restr, NX_restr = math.ceil(0.5*NZ_restr), math.ceil(0.5*NY_restr), math.ceil(0.5*NX_restr)
             LZ_restr, LY_restr, LX_restr = NZ_restr-1, NY_restr-1, NX_restr-1
             meshInfos.append(opticalFlow.MeshInfo3D(NZ_restr,NY_restr,NX_restr,LZ_restr,LY_restr,LX_restr))
@@ -69,12 +92,12 @@ class TVL1OpticalFlow:
         ps = [p]
 
         # Create the pyramid
-        for s in range(1, NUM_SCALES):
+        for s in range(1, self.NUM_SCALES):
             prolongationOp_cuda = opticalFlow.Prolongation3D(meshInfos[s-1],meshInfos[s])
-            I0s.append(prolongationOp_cuda.forward(I0s[s-1],InterpolationTypeCuda))
-            I1s.append(prolongationOp_cuda.forward(I1s[s-1],InterpolationTypeCuda))
-            us.append(torch.zeros([meshInfos[s].getNZ(),meshInfos[s].getNY(),meshInfos[s].getNX(),3]).float().to(DEVICE))
-            ps.append(torch.zeros([meshInfos[s].getNZ(),meshInfos[s].getNY(),meshInfos[s].getNX(),3,3]).float().to(DEVICE))
+            I0s.append(prolongationOp_cuda.forward(I0s[s-1],self.InterpolationTypeCuda))
+            I1s.append(prolongationOp_cuda.forward(I1s[s-1],self.InterpolationTypeCuda))
+            us.append(torch.zeros([meshInfos[s].getNZ(),meshInfos[s].getNY(),meshInfos[s].getNX(),3]).float().to(self.DEVICE))
+            ps.append(torch.zeros([meshInfos[s].getNZ(),meshInfos[s].getNY(),meshInfos[s].getNX(),3,3]).float().to(self.DEVICE))
 
         return I0s, I1s, us, ps, meshInfos
 
@@ -85,7 +108,7 @@ class TVL1OpticalFlow:
         I0s, I1s, us, ps, meshInfos = self.generatePyramid(I0,I1,u,p)
 
         print("start to compute optical flow for pyramid")
-        for s in range(NUM_SCALES-1, -1, -1):
+        for s in range(self.NUM_SCALES-1, -1, -1):
             print("step = ", s)
 
             # Compute the optical flow at scale s
@@ -99,7 +122,7 @@ class TVL1OpticalFlow:
 
             # Prolongate the optical flow and dual variables to the next pyramid level
             prolongationOp_cuda = opticalFlow.Prolongation3D(meshInfos[s],meshInfos[s-1])
-            us[s-1] = prolongationOp_cuda.forwardVectorField(us[s],InterpolationTypeCuda)
+            us[s-1] = prolongationOp_cuda.forwardVectorField(us[s],self.InterpolationTypeCuda)
             #factor LXNew/LXOld, ...
             us[s-1][:,:,:,0] *= meshInfos[s-1].getLX() / meshInfos[s].getLX()
             us[s-1][:,:,:,1] *= meshInfos[s-1].getLY() / meshInfos[s].getLY()
@@ -108,7 +131,7 @@ class TVL1OpticalFlow:
             #TODO Dirichlet boundary condition for p?
             # ps[s] = self.dirichlet(ps[s])
 
-            ps[s-1] = prolongationOp_cuda.forwardMatrixField(ps[s],InterpolationTypeCuda)
+            ps[s-1] = prolongationOp_cuda.forwardMatrixField(ps[s],self.InterpolationTypeCuda)
 
             #TODO prolongation factor for p?
 
@@ -116,7 +139,7 @@ class TVL1OpticalFlow:
     def computeOnSingleStep(self, s, I0, I1, u, p, meshInfo):
 
         print("start to compute optical flow for single step")
-        progress_bar = tqdm(total=MAX_WARPS * MAX_OUTER_ITERATIONS)
+        progress_bar = tqdm(total = self.MAX_WARPS * self.MAX_OUTER_ITERATIONS)
 
         # Compute target image gradients
         #nablaOp = Nabla3D_Central(meshInfo)
@@ -126,28 +149,34 @@ class TVL1OpticalFlow:
 
         z = u
 
-        for w in range(MAX_WARPS):
+        for w in range(self.MAX_WARPS):
             # Compute the warping of the target image and its derivatives
-            I1_warped = warpingOp.forward(I1,u,InterpolationTypeCuda)
-            I1_warped_grad = warpingOp.forwardVectorField(I1_grad,u,InterpolationTypeCuda)
+            I1_warped = warpingOp.forward(I1,u,self.InterpolationTypeCuda)
+            I1_warped_grad = warpingOp.forwardVectorField(I1_grad,u,self.InterpolationTypeCuda)
             # Constant part of the rho function
             #rho_c = I1_warped - u[:, :, :, 0] * I1_warped_grad[:, :, :, 0] - u[:, :, :, 1] * I1_warped_grad[:, :, :, 1] - u[:, :, :, 2] * I1_warped_grad[:, :, :, 2] - I0
             rho_c = I1_warped - torch.sum(u * I1_warped_grad, dim=3) - I0
 
-            breakConditionVecPrimal = torch.zeros([MAX_OUTER_ITERATIONS])
-            breakConditionVecDual = torch.zeros([MAX_OUTER_ITERATIONS])
-            breakConditionVecUpdate = torch.zeros([MAX_OUTER_ITERATIONS])
+            breakConditionVecPrimal = torch.zeros([self.MAX_OUTER_ITERATIONS]).float().to(self.DEVICE)
+            breakConditionVecDual = torch.zeros([self.MAX_OUTER_ITERATIONS]).float().to(self.DEVICE)
+            breakConditionVecUpdate = torch.zeros([self.MAX_OUTER_ITERATIONS]).float().to(self.DEVICE)
 
-            for n in range(MAX_OUTER_ITERATIONS):
+            # TODO possible use results for new warp
+            sigma = self.sigma 
+            tau = self.tau
+            theta = self.theta 
+            gamma = self.gamma
+
+            for n in range(self.MAX_OUTER_ITERATIONS):
 
                 # update of dual variable
                 pold = p
                 z_grad = nablaOp.forwardVectorField(z)
                 dualVariable = p + sigma * z_grad
-                p = opticalFlow.TVL1OF3D_proxDual( dualVariable, sigma, dualFctWeight_TV, meshInfo)
+                p = opticalFlow.TVL1OF3D_proxDual( dualVariable, sigma, self.dualFctWeight_TV, meshInfo)
                 breakConditionVecDual[n] = torch.norm(p-pold).item()
-                if dualFctWeight_TV == 0.:
-                   p = torch.zeros([meshInfo.getNZ(),meshInfo.getNY(),meshInfo.getNX(),3,3]).float().to(DEVICE)
+                if self.dualFctWeight_TV == 0.:
+                   p = torch.zeros([meshInfo.getNZ(),meshInfo.getNY(),meshInfo.getNX(),3,3]).float().to(self.DEVICE)
 
                 # update of primal variable
                 uold = u
@@ -157,17 +186,21 @@ class TVL1OpticalFlow:
                 #print("rho.norm = ", torch.norm(rho).item() )
                 p_div = nablaOp.backwardVectorField(p)
                 primalVariable = u - tau * p_div
-                u = opticalFlow.TVL1OF3D_proxPrimal(primalVariable, tau, primalFctWeight_Matching, rho, I1_warped_grad, meshInfo )
+                u = opticalFlow.TVL1OF3D_proxPrimal(primalVariable, tau, self.primalFctWeight_Matching, rho, I1_warped_grad, meshInfo )
                 breakConditionVecPrimal[n] = torch.norm(u-uold).item()
-                # if primalFctWeight_Matching == 0.:
-                #     u = torch.zeros([meshInfo.getNZ(),meshInfo.getNY(),meshInfo.getNX(),3]).float().to(DEVICE)
+                # if self.primalFctWeight_Matching == 0.:
+                #     u = torch.zeros([meshInfo.getNZ(),meshInfo.getNY(),meshInfo.getNX(),3]).float().to(self.DEVICE)
 
                 #update of stepsizes
-                #if ChambollePockType == 1:
-                #if ChambollePockType == 2:
-                    #   theta = 1. / std::sqrt( 1. + 2. * gamma * StepSizePrimal );
-                    #   tau *= theta;
-                #   sigma /= theta;
+                if self.PRIMALDUAL_ALGO_TYPE == 1:
+                    # dot nothing 
+                    print("apply CP1")
+                elif self.PRIMALDUAL_ALGO_TYPE == 2:
+                    theta = 1. / math.sqrt( 1. + 2. * gamma * tau )
+                    tau *= theta
+                    sigma /= theta
+                else:
+                    print("wrong method for Chambolle-Pock-Algorithm")
 
                 # overrelaxation
                 zold = z
@@ -176,9 +209,11 @@ class TVL1OpticalFlow:
 
                 progress_bar.update(1)
 
-            saveCurve1D(breakConditionVecPrimal, MAX_OUTER_ITERATIONS, self.saveDir, f"CPErrorPrimal_it{s}_warp{w}", "loglog")
-            saveCurve1D(breakConditionVecDual, MAX_OUTER_ITERATIONS, self.saveDir, f"CPErrorDual_it{s}_warp{w}", "loglog")
-            saveCurve1D(breakConditionVecUpdate, MAX_OUTER_ITERATIONS, self.saveDir, f"CPErrorUpdate_it{s}_warp{w}", "loglog")
+            if self.useDebugOutput:
+                #saveCurve1D(primalFctVec, MAX_OUTER_ITERATIONS, self.saveDirDebug, f"PrimalFct_it{s}_warp{w}")
+                saveCurve1D(breakConditionVecPrimal, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"CPErrorPrimal_it{s}_warp{w}", "loglog")
+                saveCurve1D(breakConditionVecDual, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"CPErrorDual_it{s}_warp{w}", "loglog")
+                saveCurve1D(breakConditionVecUpdate, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"CPErrorUpdate_it{s}_warp{w}", "loglog")
 
         return u, p
 
@@ -193,7 +228,7 @@ class TVL1OpticalFlow:
         save_slices(I0,f"I0_it{step}.png", saveDirStep)
         save_slices(I1,f"I1_it{step}.png", saveDirStep)
         warpingOp = opticalFlow.Warping3D(meshInfo)
-        I1_warped = warpingOp.forward(I1,u,InterpolationTypeCuda)
+        I1_warped = warpingOp.forward(I1,u,self.InterpolationTypeCuda)
         save_slices(I1_warped, f"I1_warped_it{step}.png", saveDirStep)
         save_slices(torch.abs(I1_warped-I0), f"Diff_I1warped_to_I0_it{step}.png", saveDirStep)
 

@@ -28,7 +28,7 @@ from opticalFlow_cuda_ext import opticalFlow
 
 
 #InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_LINEAR
-InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_CUBIC_HERMITESPLINE
+#InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_CUBIC_HERMITESPLINE
 
 
 class TVL1OpticalFlow2D:
@@ -93,8 +93,8 @@ class TVL1OpticalFlow2D:
         # Create the pyramid
         for s in range(1, self.NUM_SCALES):
             prolongationOp_cuda = opticalFlow.Prolongation2D(meshInfos[s-1],meshInfos[s])
-            I0s.append(prolongationOp_cuda.forward(I0s[s-1].contiguous(),InterpolationTypeCuda))
-            I1s.append(prolongationOp_cuda.forward(I1s[s-1].contiguous(),InterpolationTypeCuda))
+            I0s.append(prolongationOp_cuda.forward(I0s[s-1].contiguous(),self.InterpolationTypeCuda))
+            I1s.append(prolongationOp_cuda.forward(I1s[s-1].contiguous(),self.InterpolationTypeCuda))
             us.append(torch.zeros([meshInfos[s].getNY(),meshInfos[s].getNX(),2]).float().to(self.DEVICE))
             ps.append(torch.zeros([meshInfos[s].getNY(),meshInfos[s].getNX(),2,2]).float().to(self.DEVICE))
 
@@ -125,7 +125,7 @@ class TVL1OpticalFlow2D:
 
             # Prolongate the optical flow and dual variables to the next pyramid level
             prolongationOp_cuda = opticalFlow.Prolongation2D(meshInfos[s],meshInfos[s-1])
-            us[s-1] = prolongationOp_cuda.forwardVectorField(us[s],InterpolationTypeCuda)
+            us[s-1] = prolongationOp_cuda.forwardVectorField(us[s],self.InterpolationTypeCuda)
             #factor LXNew/LXOld, ...
             us[s-1][:,:,0] *= meshInfos[s-1].getLX() / meshInfos[s].getLX()
             us[s-1][:,:,1] *= meshInfos[s-1].getLY() / meshInfos[s].getLY()
@@ -133,7 +133,7 @@ class TVL1OpticalFlow2D:
             #TODO Dirichlet boundary condition for p?
             # ps[s] = self.dirichlet(ps[s])
 
-            ps[s-1] = prolongationOp_cuda.forwardMatrixField(ps[s],InterpolationTypeCuda)
+            ps[s-1] = prolongationOp_cuda.forwardMatrixField(ps[s],self.InterpolationTypeCuda)
 
             #TODO prolongation factor for p?
 
@@ -153,8 +153,8 @@ class TVL1OpticalFlow2D:
 
         for w in range(self.MAX_WARPS):
             # Compute the warping of the target image and its derivatives
-            I1_warped = warpingOp.forward(I1.contiguous(),u,InterpolationTypeCuda)
-            I1_warped_grad = warpingOp.forwardVectorField(I1_grad,u,InterpolationTypeCuda)
+            I1_warped = warpingOp.forward(I1.contiguous(),u,self.InterpolationTypeCuda)
+            I1_warped_grad = warpingOp.forwardVectorField(I1_grad,u,self.InterpolationTypeCuda)
             # Constant part of the rho function
             #rho_c = I1_warped - u[:, :, 0] * I1_warped_grad[:, :, 0] - u[:, :, 1] * I1_warped_grad[:, :, 1] - I0
             rho_c = I1_warped - torch.sum(u * I1_warped_grad, dim=2) - I0
@@ -253,7 +253,7 @@ class TVL1OpticalFlow2D:
         saveImage(I0,saveDirStep,f"I0_it{step}.png")
         saveImage(I1,saveDirStep,f"I1_it{step}.png")
         warpingOp = opticalFlow.Warping2D(meshInfo)
-        I1_warped = warpingOp.forward(I1.contiguous(),u,InterpolationTypeCuda)
+        I1_warped = warpingOp.forward(I1.contiguous(),u,self.InterpolationTypeCuda)
         saveImage(I1_warped,saveDirStep,f"I1_warped_it{step}.png")
         saveImage(torch.abs(I1_warped-I0),saveDirStep,f"Diff_I1warped_to_I0_it{step}.png")
 
