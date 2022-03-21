@@ -33,11 +33,11 @@ def saveCurve1D(input, LX1D, saveDir, name, type="plot"):
 
 def saveImage(input,saveDir,name,max_gray_value=1.):
     factor_gray_value = 255. / max_gray_value
-    NY2D = input.shape[0]
-    NX2D = input.shape[1]
+    # NY2D = input.shape[0]
+    # NX2D = input.shape[1]
     pathNameA = os.path.join(saveDir, name) 
-    img_yx = input.cpu().detach().numpy()
-    img = np.swapaxes(img_yx, 0, 1)
+    img = input.cpu().detach().numpy()
+    # img = np.swapaxes(img, 0, 1)
     cv2.imwrite(pathNameA,factor_gray_value * img)
 
 
@@ -76,7 +76,8 @@ def save_slices(image3D, fileName, saveDir, max_gray_value=1):
 
     fig, axs = plt.subplots(numRows, numCols,constrained_layout=True,figsize=(16.,9.),dpi=4)
     #fig.canvas.manager.set_window_title('4D Nifti Image')
-    fig.suptitle('4D_Nifti file: {} \n with {} slices in z-direction'.format(os.path.basename(fileName),numZSlices), fontsize=16)
+    #fig.suptitle('4D_Nifti file: {} \n with {} slices in z-direction'.format(os.path.basename(fileName),numZSlices), fontsize=16)
+    fig.suptitle('file: {}'.format(os.path.basename(fileName)), fontsize=16)
     for z, ax in enumerate(axs.flat):
         if z < numZSlices:
             ax.imshow(image3D[z,:,:].cpu().detach().numpy(), cmap='gray', vmin=0, vmax=max_gray_value, interpolation=None)

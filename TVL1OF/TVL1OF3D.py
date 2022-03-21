@@ -107,9 +107,13 @@ class TVL1OpticalFlow3D:
 
         I0s, I1s, us, ps, meshInfos = self.generatePyramid(I0,I1,u,p)
 
+        print("\n")
+        print("============================================")
         print("start to compute optical flow for pyramid")
+        print("============================================")
+        print("\n")
+
         for s in range(self.NUM_SCALES-1, -1, -1):
-            print("step = ", s)
 
             # Compute the optical flow at scale s
             us[s], ps[s] = self.computeOnSingleStep(s, I0s[s], I1s[s], us[s], ps[s], meshInfos[s])
@@ -138,7 +142,7 @@ class TVL1OpticalFlow3D:
 
     def computeOnSingleStep(self, s, I0, I1, u, p, meshInfo):
 
-        print("start to compute optical flow for single step")
+        print("start to compute optical flow for single step = ", s)
         progress_bar = tqdm(total = self.MAX_WARPS * self.MAX_OUTER_ITERATIONS)
 
         # Compute target image gradients

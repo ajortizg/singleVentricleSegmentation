@@ -155,19 +155,6 @@ __global__ void cuda_TVL1OF2D_proxDual_kernel(
 
   if (ix < NX && iy < NY)
   {
-    // for( int derivDir=0; derivDir<2; ++derivDir )
-    // {
-    //   T normSqr = 0.;
-    //   for( int flowDir=0; flowDir<2; ++flowDir)
-    //   {
-    //     normSqr += dualVariable[iy][ix][flowDir][derivDir] * dualVariable[iy][ix][flowDir][derivDir];
-    //   }
-    //   const T den = max(dualFctWeight_TV,  sqrtf(normSqr) );
-    //   for( int flowDir=0; flowDir<2; ++flowDir)
-    //   {
-    //     output[iy][ix][flowDir][derivDir] = dualVariable[iy][ix][flowDir][derivDir] / den;
-    //   }
-    // }
     for( int flowDir=0; flowDir<2; ++flowDir)    
     {
       T normSqr = 0.;
@@ -175,7 +162,8 @@ __global__ void cuda_TVL1OF2D_proxDual_kernel(
       {
         normSqr += dualVariable[iy][ix][flowDir][derivDir] * dualVariable[iy][ix][flowDir][derivDir];
       }
-      const T den = max(dualFctWeight_TV,  sqrtf(normSqr) );
+      //const T den = max(dualFctWeight_TV,  sqrtf(normSqr) );
+      const T den = fmaxf(1.,  sqrtf(normSqr) / dualFctWeight_TV );
       for( int derivDir=0; derivDir<2; ++derivDir )
       {
         output[iy][ix][flowDir][derivDir] = dualVariable[iy][ix][flowDir][derivDir] / den;
@@ -259,17 +247,6 @@ __global__ void cuda_TVL1OF3D_proxDual_kernel(
 
   if (ix < NX && iy < NY && iz < NZ)
   {
-    // for( int il=0; il<3; ++il )
-    // {
-    //   T normSqr = 0.;
-    //   for( int ik=0; ik<3; ++ik)
-    //     normSqr += dualVariable[iz][iy][ix][ik][il] * dualVariable[iz][iy][ix][ik][il];
-    //   const T den = max(dualFctWeight_TV,  sqrtf(normSqr) );
-    //   for( int ik=0; ik<3; ++ik)
-    //   {
-    //     output[iz][iy][ix][ik][il] = dualVariable[iz][iy][ix][ik][il] / den;
-    //   }
-    // }
     for( int flowDir=0; flowDir<3; ++flowDir)
     {
       T normSqr = 0.;
@@ -277,7 +254,8 @@ __global__ void cuda_TVL1OF3D_proxDual_kernel(
       {
         normSqr += dualVariable[iz][iy][ix][flowDir][derivDir] * dualVariable[iz][iy][ix][flowDir][derivDir];
       }
-      const T den = max(dualFctWeight_TV,  sqrtf(normSqr) );
+      //const T den = max(dualFctWeight_TV,  sqrtf(normSqr) );
+      const T den = fmaxf(1.,  sqrtf(normSqr) / dualFctWeight_TV );
       for( int derivDir=0; derivDir<3; ++derivDir )
       {
         output[iz][iy][ix][flowDir][derivDir] = dualVariable[iz][iy][ix][flowDir][derivDir] / den;

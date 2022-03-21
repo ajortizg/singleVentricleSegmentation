@@ -4,8 +4,8 @@ import torch
 import os
 
 from utils.config import *
-from tvl1.tvl1Scipy import TVL1Scipy
-from tvl1.tvl1Cuda import *
+from TVL1OF.tvl1Scipy import TVL1Scipy
+from TVL1OF.tvl1Cuda import *
 
 pythonOps_lib_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../pythonOps'))
 sys.path.append(pythonOps_lib_path)

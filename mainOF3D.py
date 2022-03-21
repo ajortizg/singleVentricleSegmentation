@@ -4,7 +4,7 @@ import os
 import pandas
 
 # from utils.config import *
-from tvl1.TVL1OF3D import *
+from TVL1OF.TVL1OF3D import *
 
 from opticalFlow_cuda_ext import opticalFlow
 

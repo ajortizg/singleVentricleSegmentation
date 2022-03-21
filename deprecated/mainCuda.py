@@ -4,7 +4,7 @@ import os
 
 from utils.config import *
 # from tvl1.tvl1Cuda import TVL1Cuda
-from tvl1.tvl1Cuda import *
+from TVL1OF.tvl1Cuda import *
 
 if __name__ == "__main__":
     np.set_printoptions(precision=2, suppress=True)

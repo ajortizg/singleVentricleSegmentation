@@ -4,7 +4,7 @@ import time
 import os
 
 from utils.config import *
-from tvl1.tvl1Scipy import TVL1Scipy
+from TVL1OF.tvl1Scipy import TVL1Scipy
 
 if __name__ == "__main__":
     np.set_printoptions(precision=2, suppress=True)

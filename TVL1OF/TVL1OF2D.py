@@ -26,11 +26,6 @@ sys.path.append(pythonOps_lib_path)
 
 from opticalFlow_cuda_ext import opticalFlow
 
-
-#InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_LINEAR
-#InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_CUBIC_HERMITESPLINE
-
-
 class TVL1OpticalFlow2D:
     def __init__(self,saveDir,config):
         self.saveDir = saveDir
@@ -159,7 +154,9 @@ class TVL1OpticalFlow2D:
             #rho_c = I1_warped - u[:, :, 0] * I1_warped_grad[:, :, 0] - u[:, :, 1] * I1_warped_grad[:, :, 1] - I0
             rho_c = I1_warped - torch.sum(u * I1_warped_grad, dim=2) - I0
 
-            #primalFctVec = torch.zeros([MAX_OUTER_ITERATIONS])
+            primalFctVec = torch.zeros([self.MAX_OUTER_ITERATIONS])
+            dualFctVec = torch.zeros([self.MAX_OUTER_ITERATIONS])
+            totalFctVec = torch.zeros([self.MAX_OUTER_ITERATIONS])
             breakConditionVecPrimal = torch.zeros([self.MAX_OUTER_ITERATIONS])
             breakConditionVecDual = torch.zeros([self.MAX_OUTER_ITERATIONS])
             breakConditionVecUpdate = torch.zeros([self.MAX_OUTER_ITERATIONS])
@@ -189,10 +186,11 @@ class TVL1OpticalFlow2D:
                 # print("dualVariable.norm=",torch.norm(dualVariable).item())
                 # #end test
                 p = opticalFlow.TVL1OF2D_proxDual( dualVariable, sigma, self.dualFctWeight_TV, meshInfo)
-                breakConditionVecDual[n] = torch.norm(p-pold).item()
-                #test set zero because result for sigma=0 seems to be nan
                 if self.dualFctWeight_TV == 0.:
                    p = torch.zeros([meshInfo.getNY(),meshInfo.getNX(),2,2]).float().to(self.DEVICE)
+                #debug
+                breakConditionVecDual[n] = torch.norm(p-pold).item()
+                dualFctVec[n] = self.dualFctWeight_TV * torch.sum(torch.norm(p, dim=3))
 
 
                 # update of primal variable
@@ -211,10 +209,13 @@ class TVL1OpticalFlow2D:
                 p_div = nablaOp.backwardVectorField(p)
                 primalVariable = u - tau * p_div
                 u = opticalFlow.TVL1OF2D_proxPrimal(primalVariable, tau, self.primalFctWeight_Matching, rho, I1_warped_grad, meshInfo )
-                breakConditionVecPrimal[n] = torch.norm(u-uold).item()
-                #primalFctVec[n] = opticalFlow.TVL1OF2D_PrimalFct(primalFctWeight_Matching, rho, meshInfo )
                 # if self.primalFctWeight_Matching == 0.:
                 #     u = torch.zeros([meshInfo.getNY(),meshInfo.getNX(),2]).float().to(self.DEVICE)
+                # debug
+                breakConditionVecPrimal[n] = torch.norm(u-uold).item()
+                #primalFctVec[n] = opticalFlow.TVL1OF2D_PrimalFct(primalFctWeight_Matching, rho, meshInfo )
+                rho_new = rho_c + torch.sum(u * I1_warped_grad, dim=2)
+                primalFctVec[n] = self.primalFctWeight_Matching * torch.sum(torch.abs(rho_new))
 
                 #update of stepsizes
                 if self.PRIMALDUAL_ALGO_TYPE == 1:
@@ -230,12 +231,16 @@ class TVL1OpticalFlow2D:
                 # overrelaxation
                 zold = z
                 z = (1. + theta) * u - theta * uold
+                #debug
                 breakConditionVecUpdate[n] = torch.norm(z-zold).item()
+                totalFctVec[n]=primalFctVec[n]+dualFctVec[n]
 
                 progress_bar.update(1)
  
             if self.useDebugOutput:
-                #saveCurve1D(primalFctVec, MAX_OUTER_ITERATIONS, self.saveDirDebug, f"PrimalFct_it{s}_warp{w}")
+                saveCurve1D(primalFctVec, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"PrimalFct_it{s}_warp{w}")
+                saveCurve1D(dualFctVec, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"DualFct_it{s}_warp{w}")
+                saveCurve1D(totalFctVec, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"TotalFct_it{s}_warp{w}")
                 saveCurve1D(breakConditionVecPrimal, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"CPErrorPrimal_it{s}_warp{w}", "loglog")
                 saveCurve1D(breakConditionVecDual, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"CPErrorDual_it{s}_warp{w}", "loglog")
                 saveCurve1D(breakConditionVecUpdate, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"CPErrorUpdate_it{s}_warp{w}", "loglog")
