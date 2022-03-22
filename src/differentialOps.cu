@@ -427,7 +427,7 @@ __global__ void cuda_nabla3d_cd_forward_kernel(
                               : 
                               0.5*(b[iz][iy][ix] - b[iz][iy][ix-1])/hX
                             : 
-                            0.5*(b[iz][iy][ix+1]-b[iz][iy][ix])/hX;
+                            0.5*(b[iz][iy][ix+1] - b[iz][iy][ix])/hX;
 
       Db[iz][iy][ix][1] = (iy > 0) ? 
                             (iy < NY-1) ? 
@@ -435,7 +435,7 @@ __global__ void cuda_nabla3d_cd_forward_kernel(
                               : 
                               0.5*(b[iz][iy][ix] - b[iz][iy-1][ix])/hY
                             : 
-                            0.5*(b[iz][iy+1][ix]-b[iz][iy][ix])/hY;
+                            0.5*(b[iz][iy+1][ix] - b[iz][iy][ix])/hY;
 
       Db[iz][iy][ix][2] = (iz > 0) ? 
                             (iz < NZ-1) ? 
@@ -443,7 +443,7 @@ __global__ void cuda_nabla3d_cd_forward_kernel(
                               : 
                               0.5*(b[iz][iy][ix] - b[iz-1][iy][ix])/hZ
                             : 
-                            0.5*(b[iz+1][iy][ix]-b[iz][iy][ix])/hZ;
+                            0.5*(b[iz+1][iy][ix] - b[iz][iy][ix])/hZ;
   }
   
 }
