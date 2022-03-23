@@ -59,8 +59,6 @@ if __name__ == "__main__":
     #print(image0.size)
     #print(image0.mode)
 
-    # NX = image0.size[0]
-    # NY = image0.size[1]
     NX = image0.shape[1]
     NY = image0.shape[0]
     print( f"   * dimensions I0 input: (Y,X) = ({NY},{NX})" )
@@ -76,19 +74,9 @@ if __name__ == "__main__":
     image0 *= scaleMaxValue / totalMaxValue
     image1 *= scaleMaxValue / totalMaxValue
 
-    ## swap from (X,Y) to cuda-compatible (Y,X):
-    # I0np = np.swapaxes(image0, 0, 1)
-    # I1np = np.swapaxes(image1, 0, 1)
-    # print( f"   * dimensions I0: (Y,X) = {I0np.shape}")
-    # print( f"   * dimensions I1: (Y,X) = {I1np.shape}")
-
     #convert to torch for given time steps
     I0 = torch.from_numpy(image0).float().to(DEVICE)
     I1 = torch.from_numpy(image1).float().to(DEVICE)
-    # I0 = torch.from_numpy(image0).float().to(DEVICE)
-    # I1 = torch.from_numpy(image1).float().to(DEVICE)
-    # I0 = torch.swapaxes(I0, 0, 1)
-    # I1 = torch.swapaxes(I1, 0, 1)
 
     #initialization of optical flow 
     u = torch.zeros([NY,NX,2]).float().to(DEVICE)
@@ -97,6 +85,5 @@ if __name__ == "__main__":
     # Compute the optical flow
     alg = TVL1OpticalFlow2D(saveDir,config)
     alg.computeOnPyramid(I0, I1, u, p)
-    #alg.computeOnPyramid(I1, I0, u, p)
 
 

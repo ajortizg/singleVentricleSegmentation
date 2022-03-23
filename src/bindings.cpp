@@ -42,37 +42,48 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
         .def("gethZ", &MeshInfo3D::gethZ);
 
   //=======================================
+  // boundary
+  //======================================= 
+  py::enum_<BoundaryType>(m, "BoundaryType")
+    .value("BOUNDARY_ZERO", BoundaryType::BOUNDARY_ZERO)
+    .value("BOUNDARY_NEAREST", BoundaryType::BOUNDARY_NEAREST)
+    .value("BOUNDARY_MIRROR", BoundaryType::BOUNDARY_MIRROR)
+    .value("BOUNDARY_REFLECT", BoundaryType::BOUNDARY_REFLECT)
+    .export_values();
+
+
+  //=======================================
   // differentialOps
   //======================================= 
-  py::class_<Nabla1D_FD>(m,"Nabla1D_FD")
-        .def(py::init<const MeshInfo1D&>())
-        .def("forward", &Nabla1D_FD::forward)
-        .def("backward", &Nabla1D_FD::backward);
+//   py::class_<Nabla1D_FD>(m,"Nabla1D_FD")
+//         .def(py::init<const MeshInfo1D&>())
+//         .def("forward", &Nabla1D_FD::forward)
+//         .def("backward", &Nabla1D_FD::backward);
 
-  py::class_<Nabla2D_FD>(m,"Nabla2D_FD")
-        .def(py::init<const MeshInfo2D&>())
-        .def("forward", &Nabla2D_FD::forward)
-        .def("backward", &Nabla2D_FD::backward);
+//   py::class_<Nabla2D_FD>(m,"Nabla2D_FD")
+//         .def(py::init<const MeshInfo2D&>())
+//         .def("forward", &Nabla2D_FD::forward)
+//         .def("backward", &Nabla2D_FD::backward);
 
-  py::class_<Nabla3D_FD>(m,"Nabla3D_FD")
-        .def(py::init<const MeshInfo3D&>())
-        .def("forward", &Nabla3D_FD::forward)
-        .def("backward", &Nabla3D_FD::backward);
+//   py::class_<Nabla3D_FD>(m,"Nabla3D_FD")
+//         .def(py::init<const MeshInfo3D&>())
+//         .def("forward", &Nabla3D_FD::forward)
+//         .def("backward", &Nabla3D_FD::backward);
 
   py::class_<Nabla1D_CD>(m,"Nabla1D_CD")
-        .def(py::init<const MeshInfo1D&>())
+        .def(py::init<const MeshInfo1D&, const BoundaryType>())
         .def("forward", &Nabla1D_CD::forward)
         .def("backward", &Nabla1D_CD::backward);
 
   py::class_<Nabla2D_CD>(m,"Nabla2D_CD")
-        .def(py::init<const MeshInfo2D&>())
+        .def(py::init<const MeshInfo2D&, const BoundaryType>())
         .def("forward", &Nabla2D_CD::forward)
         .def("backward", &Nabla2D_CD::backward)
         .def("forwardVectorField", &Nabla2D_CD::forwardVectorField)
         .def("backwardVectorField", &Nabla2D_CD::backwardVectorField);
 
   py::class_<Nabla3D_CD>(m,"Nabla3D_CD")
-        .def(py::init<const MeshInfo3D&>())
+        .def(py::init<const MeshInfo3D&, const BoundaryType>())
         .def("forward", &Nabla3D_CD::forward)
         .def("backward", &Nabla3D_CD::backward)
         .def("forwardVectorField", &Nabla3D_CD::forwardVectorField)

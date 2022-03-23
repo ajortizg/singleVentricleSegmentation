@@ -45,12 +45,25 @@ class TVL1OpticalFlow3D:
         self.tau = config.getfloat('PARAMETERS', 'tau')
         self.theta = config.getfloat('PARAMETERS', 'theta')
         self.gamma = config.getfloat('PARAMETERS', 'gamma')
+        #interpolation
         interType = config.get('PARAMETERS', 'InterpolationType')
         self.InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_LINEAR
         if interType == "LINEAR":
             self.InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_LINEAR
         elif interType == "CUBIC_HERMITESPLINE":
             self.InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_CUBIC_HERMITESPLINE
+        #boundary
+        boundaryType = config.get('PARAMETERS', 'BoundaryType')
+        self.BoundaryTypeCuda = opticalFlow.BoundaryType.BOUNDARY_ZERO
+        if boundaryType == "ZERO":
+            self.BoundaryTypeCuda = opticalFlow.BoundaryType.BOUNDARY_ZERO
+        elif boundaryType == "NEAREST":
+            self.BoundaryTypeCuda = opticalFlow.BoundaryType.BOUNDARY_NEAREST
+        elif boundaryType == "MIRROR":
+            self.BoundaryTypeCuda = opticalFlow.BoundaryType.BOUNDARY_MIRROR
+        elif boundaryType == "REFLECT":
+            self.BoundaryTypeCuda = opticalFlow.BoundaryType.BOUNDARY_REFLECT
+        #cuda
         cuda_availabe = config.get('DEVICE', 'cuda_availabe')
         self.DEVICE = "cuda" if cuda_availabe else "cpu"
         self.saveDirDebug = os.path.sep.join([self.saveDir, "debug"])
@@ -147,7 +160,7 @@ class TVL1OpticalFlow3D:
 
         # Compute target image gradients
         #nablaOp = Nabla3D_Central(meshInfo)
-        nablaOp = opticalFlow.Nabla3D_CD(meshInfo)
+        nablaOp = opticalFlow.Nabla3D_CD(meshInfo,self.BoundaryTypeCuda)
         warpingOp = opticalFlow.Warping3D(meshInfo)
         I1_grad = nablaOp.forward(I1)
 

@@ -419,6 +419,7 @@ __device__ T cuda_interpolate1d_cubicHermiteSpline_local(volatile T* localBuffer
 }
 
 
+//ZERO-BOUNDARY
 template <typename T>
 __device__ T cuda_interpolate1d_cubicHermiteSpline(const torch::PackedTensorAccessor32<T,1,torch::RestrictPtrTraits> u, 
                                       const int NX, const float LX, const float hX, const T coord_x_warped) {
@@ -442,6 +443,78 @@ __device__ T cuda_interpolate1d_cubicHermiteSpline(const torch::PackedTensorAcce
 }
 
 
+//REFLECTION
+// template <typename T>
+// __device__ T cuda_interpolate1d_cubicHermiteSpline(const torch::PackedTensorAccessor32<T,1,torch::RestrictPtrTraits> u, 
+//                                       const int NX, const float LX, const float hX, const T coord_x_warped) {
+
+//   const int ix_f = floorf(coord_x_warped / hX);
+//   const T wx = coord_x_warped / hX - ix_f;
+//   T buff_x[4];
+
+//   for (int dx = -1; dx < 3; ++dx)
+//   {
+//         const int c_ix_x = ix_f + dx;
+//         if (c_ix_x >= 0 && c_ix_x < NX)
+//           buff_x[dx + 1] = u[c_ix_x];
+//         else if(c_ix_x < 0)
+//           buff_x[dx + 1] = u[-c_ix_x - 1];
+//         else
+//           buff_x[dx + 1] = u[2*NX-2-c_ix_x];
+//   }
+
+//   T out = cuda_interpolate1d_cubicHermiteSpline_local<T>(buff_x, wx + 1);
+
+//   return out;
+// }
+
+
+// //ZERO-BOUNDARY
+// template <typename T>
+// __device__ T cuda_interpolate2d_bicubicHermiteSpline(const torch::PackedTensorAccessor32<T,2,torch::RestrictPtrTraits> u, 
+//                                         const int NY, const int NX,
+//                                         const float LY, const float LX,
+//                                         const float hY, const float hX,
+//                                         const T coord_y_warped, const T coord_x_warped) {
+
+//   const int ix_f = floorf(coord_x_warped / hX);
+//   const T wx = coord_x_warped / hX - ix_f;
+
+//   const int iy_f = floorf(coord_y_warped / hY);
+//   const T wy = coord_y_warped / hY - iy_f;
+
+//   T buff_y[4];
+//   T buff_x[4];
+
+//   for (int dy = -1; dy < 3; ++dy)
+//   {
+//     const int c_ix_y = iy_f + dy;
+
+//     if (c_ix_y >= 0 && c_ix_y < NY)
+//     {
+//       for (int dx = -1; dx < 3; ++dx)
+//       {
+//         const int c_ix_x = ix_f + dx;
+//         if (c_ix_x >= 0 && c_ix_x < NX)
+//           buff_x[dx + 1] = u[c_ix_y][c_ix_x];
+//         else
+//           buff_x[dx + 1] = 0;
+//       }
+//       buff_y[dy + 1] = cuda_interpolate1d_cubicHermiteSpline_local<T>(buff_x, wx + 1);
+//     }
+//     else
+//       buff_y[dy + 1] = 0;
+//   }
+
+//   T out = cuda_interpolate1d_cubicHermiteSpline_local<T>(buff_y, wy + 1);
+
+//   return out;
+// }
+
+
+
+
+//REFLECTION-BOUNDARY
 template <typename T>
 __device__ T cuda_interpolate2d_bicubicHermiteSpline(const torch::PackedTensorAccessor32<T,2,torch::RestrictPtrTraits> u, 
                                         const int NY, const int NX,
@@ -469,19 +542,43 @@ __device__ T cuda_interpolate2d_bicubicHermiteSpline(const torch::PackedTensorAc
         const int c_ix_x = ix_f + dx;
         if (c_ix_x >= 0 && c_ix_x < NX)
           buff_x[dx + 1] = u[c_ix_y][c_ix_x];
+        else if(c_ix_x < 0)
+          buff_x[dx + 1] = u[c_ix_y][-c_ix_x - 1];
         else
-          buff_x[dx + 1] = 0;
+          buff_x[dx + 1] = u[c_ix_y][2*NX-2-c_ix_x];
       }
       buff_y[dy + 1] = cuda_interpolate1d_cubicHermiteSpline_local<T>(buff_x, wx + 1);
     }
-    else
-      buff_y[dy + 1] = 0;
+    else if(c_ix_y < 0){
+      for (int dx = -1; dx < 3; ++dx)
+      {
+        const int c_ix_x = ix_f + dx;
+        if (c_ix_x >= 0 && c_ix_x < NX)
+          buff_y[dy + 1] = u[-c_ix_y - 1][c_ix_x];
+        else if(c_ix_x < 0)
+          buff_y[dy + 1] = u[-c_ix_y - 1][-c_ix_x - 1];
+        else
+          buff_y[dy + 1] = u[-c_ix_y - 1][2*NX-2-c_ix_x];
+      }
+    }else{
+      for (int dx = -1; dx < 3; ++dx)
+      {
+        const int c_ix_x = ix_f + dx;
+        if (c_ix_x >= 0 && c_ix_x < NX)
+          buff_y[dy + 1] = u[2*NY-2-c_ix_y][c_ix_x];
+        else if(c_ix_x < 0)
+          buff_y[dy + 1] = u[2*NY-2-c_ix_y][-c_ix_x - 1];
+        else
+          buff_y[dy + 1] = u[2*NY-2-c_ix_y][2*NX-2-c_ix_x];
+      }
+    }
   }
 
   T out = cuda_interpolate1d_cubicHermiteSpline_local<T>(buff_y, wy + 1);
 
   return out;
 }
+
 
 
 template <typename T>

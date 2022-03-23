@@ -91,6 +91,17 @@ public:
 
 
 
+/** Boundary types. */
+typedef enum
+{
+  //INTERPOLATE_NEAREST,
+  BOUNDARY_ZERO,
+  BOUNDARY_NEAREST,
+  BOUNDARY_MIRROR,
+  BOUNDARY_REFLECT
+} BoundaryType;
+
+
 /** Interpolation types. */
 typedef enum
 {

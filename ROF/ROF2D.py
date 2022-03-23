@@ -34,12 +34,25 @@ class ROF2D:
         self.tau = config.getfloat('PARAMETERS', 'tau')
         self.theta = config.getfloat('PARAMETERS', 'theta')
         self.gamma = config.getfloat('PARAMETERS', 'gamma')
+        # interpolation
         interType = config.get('PARAMETERS', 'InterpolationType')
         self.InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_LINEAR
         if interType == "LINEAR":
             self.InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_LINEAR
         elif interType == "CUBIC_HERMITESPLINE":
             self.InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_CUBIC_HERMITESPLINE
+        #boundary
+        boundaryType = config.get('PARAMETERS', 'BoundaryType')
+        self.BoundaryTypeCuda = opticalFlow.BoundaryType.BOUNDARY_ZERO
+        if boundaryType == "ZERO":
+            self.BoundaryTypeCuda = opticalFlow.BoundaryType.BOUNDARY_ZERO
+        elif boundaryType == "NEAREST":
+            self.BoundaryTypeCuda = opticalFlow.BoundaryType.BOUNDARY_NEAREST
+        elif boundaryType == "MIRROR":
+            self.BoundaryTypeCuda = opticalFlow.BoundaryType.BOUNDARY_MIRROR
+        elif boundaryType == "REFLECT":
+            self.BoundaryTypeCuda = opticalFlow.BoundaryType.BOUNDARY_REFLECT
+        #cuda
         cuda_availabe = config.get('DEVICE', 'cuda_availabe')
         self.DEVICE = "cuda" if cuda_availabe else "cpu"
         self.saveDirDebug = os.path.sep.join([self.saveDir, "debug"])
@@ -72,8 +85,8 @@ class ROF2D:
         # Create the pyramid
         for s in range(1, self.NUM_SCALES):
             prolongationOp_cuda = opticalFlow.Prolongation2D(meshInfos[s-1],meshInfos[s])
-            I0s.append(prolongationOp_cuda.forward(I0s[s-1].contiguous(),self.InterpolationTypeCuda))
-            Is.append(prolongationOp_cuda.forward(Is[s-1].contiguous(),self.InterpolationTypeCuda))
+            I0s.append(prolongationOp_cuda.forward(I0s[s-1],self.InterpolationTypeCuda))
+            Is.append(prolongationOp_cuda.forward(Is[s-1],self.InterpolationTypeCuda))
             ps.append(torch.zeros([meshInfos[s].getNY(),meshInfos[s].getNX(),2]).float().to(self.DEVICE))
 
         return I0s, Is, ps, meshInfos
@@ -102,7 +115,6 @@ class ROF2D:
 
             # Prolongate the optical flow and dual variables to the next pyramid level
             prolongationOp_cuda = opticalFlow.Prolongation2D(meshInfos[s],meshInfos[s-1])
-            #I0s[s-1] = prolongationOp_cuda.forward(I0s[s],self.InterpolationTypeCuda)
             Is[s-1] = prolongationOp_cuda.forward(Is[s],self.InterpolationTypeCuda)
             ps[s-1] = prolongationOp_cuda.forwardVectorField(ps[s],self.InterpolationTypeCuda)
             #TODO prolongation factor for p?
@@ -115,7 +127,7 @@ class ROF2D:
 
         # Compute target image gradients
         #nablaOp = Nabla2D_Central(meshInfo)
-        nablaOp = opticalFlow.Nabla2D_CD(meshInfo)
+        nablaOp = opticalFlow.Nabla2D_CD(meshInfo,self.BoundaryTypeCuda)
         
         z = I
         sigma = self.sigma 

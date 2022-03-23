@@ -39,12 +39,25 @@ class TVL1OpticalFlow2D:
         self.tau = config.getfloat('PARAMETERS', 'tau')
         self.theta = config.getfloat('PARAMETERS', 'theta')
         self.gamma = config.getfloat('PARAMETERS', 'gamma')
+        #interpolation
         interType = config.get('PARAMETERS', 'InterpolationType')
         self.InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_LINEAR
         if interType == "LINEAR":
             self.InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_LINEAR
         elif interType == "CUBIC_HERMITESPLINE":
             self.InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_CUBIC_HERMITESPLINE
+        #boundary
+        boundaryType = config.get('PARAMETERS', 'BoundaryType')
+        self.BoundaryTypeCuda = opticalFlow.BoundaryType.BOUNDARY_ZERO
+        if boundaryType == "ZERO":
+            self.BoundaryTypeCuda = opticalFlow.BoundaryType.BOUNDARY_ZERO
+        elif boundaryType == "NEAREST":
+            self.BoundaryTypeCuda = opticalFlow.BoundaryType.BOUNDARY_NEAREST
+        elif boundaryType == "MIRROR":
+            self.BoundaryTypeCuda = opticalFlow.BoundaryType.BOUNDARY_MIRROR
+        elif boundaryType == "REFLECT":
+            self.BoundaryTypeCuda = opticalFlow.BoundaryType.BOUNDARY_REFLECT
+        #cuda
         cuda_availabe = config.get('DEVICE', 'cuda_availabe')
         self.DEVICE = "cuda" if cuda_availabe else "cpu"
         self.saveDirDebug = os.path.sep.join([self.saveDir, "debug"])
@@ -88,8 +101,8 @@ class TVL1OpticalFlow2D:
         # Create the pyramid
         for s in range(1, self.NUM_SCALES):
             prolongationOp_cuda = opticalFlow.Prolongation2D(meshInfos[s-1],meshInfos[s])
-            I0s.append(prolongationOp_cuda.forward(I0s[s-1].contiguous(),self.InterpolationTypeCuda))
-            I1s.append(prolongationOp_cuda.forward(I1s[s-1].contiguous(),self.InterpolationTypeCuda))
+            I0s.append(prolongationOp_cuda.forward(I0s[s-1],self.InterpolationTypeCuda))
+            I1s.append(prolongationOp_cuda.forward(I1s[s-1],self.InterpolationTypeCuda))
             us.append(torch.zeros([meshInfos[s].getNY(),meshInfos[s].getNX(),2]).float().to(self.DEVICE))
             ps.append(torch.zeros([meshInfos[s].getNY(),meshInfos[s].getNX(),2,2]).float().to(self.DEVICE))
 
@@ -140,15 +153,15 @@ class TVL1OpticalFlow2D:
 
         # Compute target image gradients
         #nablaOp = Nabla2D_Central(meshInfo)
-        nablaOp = opticalFlow.Nabla2D_CD(meshInfo)
+        nablaOp = opticalFlow.Nabla2D_CD(meshInfo,self.BoundaryTypeCuda)
         warpingOp = opticalFlow.Warping2D(meshInfo)
-        I1_grad = nablaOp.forward(I1.contiguous())
+        I1_grad = nablaOp.forward(I1)
 
         z = u
 
         for w in range(self.MAX_WARPS):
             # Compute the warping of the target image and its derivatives
-            I1_warped = warpingOp.forward(I1.contiguous(),u,self.InterpolationTypeCuda)
+            I1_warped = warpingOp.forward(I1,u,self.InterpolationTypeCuda)
             I1_warped_grad = warpingOp.forwardVectorField(I1_grad,u,self.InterpolationTypeCuda)
             # Constant part of the rho function
             #rho_c = I1_warped - u[:, :, 0] * I1_warped_grad[:, :, 0] - u[:, :, 1] * I1_warped_grad[:, :, 1] - I0
@@ -258,12 +271,9 @@ class TVL1OpticalFlow2D:
         saveImage(I0,saveDirStep,f"I0_it{step}.png")
         saveImage(I1,saveDirStep,f"I1_it{step}.png")
         warpingOp = opticalFlow.Warping2D(meshInfo)
-        I1_warped = warpingOp.forward(I1.contiguous(),u,self.InterpolationTypeCuda)
+        I1_warped = warpingOp.forward(I1,u,self.InterpolationTypeCuda)
         saveImage(I1_warped,saveDirStep,f"I1_warped_it{step}.png")
         saveImage(torch.abs(I1_warped-I0),saveDirStep,f"Diff_I1warped_to_I0_it{step}.png")
-
-        # save_single_zslices(I0, saveDirStep, "I0Slices", 1., 0)
-        # save_single_zslices(I1_warped, saveDirStep, "I1WarpedSlices", 1., 0)
         
         flowName = f"flow_it{step}.pt"
         fileNameFlow = os.path.join(saveDirStep, flowName) 
