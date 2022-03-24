@@ -5,6 +5,8 @@ sys.path.append('core')
 #==================================
 import os
 import torch
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import cv2
 import numpy as np

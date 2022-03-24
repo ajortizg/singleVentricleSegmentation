@@ -8,7 +8,8 @@
 #include <stdio.h>
 
 #include "coreDefines.h"
-#include "interpolation.cu"
+#include "interpolation_cubicHermiteSpline.cu"
+#include "interpolation_linear.cu"
 
 // for debugging
 // #define CUDA_ERROR_CHECK

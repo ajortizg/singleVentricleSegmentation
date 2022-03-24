@@ -148,6 +148,7 @@ class TVL1OpticalFlow2D:
 
     def computeOnSingleStep(self, s, I0, I1, u, p, meshInfo):
 
+        print("\n")
         print("start to compute optical flow for single step = ", s)
         progress_bar = tqdm(total = self.MAX_WARPS * self.MAX_OUTER_ITERATIONS)
 

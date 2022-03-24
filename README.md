@@ -19,5 +19,11 @@ to install setup file:
 * pip install . 
 
 to use config file link data and result folder: 
+
+on linux:
 * ln -s /home/.../singleVentricleData/ /home/.../singleVentricleSegmentation/
 * ln -s /home/.../results /home/.../singleVentricleSegmentation/
+
+on windows:
+* New-Item -ItemType SymbolicLink -Target "C:\Users\...\data\" -Path "C:\Users\...\singleVentricleSegmentation\data"
+* New-Item -ItemType SymbolicLink -Target "C:\Users\...\results\" -Path "C:\Users\...\singleVentricleSegmentation\results"

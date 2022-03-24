@@ -122,6 +122,7 @@ class ROF2D:
 
     def computeOnSingleStep(self, s, I0, I, p, meshInfo):
 
+        print("\n")
         print("start to compute ROF for single step = ", s)
         progress_bar = tqdm(total = self.MAX_OUTER_ITERATIONS)
 
@@ -222,9 +223,6 @@ class ROF2D:
 
 
     def saveSingleStepToFile(self,step,I0,I,p,meshInfo):
-        
-        print("save step ", step)
-
         saveDirStep = os.path.sep.join([self.saveDir, f"it{step}"])
         if not os.path.exists(saveDirStep):
             os.makedirs(saveDirStep)
