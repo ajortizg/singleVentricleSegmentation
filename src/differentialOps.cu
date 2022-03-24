@@ -215,18 +215,6 @@ __global__ void cuda_divergence1d_cd_backward_bdryMirror_kernel(
                               :
                               -0.5*p[ix+1][0];
 
-      // T divp_x;
-      // if( ix == 0 )
-      //   divp_x = -0.5*p[ix+1][0];
-      // else if( ix == 1 )
-      //   divp_x = -0.5*p[ix+1][0];
-      // else if ( ix == NX-2)
-      //   divp_x =  0.5*p[ix-1][0];
-      // else if ( ix == NX-1 )
-      //   divp_x = 0.5*p[ix-1][0];
-      // else
-      //   divp_x = 0.5*(p[ix-1][0] - p[ix+1][0]);
-
       divp[ix] = divp_x/hX;
   }
 }
@@ -1060,6 +1048,7 @@ __global__ void cuda_divergence3d_cd_backward_bdryMirror_kernel(
       divp[iz][iy][ix] = divp_x/hX + divp_y/hY + divp_z/hZ;
   }
 }
+
 
 template <typename T>
 __global__ void cuda_divergence3d_cd_backward_bdryReflect_kernel(

@@ -88,12 +88,8 @@ __device__ T cuda_interpolate1d_cubicHermiteSpline(const torch::PackedTensorAcce
 //   for (int dx = -1; dx < 3; ++dx)
 //   {
 //         const int c_ix_x = ix_f + dx;
-//         if (c_ix_x >= 0 && c_ix_x < NX)
-//           buff_x[dx + 1] = u[c_ix_x];
-//         else if(c_ix_x < 0)
-//           buff_x[dx + 1] = u[-c_ix_x - 1];
-//         else
-//           buff_x[dx + 1] = u[2*NX-2-c_ix_x];
+//         c_ix_x_out = getIndex_interpolate_bdryReflect(c_ix_x,NX);
+//         buff_x[dx + 1] = u[c_ix_x_out];
 //   }
 
 //   T out = cuda_interpolate1d_cubicHermiteSpline_local<T>(buff_x, wx + 1);
@@ -176,7 +172,7 @@ __device__ T cuda_interpolate2d_bicubicHermiteSpline(const torch::PackedTensorAc
         if (c_ix_x >= 0 && c_ix_x < NX)
           buff_x[dx + 1] = u[c_ix_y][c_ix_x];
         else if(c_ix_x < 0)
-          buff_x[dx + 1] = u[c_ix_y][-c_ix_x - 1];
+          buff_x[dx + 1] = u[c_ix_y][-c_ix_x];
         else
           buff_x[dx + 1] = u[c_ix_y][2*NX-2-c_ix_x];
       }
@@ -189,7 +185,7 @@ __device__ T cuda_interpolate2d_bicubicHermiteSpline(const torch::PackedTensorAc
         if (c_ix_x >= 0 && c_ix_x < NX)
           buff_y[dy + 1] = u[-c_ix_y - 1][c_ix_x];
         else if(c_ix_x < 0)
-          buff_y[dy + 1] = u[-c_ix_y - 1][-c_ix_x - 1];
+          buff_y[dy + 1] = u[-c_ix_y - 1][-c_ix_x];
         else
           buff_y[dy + 1] = u[-c_ix_y - 1][2*NX-2-c_ix_x];
       }
@@ -200,7 +196,7 @@ __device__ T cuda_interpolate2d_bicubicHermiteSpline(const torch::PackedTensorAc
         if (c_ix_x >= 0 && c_ix_x < NX)
           buff_y[dy + 1] = u[2*NY-2-c_ix_y][c_ix_x];
         else if(c_ix_x < 0)
-          buff_y[dy + 1] = u[2*NY-2-c_ix_y][-c_ix_x - 1];
+          buff_y[dy + 1] = u[2*NY-2-c_ix_y][-c_ix_x];
         else
           buff_y[dy + 1] = u[2*NY-2-c_ix_y][2*NX-2-c_ix_x];
       }
