@@ -51,6 +51,7 @@ def create_grid(NZ, NY, NX):
     return np.stack((xx, yy, zz), axis=3)
 
 
+# Dimension of the volume
 NX, NY, NZ = 32, 44, 16
 grid = create_grid(NZ, NY, NX)
 
@@ -74,7 +75,8 @@ print(voxel_color.shape)
 # 3D plot
 fig = plt.figure()
 ax = fig.add_subplot(projection='3d')
-ax.voxels(np.transpose(voxelarray, (2, 1, 0)), 
+ax.voxels(np.transpose(voxelarray, (2, 1, 0)),
+          facecolors=np.transpose(voxel_color, (2, 1, 0, 3)),
           edgecolor='k', linewidth=0.5)
 ax.set(xlabel='X', ylabel='Y', zlabel='Z')
 
@@ -89,8 +91,8 @@ plot_slices(voxel_val, str="voxelarray", block=False)
 grid_w = np.zeros_like(grid)
 of = np.zeros([NZ, NY, NX, 3])
 # R = T.rotz(20) * T.rotx(16) * T.roty(20)
-R = T.rotz(12)
-t = np.array([NX//2, NY//2, 0])
+R = T.rotz(3)
+t = np.array([1, 0, 1])
 
 R_left = np.linalg.inv(R)
 
@@ -100,8 +102,8 @@ for x in range(NX):
             # grid_w[z, y, x, :] = R@grid[z, y, x, :]
             grid_w[z, y, x, :] = R@grid[z, y, x, :] + t
             of[z, y, x, :] = grid_w[z, y, x, :] - grid[z, y, x, :]
-            # print(grid[z, y, x, :], grid_w[z, y, x, :],
-            #       of[z, y, x, :], grid[z, y, x, :] + of[z, y, x, :])
+            print(grid[z, y, x, :], grid_w[z, y, x, :],
+                  of[z, y, x, :], grid[z, y, x, :] + of[z, y, x, :])
 
 new_cords = grid + of
 voxel_val_w = ndimage.map_coordinates(voxel_val,
@@ -111,15 +113,15 @@ voxel_val_w = ndimage.map_coordinates(voxel_val,
                                       order=3, mode="constant")
 plot_slices(voxel_val_w, str="voxel_val_w", block=False)
 
-voxelarray_w = ndimage.map_coordinates(voxelarray,
-                                       [new_cords[:, :, :, 2],
-                                        new_cords[:, :, :, 1],
-                                        new_cords[:, :, :, 0]],
-                                       order=3, mode="constant")
-voxelarray_w[voxelarray_w < 0.5] = 0
-fig = plt.figure()
-ax = fig.add_subplot(projection='3d')
-ax.voxels(np.transpose(voxelarray_w, (2, 1, 0)),
-          edgecolor='k', linewidth=0.5)
-ax.set(xlabel='X', ylabel='Y', zlabel='Z')
+# voxelarray_w = ndimage.map_coordinates(voxelarray,
+#                                        [new_cords[:, :, :, 2],
+#                                         new_cords[:, :, :, 1],
+#                                         new_cords[:, :, :, 0]],
+#                                        order=3, mode="constant")
+# voxelarray_w[voxelarray_w < 0.5] = 0
+# fig = plt.figure()
+# ax = fig.add_subplot(projection='3d')
+# ax.voxels(np.transpose(voxelarray_w, (2, 1, 0)),
+#           edgecolor='k', linewidth=0.5)
+# ax.set(xlabel='X', ylabel='Y', zlabel='Z')
 plt.show()
