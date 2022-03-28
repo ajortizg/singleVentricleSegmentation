@@ -1,5 +1,23 @@
 from abc import abstractmethod
 import numpy as np
+import torch.nn.functional as F
+import torch
+
+
+def scale_grid(grid):
+    # scale grid to [-1,1]
+    NZ, NY, NX, _ = grid.shape
+    grid[:, :, :, 0] = 2.0 * grid[:, :, :, 0] / max(NX-1, 1) - 1.0
+    grid[:, :, :, 1] = 2.0 * grid[:, :, :, 1] / max(NY-1, 1) - 1.0
+    grid[:, :, :, 2] = 2.0 * grid[:, :, :, 2] / max(NZ-1, 1) - 1.0
+    return grid
+
+
+def normalize(x):
+    # Normalize between 0 and 1
+    min = np.amin(x)
+    max = np.amax(x)
+    return (x-min)/(max-min)
 
 
 class Object:
@@ -8,12 +26,29 @@ class Object:
         self.cy = cy
         self.cz = cz
         self.voxels = None
+        self.gray_values = None
 
     @abstractmethod
     def create_voxels(self, grid):
         self.xx = grid[:, :, :, 0]
         self.yy = grid[:, :, :, 1]
         self.zz = grid[:, :, :, 2]
+
+    def warp(self, grid, of):
+        if self.gray_values is not None:
+            grid = torch.from_numpy(grid)
+            of = torch.from_numpy(of)
+
+            new_coords = scale_grid(grid - of)
+            new_coords.unsqueeze_(dim=0)
+            vol = torch.from_numpy(self.gray_values)
+            vol.unsqueeze_(dim=0).unsqueeze_(dim=0)
+
+            vol_w = F.grid_sample(vol, new_coords, align_corners=True,
+                                  mode="bilinear", padding_mode="zeros")
+            return vol_w.squeeze().numpy()
+        else:
+            return None
 
 
 class Sphere(Object):
@@ -36,10 +71,6 @@ class Cube(Object):
 
     def create_voxels(self, grid):
         super().create_voxels(grid)
-        # self.voxels = (self.xx < self.cx - self.lx//2 | self.xx > self.cx + self.lx//2) & \
-        #     (self.yy < self.cy - self.ly//2 | self.yy > self.cy + self.ly//2) & \
-        #     (self.zz < self.cz - self.lz//2 | self.zz > self.cz + self.lz//2)
-
         self.voxels = np.full(self.xx.shape, False)
         self.voxels[self.cz - self.lz//2: self.cz + self.lz//2,
                     self.cy - self.ly//2: self.cy + self.ly//2,
@@ -58,4 +89,21 @@ class Ellipsoid(Object):
         NZ, NY, NX = grid.shape[:3]
 
         self.voxels = (self.xx - self.cx)**2/self.rx**2 + (self.yy - self.cy)**2/self.ry**2 + \
-            (self.zz - self.cz)**2/self.rz**2 <= 1.0
+            (self.zz - self.cz)**2/self.rz**2 < 1.0
+
+        self.gray_values = np.ones((NZ, NY, NX))
+        # Gray value linealy varing in y direction
+        # gray = np.linspace(0.3, 0.9, NY)
+
+        zz_gray, yy_gray, xx_gray = np.meshgrid(
+            np.linspace(0.0, 1.0, NZ),
+            np.linspace(0.0, 1.0, NY),
+            np.linspace(0.0, 1.0, NX), indexing="ij")
+
+        self.gray_values = (zz_gray*0.3 + yy_gray*0.5 +
+                            xx_gray*0.2) * self.voxels
+
+        # self.gray_values = normalize(self.gray_values)
+
+        # for y in range(NY):
+        #     self.gray_values[:, y, :] = gray[y] * self.voxels[:, y, :]

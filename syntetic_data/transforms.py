@@ -1,7 +1,9 @@
 import numpy as np
 import math
 
-np.set_printoptions(precision=4, suppress=True)
+# small rotation
+# small translation
+# compression and gray value change
 
 
 def rotx(deg):
