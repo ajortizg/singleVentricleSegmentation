@@ -55,22 +55,23 @@ def create_grid(NZ, NY, NX):
 NX, NY, NZ = 32, 44, 16
 grid = create_grid(NZ, NY, NX)
 
-sphere = Sphere(NX//2, NY//2, NZ//2, 9)
-sphere.create_voxels(grid)
+# sphere = Sphere(NX//2, NY//2, NZ//2, 9)
+# sphere.create_voxels(grid)
 
-cube = Cube(NX//3, NY//2, NZ//2, 12, 6, NZ)
-cube.create_voxels(grid)
+# cube = Cube(NX//3, NY//2, NZ//2, 12, 6, NZ)
+# cube.create_voxels(grid)
 
-voxelarray = sphere.voxels | cube.voxels
+ellipsoid = Ellipsoid(NX//2, NY//2, NZ//2, 18, 7, 2)
+ellipsoid.create_voxels(grid)
+
+# voxelarray = sphere.voxels | cube.voxels
+voxelarray = ellipsoid.voxels
 
 # Voxel color
 alpha = 0.3
 voxel_color = np.empty([NZ, NY, NX, 4])
-voxel_color[sphere.voxels] = [0, 1, 0, alpha]  # green
-voxel_color[cube.voxels] = [0, 0, 1, alpha*2]  # green
-
-print(voxelarray.shape)
-print(voxel_color.shape)
+voxel_color[ellipsoid.voxels] = [0, 1, 0, alpha]  # green
+# voxel_color[cube.voxels] = [0, 0, 1, alpha*2]  # blue
 
 # 3D plot
 fig = plt.figure()
@@ -81,9 +82,11 @@ ax.voxels(np.transpose(voxelarray, (2, 1, 0)),
 ax.set(xlabel='X', ylabel='Y', zlabel='Z')
 
 # voxel value
-voxel_val = np.where(cube.voxels == True, 0.5,
-                     np.where(sphere.voxels == True, 1, 0))
+# voxel_val = np.where(cube.voxels == True, 0.5,
+#                      np.where(sphere.voxels == True, 1, 0))
+voxel_val = np.where(ellipsoid.voxels == True, 0.5, 0)
 plot_slices(voxel_val, str="voxelarray", block=False)
+
 
 # small rotation
 # small translation
@@ -91,8 +94,8 @@ plot_slices(voxel_val, str="voxelarray", block=False)
 grid_w = np.zeros_like(grid)
 of = np.zeros([NZ, NY, NX, 3])
 # R = T.rotz(20) * T.rotx(16) * T.roty(20)
-R = T.rotz(3)
-t = np.array([1, 0, 1])
+R = np.eye(3,3)
+t = np.array([1, 0, 0])
 
 R_left = np.linalg.inv(R)
 
@@ -102,15 +105,16 @@ for x in range(NX):
             # grid_w[z, y, x, :] = R@grid[z, y, x, :]
             grid_w[z, y, x, :] = R@grid[z, y, x, :] + t
             of[z, y, x, :] = grid_w[z, y, x, :] - grid[z, y, x, :]
-            print(grid[z, y, x, :], grid_w[z, y, x, :],
-                  of[z, y, x, :], grid[z, y, x, :] + of[z, y, x, :])
+            # print(grid[z, y, x, :], grid_w[z, y, x, :],
+            #       of[z, y, x, :], grid[z, y, x, :] + of[z, y, x, :])
 
 new_cords = grid + of
 voxel_val_w = ndimage.map_coordinates(voxel_val,
                                       [new_cords[:, :, :, 2],
                                        new_cords[:, :, :, 1],
                                        new_cords[:, :, :, 0]],
-                                      order=3, mode="constant")
+                                      order=1, mode="constant")
+
 plot_slices(voxel_val_w, str="voxel_val_w", block=False)
 
 # voxelarray_w = ndimage.map_coordinates(voxelarray,
