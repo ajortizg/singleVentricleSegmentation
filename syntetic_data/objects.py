@@ -84,26 +84,28 @@ class Ellipsoid(Object):
         self.ry = ry
         self.rz = rz
 
-    def create_voxels(self, grid):
+    def create_voxels(self, grid, constant=False, value=1.0):
         super().create_voxels(grid)
         NZ, NY, NX = grid.shape[:3]
 
         self.voxels = (self.xx - self.cx)**2/self.rx**2 + (self.yy - self.cy)**2/self.ry**2 + \
-            (self.zz - self.cz)**2/self.rz**2 < 1.0
+            (self.zz - self.cz)**2/self.rz**2 <= 1.0
 
-        self.gray_values = np.ones((NZ, NY, NX))
-        # Gray value linealy varing in y direction
-        # gray = np.linspace(0.3, 0.9, NY)
+        self.gray_values = np.ones((NZ, NY, NX), dtype=np.float64)
+        # Gray value linealy varing in x direction
+        # gray = np.linspace(0.1, 0.9, NX)
 
-        zz_gray, yy_gray, xx_gray = np.meshgrid(
-            np.linspace(0.0, 1.0, NZ),
-            np.linspace(0.0, 1.0, NY),
-            np.linspace(0.0, 1.0, NX), indexing="ij")
+        if constant:
+            self.gray_values = value * self.voxels
+        else:
+            zz_gray, yy_gray, xx_gray = np.meshgrid(
+                np.linspace(0.0, 1.0, NZ),
+                np.linspace(0.0, 1.0, NY),
+                np.linspace(0.0, 1.0, NX), indexing="ij")
 
-        self.gray_values = (zz_gray*0.3 + yy_gray*0.5 +
-                            xx_gray*0.2) * self.voxels
+            self.gray_values = (zz_gray*0.3 + yy_gray*0.5 +
+                                xx_gray*0.2) * self.voxels
 
         # self.gray_values = normalize(self.gray_values)
-
-        # for y in range(NY):
-        #     self.gray_values[:, y, :] = gray[y] * self.voxels[:, y, :]
+        # for x in range(NX):
+            # self.gray_values[:, :, x] = gray[x] * self.voxels[:, :, x]

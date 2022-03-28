@@ -40,5 +40,12 @@ def SE3(rot, t):
     return T
 
 
+def scale(sx, sy, sz):
+    return np.array([
+        [sx, 0, 0],
+        [0, sy, 0],
+        [0, 0, sz]
+    ])
+
 # T2 = SE3(roty(67)*rotx(7)*rotz(43), [5, 6, 7])
 # print(T2)
