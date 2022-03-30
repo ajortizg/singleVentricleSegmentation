@@ -6,10 +6,16 @@ import torch
 
 def scale_grid(grid):
     # scale grid to [-1,1]
-    NZ, NY, NX, _ = grid.shape
-    grid[:, :, :, 0] = 2.0 * grid[:, :, :, 0] / max(NX-1, 1) - 1.0
-    grid[:, :, :, 1] = 2.0 * grid[:, :, :, 1] / max(NY-1, 1) - 1.0
-    grid[:, :, :, 2] = 2.0 * grid[:, :, :, 2] / max(NZ-1, 1) - 1.0
+    if grid.dim() == 4:
+        NZ, NY, NX, _ = grid.shape
+        grid[:, :, :, 0] = 2.0 * grid[:, :, :, 0] / max(NX-1, 1) - 1.0
+        grid[:, :, :, 1] = 2.0 * grid[:, :, :, 1] / max(NY-1, 1) - 1.0
+        grid[:, :, :, 2] = 2.0 * grid[:, :, :, 2] / max(NZ-1, 1) - 1.0
+    elif grid.dim() == 3:
+        NY, NX, _ = grid.shape
+        grid[:, :, 0] = 2.0 * grid[:, :, 0] / max(NX-1, 1) - 1.0
+        grid[:, :, 1] = 2.0 * grid[:, :, 1] / max(NY-1, 1) - 1.0
+
     return grid
 
 
@@ -30,9 +36,13 @@ class Object:
 
     @abstractmethod
     def create_voxels(self, grid):
-        self.xx = grid[:, :, :, 0]
-        self.yy = grid[:, :, :, 1]
-        self.zz = grid[:, :, :, 2]
+        if grid.ndim == 4:
+            self.xx = grid[:, :, :, 0]
+            self.yy = grid[:, :, :, 1]
+            self.zz = grid[:, :, :, 2]
+        elif grid.ndim == 3:
+            self.xx = grid[:, :, 0]
+            self.yy = grid[:, :, 1]
 
     def warp(self, grid, of):
         if self.gray_values is not None:
@@ -109,3 +119,27 @@ class Ellipsoid(Object):
         # self.gray_values = normalize(self.gray_values)
         # for x in range(NX):
             # self.gray_values[:, :, x] = gray[x] * self.voxels[:, :, x]
+
+
+class Ellipse(Object):
+    def __init__(self, cx, cy, rx, ry):
+        super().__init__(cx, cy, 0)
+        self.rx = rx
+        self.ry = ry
+
+    def create_voxels(self, grid):
+        super().create_voxels(grid)
+        NY, NX = grid.shape[:2]
+
+        self.voxels = (self.xx - self.cx)**2/self.rx**2 + \
+            (self.yy - self.cy)**2/self.ry**2 <= 1.0
+
+        gray = np.linspace(0.1, 0.9, NX)
+        self.gray_values = np.ones((NY, NX), dtype=np.float64)
+        for x in range(NX):
+            self.gray_values[:, x] = gray[x] * self.voxels[:, x]
+
+        # for x in range(NX):
+        #     for y in range(NY):
+        #         if ~self.voxels[y, x]:
+        #             self.gray_values[y, x] = 1.0
