@@ -25,7 +25,6 @@ ax.set_title("ellipses")
 # Compute intermediate steps
 ts = 10
 alpha = np.linspace(0.0, 1.0, ts)
-dif = eB - eA
 prev_ei = None
 ellipsoids = []
 flos = []
