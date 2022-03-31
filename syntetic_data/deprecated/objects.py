@@ -8,13 +8,13 @@ def scale_grid(grid):
     # scale grid to [-1,1]
     if grid.dim() == 4:
         NZ, NY, NX, _ = grid.shape
-        grid[:, :, :, 0] = 2.0 * grid[:, :, :, 0] / max(NX-1, 1) - 1.0
-        grid[:, :, :, 1] = 2.0 * grid[:, :, :, 1] / max(NY-1, 1) - 1.0
-        grid[:, :, :, 2] = 2.0 * grid[:, :, :, 2] / max(NZ-1, 1) - 1.0
+        grid[:, :, :, 0] = 2.0 * grid[:, :, :, 0] / max(NX - 1, 1) - 1.0
+        grid[:, :, :, 1] = 2.0 * grid[:, :, :, 1] / max(NY - 1, 1) - 1.0
+        grid[:, :, :, 2] = 2.0 * grid[:, :, :, 2] / max(NZ - 1, 1) - 1.0
     elif grid.dim() == 3:
         NY, NX, _ = grid.shape
-        grid[:, :, 0] = 2.0 * grid[:, :, 0] / max(NX-1, 1) - 1.0
-        grid[:, :, 1] = 2.0 * grid[:, :, 1] / max(NY-1, 1) - 1.0
+        grid[:, :, 0] = 2.0 * grid[:, :, 0] / max(NX - 1, 1) - 1.0
+        grid[:, :, 1] = 2.0 * grid[:, :, 1] / max(NY - 1, 1) - 1.0
 
     return grid
 
@@ -23,7 +23,7 @@ def normalize(x):
     # Normalize between 0 and 1
     min = np.amin(x)
     max = np.amax(x)
-    return (x-min)/(max-min)
+    return (x - min) / (max - min)
 
 
 class Object:
@@ -54,11 +54,19 @@ class Object:
             vol = torch.from_numpy(self.gray_values)
             vol.unsqueeze_(dim=0).unsqueeze_(dim=0)
 
-            vol_w = F.grid_sample(vol, new_coords, align_corners=True,
-                                  mode="bilinear", padding_mode="zeros")
+            vol_w = F.grid_sample(
+                vol,
+                new_coords,
+                align_corners=True,
+                mode="nearest",
+                padding_mode="zeros",
+            )
             return vol_w.squeeze().numpy()
         else:
             return None
+
+    def update_voxels(self):
+        self.voxels = np.where(self.gray_values != 0.0, True, False)
 
 
 class Sphere(Object):
@@ -68,8 +76,9 @@ class Sphere(Object):
 
     def create_voxels(self, grid):
         super().create_voxels(grid)
-        self.voxels = (self.xx - self.cx)**2 + (self.yy - self.cy)**2 + \
-            (self.zz - self.cz)**2 < self.r**2
+        self.voxels = (self.xx - self.cx) ** 2 + (self.yy - self.cy) ** 2 + (
+            self.zz - self.cz
+        ) ** 2 < self.r**2
 
 
 class Cube(Object):
@@ -82,9 +91,11 @@ class Cube(Object):
     def create_voxels(self, grid):
         super().create_voxels(grid)
         self.voxels = np.full(self.xx.shape, False)
-        self.voxels[self.cz - self.lz//2: self.cz + self.lz//2,
-                    self.cy - self.ly//2: self.cy + self.ly//2,
-                    self.cx - self.lx//2: self.cx + self.lx//2] = True
+        self.voxels[
+            self.cz - self.lz // 2 : self.cz + self.lz // 2,
+            self.cy - self.ly // 2 : self.cy + self.ly // 2,
+            self.cx - self.lx // 2 : self.cx + self.lx // 2,
+        ] = True
 
 
 class Ellipsoid(Object):
@@ -94,12 +105,13 @@ class Ellipsoid(Object):
         self.ry = ry
         self.rz = rz
 
-    def create_voxels(self, grid, constant=False, value=1.0):
+    def create_voxels(self, grid, low=0.0, high=1.0, constant=False, value=1.0):
         super().create_voxels(grid)
         NZ, NY, NX = grid.shape[:3]
 
-        self.voxels = (self.xx - self.cx)**2/self.rx**2 + (self.yy - self.cy)**2/self.ry**2 + \
-            (self.zz - self.cz)**2/self.rz**2 <= 1.0
+        self.voxels = (self.xx - self.cx) ** 2 / self.rx**2 + (
+            self.yy - self.cy
+        ) ** 2 / self.ry**2 + (self.zz - self.cz) ** 2 / self.rz**2 <= 1.0
 
         self.gray_values = np.ones((NZ, NY, NX), dtype=np.float64)
         # Gray value linealy varing in x direction
@@ -109,16 +121,19 @@ class Ellipsoid(Object):
             self.gray_values = value * self.voxels
         else:
             zz_gray, yy_gray, xx_gray = np.meshgrid(
-                np.linspace(0.0, 1.0, NZ),
-                np.linspace(0.0, 1.0, NY),
-                np.linspace(0.0, 1.0, NX), indexing="ij")
+                np.linspace(low, high, NZ),
+                np.linspace(low, high, NY),
+                np.linspace(low, high, NX),
+                indexing="ij",
+            )
 
-            self.gray_values = (zz_gray*0.3 + yy_gray*0.5 +
-                                xx_gray*0.2) * self.voxels
+            self.gray_values = (
+                zz_gray * 0.3 + yy_gray * 0.5 + xx_gray * 0.2
+            ) * self.voxels
 
         # self.gray_values = normalize(self.gray_values)
         # for x in range(NX):
-            # self.gray_values[:, :, x] = gray[x] * self.voxels[:, :, x]
+        # self.gray_values[:, :, x] = gray[x] * self.voxels[:, :, x]
 
 
 class Ellipse(Object):
@@ -131,8 +146,9 @@ class Ellipse(Object):
         super().create_voxels(grid)
         NY, NX = grid.shape[:2]
 
-        self.voxels = (self.xx - self.cx)**2/self.rx**2 + \
-            (self.yy - self.cy)**2/self.ry**2 <= 1.0
+        self.voxels = (self.xx - self.cx) ** 2 / self.rx**2 + (
+            self.yy - self.cy
+        ) ** 2 / self.ry**2 <= 1.0
 
         gray = np.linspace(0.1, 0.9, NX)
         self.gray_values = np.ones((NY, NX), dtype=np.float64)
