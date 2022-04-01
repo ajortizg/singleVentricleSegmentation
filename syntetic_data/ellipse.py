@@ -53,7 +53,7 @@ class Ellipse:
 
 
 class Ellipsoid:
-    def __init__(self, cx, cy, cz, rx, ry, rz, angx, angy, angz, bins=100):
+    def __init__(self, cx, cy, cz, rx, ry, rz, angx, angy, angz):
         self.cx = cx
         self.cy = cy
         self.cz = cz
@@ -63,14 +63,14 @@ class Ellipsoid:
         self.angx = angx
         self. angy = angy
         self.angz = angz
-        self.bins = bins
+        self.bins = 900
+        self.color = np.random.rand(3)
 
         self.compute()
 
     def compute(self):
         u = np.linspace(0, 2*np.pi, self.bins)
         v = np.linspace(0, np.pi, self.bins)
-
         self.x = self.rx * np.outer(np.cos(u), np.sin(v))
         self.y = self.ry * np.outer(np.sin(u), np.sin(v))
         self.z = self.rz * np.outer(np.ones_like(u), np.cos(v))
@@ -82,6 +82,30 @@ class Ellipsoid:
         self.z += self.cz
 
         self.xyz = np.array([self.x, self.y, self.z])
+
+        self.pc = np.zeros((3, np.size(self.x)))
+        self.pc[0, :] = np.reshape(self.x, -1)
+        self.pc[1, :] = np.reshape(self.y, -1)
+        self.pc[2, :] = np.reshape(self.z, -1)
+
+    def voxelize(self, NZ, NY, NX, value):
+        self.value = value
+        CZ, CY, CX = NZ//2, NY//2, NX//2
+        self.mask = np.full((NZ, NY, NX), False)
+
+        # Move sphere to center of voxel image coordinates
+        for i in range(self.pc.shape[1]):
+            s = (self.pc[:, i] + np.array([CX, CY, CZ])).astype(int)
+            if (s[0] >= NX or s[1] >= NY or s[2] >= NZ):
+                continue
+            self.mask[s[2], s[1], s[0]] = True
+
+        for z in range(1, NZ//2, 1):
+            self.mask[z, :, :] = self.mask[z-1, :, :] | self.mask[z, :, :]
+        for z in range(NZ-1, NZ//2, -1):
+            self.mask[z-1, :, :] = self.mask[z-1, :, :] | self.mask[z, :, :]
+
+        self.voxels = np.where(self.mask, value, 0.0)
 
     def rotate(self):
         Rx = rotx(self.angx)

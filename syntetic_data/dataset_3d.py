@@ -2,64 +2,101 @@ import matplotlib.pyplot as plt
 import numpy as np
 from ellipse import Ellipsoid
 from transforms import rotx, roty, rotz
+import open3d as o3d
+import utils
+from tqdm import trange
+import sys
 
-eA = Ellipsoid(0, 0, 0, 3, 4, 5, 0, 15, 0)
-eB = Ellipsoid(0, 13, 0, 1, 2, 4, 90, 45, 33)
+np.set_printoptions(precision=2, suppress=True)
 
-fig = plt.figure()
-ax = fig.add_subplot(111, projection='3d', aspect='auto')
-ax.set_xlabel("X")
-ax.set_ylabel("Y")
-ax.set_zlabel("Z")
-ax.set_title("ellipsoids")
-ax.plot_surface(eA.x, eA.y, eA.z, color='green', alpha=0.3, linewidth=2)
-ax.plot_surface(eB.x, eB.y, eB.z, color='red', alpha=0.3, linewidth=2)
+
+def plot_ellipsoids(ax, ellipsoids):
+    for ei in ellipsoids:
+        ax.plot_surface(ei.x, ei.y, ei.z,
+                        color=ei.color, alpha=0.3, linewidth=2)
+
+
+def combine_voxels(ellipsoids):
+    NZ, NY, NX = ellipsoids[0].mask.shape
+    img = np.zeros((NZ, NY, NX))
+
+    e1 = ellipsoids[0]
+    e2 = ellipsoids[1]
+    e3 = ellipsoids[2]
+
+    for z in range(NZ):
+        for y in range(NY):
+            for x in range(NX):
+                if e3.mask[z, y, x]:
+                    img[z, y, x] = e3.voxels[z, y, x]
+                elif e2.mask[z, y, x]:
+                    img[z, y, x] = e2.voxels[z, y, x]
+                elif e1.mask[z, y, x]:
+                    img[z, y, x] = e1.voxels[z, y, x]
+    return img
+
+
+# Size of voxel map
+NZ, NY, NX = 16, 352, 352
+e1A = Ellipsoid(cx=0, cy=0, cz=0, rx=90, ry=150, rz=8, angx=0, angy=0, angz=0)
+e1A.voxelize(NZ, NY, NX, value=0.3)
+e2A = Ellipsoid(cx=0, cy=0, cz=0, rx=50, ry=100, rz=8, angx=0, angy=0, angz=0)
+e2A.voxelize(NZ, NY, NX, value=0.6)
+e3A = Ellipsoid(cx=0, cy=0, cz=0, rx=30, ry=50, rz=8, angx=0, angy=0, angz=0)
+e3A.voxelize(NZ, NY, NX, value=0.9)
+eAs = [e1A, e2A, e3A]
+
+
+e1B = Ellipsoid(cx=10, cy=-10, cz=0, rx=90, ry=150,
+                rz=8, angx=0, angy=0, angz=-10)
+e1B.voxelize(NZ, NY, NX, value=0.3)
+e2B = Ellipsoid(cx=10, cy=-18, cz=0, rx=50, ry=100,
+                rz=8, angx=0, angy=0, angz=15)
+e2B.voxelize(NZ, NY, NX, value=0.6)
+e3B = Ellipsoid(cx=15, cy=-10, cz=0, rx=30, ry=50,
+                rz=8, angx=0, angy=0, angz=12)
+e3B.voxelize(NZ, NY, NX, value=0.9)
+eBs = [e1B, e2B, e3B]
+
+
+imgA = combine_voxels(eAs)
+imgB = combine_voxels(eBs)
+
 
 # Compute intermediate steps
-ts = 5
+ts = 10
 alpha = np.linspace(0.0, 1.0, ts)
-prev_ei = None
 ellipsoids = []
-flos = []
-for i in range(ts):
-    ei = eA*(1-alpha[i]) + eB*(alpha[i])  # fwd (A -> B)
-    # ei = eA*(alpha[i]) + eB*(1.0-alpha[i])  # bwd (B -> A)
-    # print(ei)
-    ax.plot_surface(ei.x, ei.y, ei.z, color='blue', alpha=0.1, linewidth=2)
+flows = []
 
-    # compute fwd optical flow
-    if i >= 1:
-        u = ei.x - prev_ei.x
-        v = ei.y - prev_ei.y
-        w = ei.z - prev_ei.z
-        ellipsoids.append((prev_ei, ei))
-        flos.append(np.array([u, v, w]))
+for i in trange(ts):
+    es = []
+    for eA, eB in zip(eAs, eBs):
+        ei = eA*(1-alpha[i]) + eB*(alpha[i])  # fwd (A -> B)
+        ei.voxelize(NZ, NY, NX, eA.value)
+#         # ei = eA*(alpha[i]) + eB*(1.0-alpha[i])  # bwd (B -> A)
+        # print(ei)
+        es.append(ei)
 
-    prev_ei = ei
+    img_t = combine_voxels(es)
+    np.save(f"output/vol/vol_{i}.npy", img_t)
+    np.save(f"output/mask/mask_{i}.npy", es[-1].mask)
 
+    ellipsoids.append(es)
 
-# Warping
-fig = plt.figure()
-ax = fig.add_subplot(111, projection='3d', aspect='auto')
-ax.set_xlabel("X")
-ax.set_ylabel("Y")
-ax.set_zlabel("Z")
-ax.set_title("optical flow")
-for i, ((prev, ei), flo) in enumerate(zip(ellipsoids, flos)):
-    ax.plot_surface(prev.x, prev.y, prev.z,
-                    color='green', alpha=0.3, linewidth=2)
-
-    ax.plot_surface(prev.x + flo[0, :, :], prev.y + flo[1, :, :],
-                    prev.z+flo[2, :, :], color='red', alpha=0.3, linewidth=2)
-
-    print(f"\npair {i}\n{prev}")
-    print(ei)
-
-print(f"\neA: {eA}")
-print(f"eB: {eB}")
+t = 9
+e = ellipsoids[9]
 
 
-# for axis in 'xyz':
-#     getattr(ax, 'set_{}lim'.format(axis))((-8, 8))
+img_t0 = combine_voxels(e)
+utils.plot_slices(imgA, str="A", block=False)
+utils.plot_slices(imgB, str="B", block=False)
+utils.plot_slices(img_t0, str="t0", block=True)
 
-plt.show()
+# fig = plt.figure()
+# ax = fig.add_subplot(111, projection='3d', aspect='auto')
+# ax.set_xlabel("X")
+# ax.set_ylabel("Y")
+# ax.set_zlabel("Z")
+# ax.set_title("ellipsoids")
+# plot_ellipsoids(ax, eAs)
