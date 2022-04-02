@@ -4,6 +4,7 @@
 #include <torch/extension.h>
 #include <vector>
 #include "coreDefines.h"
+#include "boundary.cuh"
 
 //=======================================
 // CUDA forward declarations

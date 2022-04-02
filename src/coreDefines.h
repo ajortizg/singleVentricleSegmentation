@@ -90,21 +90,6 @@ public:
 };
 
 
-
-/** Boundary types. */
-typedef enum
-{
-  //ZERO: 0 0 | a b c d e | 0 0
-  BOUNDARY_ZERO,
-  //NEAREST: a a | a b c d e | e e
-  BOUNDARY_NEAREST,
-  //MIRROR: b a | a b c d e | e d
-  BOUNDARY_MIRROR,
-  //REFLECT: c b | a b c d e | d c
-  BOUNDARY_REFLECT
-} BoundaryType;
-
-
 /** Interpolation types. */
 typedef enum
 {

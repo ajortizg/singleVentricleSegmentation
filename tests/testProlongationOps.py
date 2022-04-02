@@ -24,9 +24,6 @@ sys.path.append(pythonOps_lib_path)
 import mesh
 import prolongationOps
 
-sys.path.append("../utils/")
-import plots
-
 from opticalFlow_cuda_ext import opticalFlow
 
 
@@ -34,121 +31,97 @@ from opticalFlow_cuda_ext import opticalFlow
 DEVICE = 'cuda'
 
 
-def testProlongationOps(args):
-
-    print("""
-    ==================================
-        testProlongationOps
-    ==================================
-    """)
-
-    #==================================
-    # save directory
-    saveDir = os.path.dirname("results") 
-    if args.saveDir is not None:
-        saveDir = os.path.dirname(args.saveDir) 
-    if not os.path.exists(saveDir):
-        os.makedirs(saveDir)
-
-    #==================================
-    # Load 4D nifty [x,y,z,t]
-    print("\n=================\nLoad Nifty File\n=================")
-    if not (args.fileName):
-       parser.error('add -fileName')
-    fileName = args.fileName
-
-    nii_img = nib.load(fileName)
-    nii_data_xyzt = nii_img.get_fdata()
-
-    NX = nii_data_xyzt.shape[0]
-    NY = nii_data_xyzt.shape[1]
-    NZ = nii_data_xyzt.shape[2]
-    NT = nii_data_xyzt.shape[3]
-    print( f"dimension of input: (X,Y,Z,T) = {NX,NY,NZ,NT}")
-
-
-    ## swap from nibabel (X,Y,Z) to cuda-compatible (Z,Y,X):
-    print("swap axes (X,Y,Z,T) to (Z,Y,X,T)")
-    nii_data = np.swapaxes(nii_data_xyzt, 0, 2)
-    print( f"dimension after swap: (Z,Y,X,T) = {nii_data.shape}")
-
-    #==================================
-    #scaling of data 
-    totalMinValue = np.amin(nii_data)
-    totalMaxValue = np.amax(nii_data)
-    print(f"input (min,max) = {totalMinValue,totalMaxValue}")
-    scaleMaxValue = 255.
-    print("scaling of data to max value", scaleMaxValue)
-    nii_data *= scaleMaxValue / totalMaxValue
-
-    
-    #==================================
-    # check in 2D
-    tA = 8
-    z=8
-    imageA = torch.from_numpy(nii_data[z,:,:,tA]).float().to(DEVICE)
-
-    
-    # sizeImageA_down = torch.Size([NY//2,NX//2])
-    # imageA_down = torch.zeros((sizeImageA_down)).cuda()
-    # restrictionOps.restrict2d(imageA,imageA_down)
-    imageA_prolongated = prolongationOps.prolongate2d(imageA)
-
-    # save 
-    print("imageA.shape = ", imageA.shape )
-    print("imageA_prolongated.shape = ", imageA_prolongated.shape )
-
-    plots.saveImage(imageA,saveDir,"imgA2D.png")
-    plots.saveImage(imageA_prolongated,saveDir,"imgA2D_prolongated_python.png")
-
-    #TODO swap result (Z,Y,X) back to (X,Y,Z):
-    #result_backSwap = np.swapaxes(result, 0, 2)
-
-
-    NY2D = imageA.shape(0)
-    NX2D = imageA.shape(1)
-    LY2D = 2.
-    LX2D = 2.
-    #meshInfo2D_python = mesh.MeshInfo2D(NY2D,NX2D,LY2D,LX2D)
-    meshInfo2D_cuda = opticalFlow.MeshInfo2D(NY2D,NX2D,LY2D,LX2D)
-    meshInfo2DProlongated_cuda = opticalFlow.MeshInfo2D(4*NY2D,4*NX2D,LY2D,LX2D)
-    dimVec2D = torch.Size([NY2D,NX2D])
-    # warpingOp2D_python = warpingOps.Warping2D(meshInfo2D_python)
-    prolongationOp2D_cuda = opticalFlow.Prolongation2D(meshInfo2D_cuda,meshInfo2DProlongated_cuda)
-
-    ###############  linear ############################
-    ts = time.time()
-    imageA_prolongated_linear_cuda = prolongationOp2D_cuda.forward(imageA,opticalFlow.InterpolationType.INTERPOLATE_LINEAR)
-    print('prolongation 2d bilinear - elapsed time cuda: ', (time.time()-ts))
-    plots.saveImage(imageA_prolongated_linear_cuda,saveDir,"imgA2D_prolongated_cuda.png")
-
-    #==================================
-    # check in 3D
-    # tA = 8
-    # volA = torch.from_numpy(nii_data[:,:,:,tA]).float().to(DEVICE)
-    # volA_down = restrictionOps.restrict3d(volA)
-
-    # # save 
-    # print("imageA.shape = ", imageA.shape )
-    # print("imageA_down.shape = ", imageA_down.shape )
-
-    # volA_np = volA.cpu().detach().numpy()
-    # plots.plot_3d(volA_np) #,saveDir,"volA3D.png")
-
-    # volA_down_np = volA_down.cpu().detach().numpy()
-    # plots.plot_3d(volA_down_np) #,saveDir,"volA2D_down.png")
-
-    #TODO swap result (Z,Y,X) back to (X,Y,Z):
-    #result_backSwap = np.swapaxes(result, 0, 2)
+interpolationList = [opticalFlow.InterpolationType.INTERPOLATE_LINEAR,opticalFlow.InterpolationType.INTERPOLATE_CUBIC_HERMITESPLINE]
+boundaryList = [opticalFlow.BoundaryType.BOUNDARY_NEAREST,opticalFlow.BoundaryType.BOUNDARY_MIRROR,opticalFlow.BoundaryType.BOUNDARY_REFLECT]
 
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--fileName', help="file name of 4d nifty")
-    parser.add_argument('--saveDir', help="directory for saving")
+print("""
+==================================
+   testProlongationOps
+==================================
+""")
 
-    args = parser.parse_args()
 
 
-    testProlongationOps(args)
+print("""
+===========
+   1D
+===========
+""")
+
+NX1D = 39
+LX1D = 2.
+meshInfo1D_old = opticalFlow.MeshInfo1D(NX1D,LX1D)
+
+NX1D_new = 147
+LX1D_new = 3.
+meshInfo1D_new = opticalFlow.MeshInfo1D(NX1D_new,LX1D_new)
+
+for boundary in boundaryList:
+    print("check prolongation for 1d with", boundary, ":")
+    prolongationOp1D_lin_nearest = opticalFlow.Prolongation1D(meshInfo1D_old,meshInfo1D_new,interpolationList[0],boundary)
+    prolongationOp1D_cubic_nearest = opticalFlow.Prolongation1D(meshInfo1D_old,meshInfo1D_new,interpolationList[1],boundary)
+
+    testVec1D = torch.randn([NX1D]).cuda()
+    testVec1D_prolong_lin = prolongationOp1D_lin_nearest.forward(testVec1D)
+    testVec1D_prolong_cubicHS = prolongationOp1D_cubic_nearest.forward(testVec1D)
+    print("diff linear vs cubic = ", torch.norm(testVec1D_prolong_lin - testVec1D_prolong_cubicHS).item() )
+
+    # testMatrixField = torch.randn([NY2D,NX2D,2,2]).cuda()
+    # #
+    # testMatrixField_prolong_lin_compare = torch.zeros([NY2D_new,NX2D_new,2,2]).cuda()
+    # ts_sep = time.time()
+    # for comp_i in range(0,2):
+    #     for comp_j in range(0,2):
+    #         testMatrixField_prolong_lin_compare[:,:,comp_i,comp_j] = prolongationOp2D_lin_nearest.forward( testMatrixField[:,:,comp_i,comp_j].contiguous() )
+    # print('matrix field seperately in cuda: ', (time.time()-ts_sep))
+    # #
+    # ts_full = time.time()
+    # testMatrixField_prolong_lin = prolongationOp2D_lin_nearest.forwardMatrixField(testMatrixField)
+    # print('matrix field full in cuda: ', (time.time()-ts_full))
+    # #compare
+    # print("diff matrix field = ", torch.norm(testMatrixField_prolong_lin - testMatrixField_prolong_lin_compare).item() )
+
+print("""
+===========
+   2D
+===========
+""")
+
+NY2D = 27
+NX2D = 39
+LY2D = 8.
+LX2D = 2.
+meshInfo_old = opticalFlow.MeshInfo2D(NY2D,NX2D,LY2D,LX2D)
+
+NY2D_new = 69
+NX2D_new = 147
+LY2D_new = 8.
+LX2D_new = 3.
+meshInfo_new = opticalFlow.MeshInfo2D(NY2D_new,NX2D_new,LY2D_new,LX2D_new)
+
+for boundary in boundaryList:
+    print("check prolongation for 2d with", boundary, ":")
+    prolongationOp2D_lin_nearest = opticalFlow.Prolongation2D(meshInfo_old,meshInfo_new,interpolationList[0],boundary)
+    prolongationOp2D_cubic_nearest = opticalFlow.Prolongation2D(meshInfo_old,meshInfo_new,interpolationList[1],boundary)
+
+    testVec = torch.randn([NY2D,NX2D]).cuda()
+    testVec_prolong_lin = prolongationOp2D_lin_nearest.forward(testVec)
+    testVec_prolong_cubicHS = prolongationOp2D_cubic_nearest.forward(testVec)
+    print("diff linear vs cubic = ", torch.norm(testVec_prolong_lin - testVec_prolong_cubicHS).item() )
+
+    testMatrixField = torch.randn([NY2D,NX2D,2,2]).cuda()
+    #
+    testMatrixField_prolong_lin_compare = torch.zeros([NY2D_new,NX2D_new,2,2]).cuda()
+    ts_sep = time.time()
+    for comp_i in range(0,2):
+        for comp_j in range(0,2):
+            testMatrixField_prolong_lin_compare[:,:,comp_i,comp_j] = prolongationOp2D_lin_nearest.forward( testMatrixField[:,:,comp_i,comp_j].contiguous() )
+    print('matrix field seperately in cuda: ', (time.time()-ts_sep))
+    #
+    ts_full = time.time()
+    testMatrixField_prolong_lin = prolongationOp2D_lin_nearest.forwardMatrixField(testMatrixField)
+    print('matrix field full in cuda: ', (time.time()-ts_full))
+    #compare
+    print("diff matrix field = ", torch.norm(testMatrixField_prolong_lin - testMatrixField_prolong_lin_compare).item() )

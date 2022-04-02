@@ -26,8 +26,32 @@ sys.path.append(pythonOps_lib_path)
 
 from opticalFlow_cuda_ext import opticalFlow
 
+
+import torch.nn.functional as F
+
+def generateGaussianKernel2D(sigma):
+    kernelSize = int(sigma * 5)
+    if kernelSize % 2 == 0:
+        kernelSize += 1
+    ts = torch.linspace(-kernelSize // 2, kernelSize // 2 + 1, kernelSize)
+    gauss = torch.exp((-(ts / sigma)**2 / 2))
+    kernel = gauss / gauss.sum()
+
+    return kernel
+
+def applyGaussianBlur2D(img, sigma):
+    img_in = img.reshape(1, 1, *img.shape)
+    k = generateGaussianKernel2D(sigma)
+    k2d = torch.einsum('i,j->ij', k, k).cuda()
+    k2d = k2d / k2d.sum()
+    img_2d = F.conv2d(img_in, k2d.reshape(1, 1, *k2d.shape), stride=1, padding=len(k) // 2)
+    img_out = img_2d.reshape(*img.shape)
+    return img_out
+
+
 class TVL1OpticalFlow2D:
     def __init__(self,saveDir,config):
+        self.config = config
         self.saveDir = saveDir
         self.NUM_SCALES = config.getint('PARAMETERS', 'NUM_SCALES')
         self.MAX_WARPS = config.getint('PARAMETERS', 'MAX_WARPS')
@@ -39,48 +63,59 @@ class TVL1OpticalFlow2D:
         self.tau = config.getfloat('PARAMETERS', 'tau')
         self.theta = config.getfloat('PARAMETERS', 'theta')
         self.gamma = config.getfloat('PARAMETERS', 'gamma')
+        # blurring
+        self.useGaussianBlur = config.getboolean("PARAMETERS","useGaussianBlur")
+        self.GaussianBlurSigma = config.getfloat('PARAMETERS', 'GaussianBlurSigma')
         #interpolation
         interType = config.get('PARAMETERS', 'InterpolationType')
-        self.InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_LINEAR
+        self.InterpolationTypeCuda = None
         if interType == "LINEAR":
             self.InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_LINEAR
         elif interType == "CUBIC_HERMITESPLINE":
             self.InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_CUBIC_HERMITESPLINE
+        else:
+            raise Exception("wrong InterpolationType in configParser")
         #boundary
         boundaryType = config.get('PARAMETERS', 'BoundaryType')
-        self.BoundaryTypeCuda = opticalFlow.BoundaryType.BOUNDARY_ZERO
-        if boundaryType == "ZERO":
-            self.BoundaryTypeCuda = opticalFlow.BoundaryType.BOUNDARY_ZERO
-        elif boundaryType == "NEAREST":
+        self.BoundaryTypeCuda = None
+        if boundaryType == "NEAREST":
             self.BoundaryTypeCuda = opticalFlow.BoundaryType.BOUNDARY_NEAREST
         elif boundaryType == "MIRROR":
             self.BoundaryTypeCuda = opticalFlow.BoundaryType.BOUNDARY_MIRROR
         elif boundaryType == "REFLECT":
             self.BoundaryTypeCuda = opticalFlow.BoundaryType.BOUNDARY_REFLECT
+        else:
+            raise Exception("wrong BoundaryType in configParser")
         #cuda
         cuda_availabe = config.get('DEVICE', 'cuda_availabe')
         self.DEVICE = "cuda" if cuda_availabe else "cpu"
+        #debug
         self.saveDirDebug = os.path.sep.join([self.saveDir, "debug"])
         self.useDebugOutput = config.getboolean("DEBUG","useDebugOutput")
         if self.useDebugOutput:
             os.makedirs(self.saveDirDebug)
 
+    def getMeshLength(self,config,NY,NX):
+        LenghtType = config.get('PARAMETERS', 'LenghtType')
+        if LenghtType == "numDofs":
+            LY = NY-1
+            LX = NX-1
+            return LY, LX
+        elif LenghtType == "fixed":
+            LY = config.getfloat('PARAMETERS', "LenghtY")
+            LX = config.getfloat('PARAMETERS', "LenghtX")
+            return LY, LX
+
     def generatePyramid(self, I0, I1, u, p):
 
-        # TODO should be done directly for input values
-        # Normalize the data between 0 and 1
-        # I0 = self.normalize(I0)
-        # I1 = self.normalize(I1)
-
-        # TODO necessary?
         # Smooth inputs with a Gaussian filter
-        # I0 = ndimage.gaussian_filter(I0, sigma=SIGMA)
-        # I1 = ndimage.gaussian_filter(I1, sigma=SIGMA)
+        if self.useGaussianBlur:
+            I0 = applyGaussianBlur2D(I0,self.GaussianBlurSigma)
+            I1 = applyGaussianBlur2D(I1,self.GaussianBlurSigma)
 
         # List for volumes pyramids
         NY, NX = I0.shape[0], I0.shape[1]
-        #TODO possibly change lenght scale
-        LY, LX = NY-1, NX-1
+        LY, LX = self.getMeshLength(self.config, NY, NX)
         #meshInfo2D_python = MeshInfo2D(NY,NX,LY,LX)
         meshInfo2D_cuda = opticalFlow.MeshInfo2D(NY,NX,LY,LX)
 
@@ -89,7 +124,7 @@ class TVL1OpticalFlow2D:
         NY_restr, NX_restr = NY, NX
         for s in range(1, self.NUM_SCALES):
             NY_restr, NX_restr = math.ceil(0.5*NY_restr), math.ceil(0.5*NX_restr)
-            LY_restr, LX_restr = NY_restr-1, NX_restr-1
+            LY_restr, LX_restr = self.getMeshLength(self.config, NY_restr, NX_restr)
             meshInfos.append(opticalFlow.MeshInfo2D(NY_restr,NX_restr,LY_restr,LX_restr))
 
         #lists for pyramid
@@ -100,9 +135,9 @@ class TVL1OpticalFlow2D:
 
         # Create the pyramid
         for s in range(1, self.NUM_SCALES):
-            prolongationOp_cuda = opticalFlow.Prolongation2D(meshInfos[s-1],meshInfos[s])
-            I0s.append(prolongationOp_cuda.forward(I0s[s-1],self.InterpolationTypeCuda))
-            I1s.append(prolongationOp_cuda.forward(I1s[s-1],self.InterpolationTypeCuda))
+            prolongationOp_cuda = opticalFlow.Prolongation2D(meshInfos[s-1],meshInfos[s],self.InterpolationTypeCuda,self.BoundaryTypeCuda)
+            I0s.append(prolongationOp_cuda.forward(I0s[s-1]))
+            I1s.append(prolongationOp_cuda.forward(I1s[s-1]))
             us.append(torch.zeros([meshInfos[s].getNY(),meshInfos[s].getNX(),2]).float().to(self.DEVICE))
             ps.append(torch.zeros([meshInfos[s].getNY(),meshInfos[s].getNX(),2,2]).float().to(self.DEVICE))
 
@@ -132,8 +167,8 @@ class TVL1OpticalFlow2D:
                 break
 
             # Prolongate the optical flow and dual variables to the next pyramid level
-            prolongationOp_cuda = opticalFlow.Prolongation2D(meshInfos[s],meshInfos[s-1])
-            us[s-1] = prolongationOp_cuda.forwardVectorField(us[s],self.InterpolationTypeCuda)
+            prolongationOp_cuda = opticalFlow.Prolongation2D(meshInfos[s],meshInfos[s-1],self.InterpolationTypeCuda,self.BoundaryTypeCuda)
+            us[s-1] = prolongationOp_cuda.forwardVectorField(us[s])
             #factor LXNew/LXOld, ...
             us[s-1][:,:,0] *= meshInfos[s-1].getLX() / meshInfos[s].getLX()
             us[s-1][:,:,1] *= meshInfos[s-1].getLY() / meshInfos[s].getLY()
@@ -141,7 +176,7 @@ class TVL1OpticalFlow2D:
             #TODO Dirichlet boundary condition for p?
             # ps[s] = self.dirichlet(ps[s])
 
-            ps[s-1] = prolongationOp_cuda.forwardMatrixField(ps[s],self.InterpolationTypeCuda)
+            ps[s-1] = prolongationOp_cuda.forwardMatrixField(ps[s])
 
             #TODO prolongation factor for p?
 
@@ -155,15 +190,15 @@ class TVL1OpticalFlow2D:
         # Compute target image gradients
         #nablaOp = Nabla2D_Central(meshInfo)
         nablaOp = opticalFlow.Nabla2D_CD(meshInfo,self.BoundaryTypeCuda)
-        warpingOp = opticalFlow.Warping2D(meshInfo)
+        warpingOp = opticalFlow.Warping2D(meshInfo,self.InterpolationTypeCuda,self.BoundaryTypeCuda)
         I1_grad = nablaOp.forward(I1)
 
         z = u
 
         for w in range(self.MAX_WARPS):
             # Compute the warping of the target image and its derivatives
-            I1_warped = warpingOp.forward(I1,u,self.InterpolationTypeCuda)
-            I1_warped_grad = warpingOp.forwardVectorField(I1_grad,u,self.InterpolationTypeCuda)
+            I1_warped = warpingOp.forward(I1,u)
+            I1_warped_grad = warpingOp.forwardVectorField(I1_grad,u)
             # Constant part of the rho function
             #rho_c = I1_warped - u[:, :, 0] * I1_warped_grad[:, :, 0] - u[:, :, 1] * I1_warped_grad[:, :, 1] - I0
             rho_c = I1_warped - torch.sum(u * I1_warped_grad, dim=2) - I0
@@ -271,8 +306,8 @@ class TVL1OpticalFlow2D:
         plotOpticalFlow2D(u.cpu().detach().numpy(), "u", saveDirStep, step)
         saveImage(I0,saveDirStep,f"I0_it{step}.png")
         saveImage(I1,saveDirStep,f"I1_it{step}.png")
-        warpingOp = opticalFlow.Warping2D(meshInfo)
-        I1_warped = warpingOp.forward(I1,u,self.InterpolationTypeCuda)
+        warpingOp = opticalFlow.Warping2D(meshInfo,self.InterpolationTypeCuda,self.BoundaryTypeCuda)
+        I1_warped = warpingOp.forward(I1,u)
         saveImage(I1_warped,saveDirStep,f"I1_warped_it{step}.png")
         saveImage(torch.abs(I1_warped-I0),saveDirStep,f"Diff_I1warped_to_I0_it{step}.png")
         

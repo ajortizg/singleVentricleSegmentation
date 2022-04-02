@@ -45,7 +45,6 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
   // boundary
   //======================================= 
   py::enum_<BoundaryType>(m, "BoundaryType")
-    .value("BOUNDARY_ZERO", BoundaryType::BOUNDARY_ZERO)
     .value("BOUNDARY_NEAREST", BoundaryType::BOUNDARY_NEAREST)
     .value("BOUNDARY_MIRROR", BoundaryType::BOUNDARY_MIRROR)
     .value("BOUNDARY_REFLECT", BoundaryType::BOUNDARY_REFLECT)
@@ -103,16 +102,16 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
   // warping
   //======================================= 
   py::class_<Warping1D>(m,"Warping1D")
-      .def(py::init<const MeshInfo1D&>())
+      .def(py::init<const MeshInfo1D&, const InterpolationType, const BoundaryType>())
       .def("forward", &Warping1D::forward);
 
   py::class_<Warping2D>(m,"Warping2D")
-      .def(py::init<const MeshInfo2D&>())
+      .def(py::init<const MeshInfo2D&, const InterpolationType, const BoundaryType>())
       .def("forward", &Warping2D::forward)
       .def("forwardVectorField", &Warping2D::forwardVectorField);
 
   py::class_<Warping3D>(m,"Warping3D")
-      .def(py::init<const MeshInfo3D&>())
+      .def(py::init<const MeshInfo3D&, const InterpolationType, const BoundaryType>())
       .def("forward", &Warping3D::forward)
       .def("forwardVectorField", &Warping3D::forwardVectorField);
 
@@ -120,21 +119,20 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
   // prolongation
   //======================================= 
   py::class_<Prolongation1D>(m,"Prolongation1D")
-      .def(py::init<const MeshInfo1D&,const MeshInfo1D&>())
+      .def(py::init<const MeshInfo1D&,const MeshInfo1D&, const InterpolationType, const BoundaryType>())
       .def("forward", &Prolongation1D::forward);
 
   py::class_<Prolongation2D>(m,"Prolongation2D")
-      .def(py::init<const MeshInfo2D&,const MeshInfo2D&>())
+      .def(py::init<const MeshInfo2D&,const MeshInfo2D&, const InterpolationType, const BoundaryType>())
       .def("forward", &Prolongation2D::forward)
       .def("forwardVectorField", &Prolongation2D::forwardVectorField)
       .def("forwardMatrixField", &Prolongation2D::forwardMatrixField);
 
   py::class_<Prolongation3D>(m,"Prolongation3D")
-      .def(py::init<const MeshInfo3D&,const MeshInfo3D&>())
+      .def(py::init<const MeshInfo3D&,const MeshInfo3D&, const InterpolationType, const BoundaryType>())
       .def("forward", &Prolongation3D::forward)
       .def("forwardVectorField", &Prolongation3D::forwardVectorField)
       .def("forwardMatrixField", &Prolongation3D::forwardMatrixField);
-
 
 
   //=======================================
@@ -147,14 +145,22 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
   m.def("TVL1OF3D_proxPrimal", &TVL1OF3D_proxPrimal, "primal prox step in 3D");
   m.def("TVL1OF3D_proxDual", &TVL1OF3D_proxDual, "dual prox step in 3D");
 
-
   //=======================================
   // ROF
   //=======================================
+  // py::class_<ROF2D>(m,"ROF2D")
+  //       .def(py::init<const MeshInfo2D&, const torch::Tensor&, const float, const float>())
+  //       .def("proxPrimal", &ROF2D::proxPrimal)
+  //       .def("proxDual", &ROF2D::proxDual);
+  py::class_<ROF2D>(m,"ROF2D")
+        .def(py::init<const MeshInfo2D&, const float, const float>())
+        .def("proxPrimal", &ROF2D::proxPrimal)
+        .def("proxDual", &ROF2D::proxDual);
+
   //m.def("TVL1OF_threshold", &TVL1OF_threshold, "Update step for v");
   //m.def("TVL1OF2D_PrimalFct", &TVL1OF2D_PrimalFct, "primal fct in 2D");
-  m.def("ROF2D_proxPrimal", &ROF2D_proxPrimal, "ROF primal prox step in 2D");
-  m.def("ROF2D_proxDual", &ROF2D_proxDual, "ROF dual prox step in 2D");
+  // m.def("ROF2D_proxPrimal", &ROF2D_proxPrimal, "ROF primal prox step in 2D");
+  // m.def("ROF2D_proxDual", &ROF2D_proxDual, "ROF dual prox step in 2D");
   m.def("ROF3D_proxPrimal", &ROF3D_proxPrimal, "ROF primal prox step in 3D");
   m.def("ROF3D_proxDual", &ROF3D_proxDual, "ROF dual prox step in 3D");
 

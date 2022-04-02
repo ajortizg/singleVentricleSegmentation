@@ -24,6 +24,7 @@ from opticalFlow_cuda_ext import opticalFlow
 
 class ROF2D:
     def __init__(self,saveDir,config):
+        self.config = config
         self.saveDir = saveDir
         self.NUM_SCALES = config.getint('PARAMETERS', 'NUM_SCALES')
         self.MAX_OUTER_ITERATIONS = config.getint('PARAMETERS', 'MAX_OUTER_ITERATIONS')
@@ -36,22 +37,24 @@ class ROF2D:
         self.gamma = config.getfloat('PARAMETERS', 'gamma')
         # interpolation
         interType = config.get('PARAMETERS', 'InterpolationType')
-        self.InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_LINEAR
+        self.InterpolationTypeCuda = None
         if interType == "LINEAR":
             self.InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_LINEAR
         elif interType == "CUBIC_HERMITESPLINE":
             self.InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_CUBIC_HERMITESPLINE
+        else:
+            raise Exception("wrong InterpolationType in configParser")
         #boundary
         boundaryType = config.get('PARAMETERS', 'BoundaryType')
-        self.BoundaryTypeCuda = opticalFlow.BoundaryType.BOUNDARY_ZERO
-        if boundaryType == "ZERO":
-            self.BoundaryTypeCuda = opticalFlow.BoundaryType.BOUNDARY_ZERO
-        elif boundaryType == "NEAREST":
+        self.BoundaryTypeCuda = None
+        if boundaryType == "NEAREST":
             self.BoundaryTypeCuda = opticalFlow.BoundaryType.BOUNDARY_NEAREST
         elif boundaryType == "MIRROR":
             self.BoundaryTypeCuda = opticalFlow.BoundaryType.BOUNDARY_MIRROR
         elif boundaryType == "REFLECT":
             self.BoundaryTypeCuda = opticalFlow.BoundaryType.BOUNDARY_REFLECT
+        else:
+            raise Exception("wrong BoundaryType in configParser")
         #cuda
         cuda_availabe = config.get('DEVICE', 'cuda_availabe')
         self.DEVICE = "cuda" if cuda_availabe else "cpu"
@@ -60,12 +63,22 @@ class ROF2D:
         if self.useDebugOutput:
             os.makedirs(self.saveDirDebug)
 
+    def getMeshLength(self,config,NY,NX):
+        LenghtType = config.get('PARAMETERS', 'LenghtType')
+        if LenghtType == "numDofs":
+            LY = NY-1
+            LX = NX-1
+            return LY, LX
+        elif LenghtType == "fixed":
+            LY = config.getfloat('PARAMETERS', "LenghtY")
+            LX = config.getfloat('PARAMETERS', "LenghtY")
+            return LY, LX
+
     def generatePyramid(self, I0, I, p):
 
         # List for pyramids
         NY, NX = I0.shape[0], I0.shape[1]
-        #TODO possibly change lenght scale
-        LY, LX = NY-1, NX-1
+        LY, LX = self.getMeshLength(self.config, NY, NX)
         #meshInfo2D_python = MeshInfo2D(NY,NX,LY,LX)
         meshInfo2D_cuda = opticalFlow.MeshInfo2D(NY,NX,LY,LX)
 
@@ -74,7 +87,7 @@ class ROF2D:
         NY_restr, NX_restr = NY, NX
         for s in range(1, self.NUM_SCALES):
             NY_restr, NX_restr = math.ceil(0.5*NY_restr), math.ceil(0.5*NX_restr)
-            LY_restr, LX_restr = NY_restr-1, NX_restr-1
+            LY_restr, LX_restr = self.getMeshLength(self.config, NY_restr, NX_restr)
             meshInfos.append(opticalFlow.MeshInfo2D(NY_restr,NX_restr,LY_restr,LX_restr))
 
         #lists for pyramid
@@ -84,9 +97,9 @@ class ROF2D:
 
         # Create the pyramid
         for s in range(1, self.NUM_SCALES):
-            prolongationOp_cuda = opticalFlow.Prolongation2D(meshInfos[s-1],meshInfos[s])
-            I0s.append(prolongationOp_cuda.forward(I0s[s-1],self.InterpolationTypeCuda))
-            Is.append(prolongationOp_cuda.forward(Is[s-1],self.InterpolationTypeCuda))
+            prolongationOp_cuda = opticalFlow.Prolongation2D(meshInfos[s-1],meshInfos[s],self.InterpolationTypeCuda,self.BoundaryTypeCuda)
+            I0s.append(prolongationOp_cuda.forward(I0s[s-1]))
+            Is.append(prolongationOp_cuda.forward(Is[s-1]))
             ps.append(torch.zeros([meshInfos[s].getNY(),meshInfos[s].getNX(),2]).float().to(self.DEVICE))
 
         return I0s, Is, ps, meshInfos
@@ -114,9 +127,9 @@ class ROF2D:
                 break
 
             # Prolongate the optical flow and dual variables to the next pyramid level
-            prolongationOp_cuda = opticalFlow.Prolongation2D(meshInfos[s],meshInfos[s-1])
-            Is[s-1] = prolongationOp_cuda.forward(Is[s],self.InterpolationTypeCuda)
-            ps[s-1] = prolongationOp_cuda.forwardVectorField(ps[s],self.InterpolationTypeCuda)
+            prolongationOp_cuda = opticalFlow.Prolongation2D(meshInfos[s],meshInfos[s-1],self.InterpolationTypeCuda,self.BoundaryTypeCuda)
+            Is[s-1] = prolongationOp_cuda.forward(Is[s])
+            ps[s-1] = prolongationOp_cuda.forwardVectorField(ps[s])
             #TODO prolongation factor for p?
 
 
@@ -129,6 +142,8 @@ class ROF2D:
         # Compute target image gradients
         #nablaOp = Nabla2D_Central(meshInfo)
         nablaOp = opticalFlow.Nabla2D_CD(meshInfo,self.BoundaryTypeCuda)
+        # ROFOp = opticalFlow.ROF2D(meshInfo,I0,self.weight_TVFct,self.weight_MatchingFct)
+        ROFOp = opticalFlow.ROF2D(meshInfo,self.weight_TVFct,self.weight_MatchingFct)
         
         z = I
         sigma = self.sigma 
@@ -154,7 +169,7 @@ class ROF2D:
             pold = p
             z_grad = nablaOp.forward(z)
             dualVariable = p + sigma * z_grad
-            p = opticalFlow.ROF2D_proxDual( dualVariable, sigma, self.weight_TVFct, meshInfo)
+            p = ROFOp.proxDual( dualVariable, sigma )
             if self.weight_TVFct == 0.:
                 p = torch.zeros([meshInfo.getNY(),meshInfo.getNX(),2]).float().to(self.DEVICE)
 
@@ -162,7 +177,7 @@ class ROF2D:
             Iold = I
             p_div = nablaOp.backward(p)
             primalVariable = I - tau * p_div
-            I = opticalFlow.ROF2D_proxPrimal(primalVariable, I0, tau, self.weight_MatchingFct, meshInfo )
+            I = ROFOp.proxPrimal( primalVariable, I0, tau )
             if self.weight_MatchingFct == 0.:
                 I = torch.zeros([meshInfo.getNY(),meshInfo.getNX()]).float().to(self.DEVICE)
 
@@ -186,21 +201,24 @@ class ROF2D:
             breakConditionVecDual[n] = torch.norm(p-pold).item()
             breakConditionVecPrimal[n] = torch.norm(I-Iold).item()
             breakConditionVecUpdate[n] = torch.norm(z-zold).item()
+            # vol 
+            volElement = meshInfo.gethX() * meshInfo.gethY()
             #primal(I) = F(LI) + G(I)
-            primalFctVec_G[n] = self.weight_MatchingFct * torch.norm(I-I0).item()**2
+            primalFctVec_G[n] = self.weight_MatchingFct * volElement * torch.norm(I-I0).item()**2
             I_grad = nablaOp.forward(I)
-            primalFctVec_F[n] = self.weight_TVFct * torch.sum(torch.norm(I_grad, dim=2))
+            primalFctVec_F[n] = self.weight_TVFct * volElement * torch.sum(torch.norm(I_grad, dim=2))
             primalFctVec_Total[n] = primalFctVec_F[n] + primalFctVec_G[n]
             #dual(p) = -F*(p)-G*(-L*p)
             p_norm = torch.norm(p, dim=2)
             max_p_norm = torch.max(p_norm).item()
-            if max_p_norm > self.weight_TVFct + 0.0001:
+            tol = 0.000001
+            if max_p_norm > self.weight_TVFct + tol:
                 print("proj failed:", max_p_norm)
                 dualFctVec_F[n] = -1000000.
             else:
-                #print("proj true")
-                dualFctVec_G[n] = 0.
-            dualFctVec_G[n] = 1./self.weight_TVFct * torch.norm(p_div)**2 + p_div.reshape(-1).dot(I0.reshape(-1))
+                dualFctVec_F[n] = 0.
+            #dualFctVec_G[n] = volElement * ( 0.5/self.weight_MatchingFct * torch.norm(p_div)**2 + p_div.reshape(-1).dot(I0.reshape(-1)) )
+            dualFctVec_G[n] = -1. * volElement * ( 0.5/self.weight_MatchingFct * torch.norm(p_div)**2 - p_div.reshape(-1).dot(I0.reshape(-1)) )
             dualFctVec_Total[n] = dualFctVec_F[n] + dualFctVec_G[n]
             #primal-dual-gab
             primalDualGabVec[n] = primalFctVec_Total[n] - dualFctVec_Total[n]
@@ -214,7 +232,7 @@ class ROF2D:
                 saveCurve1D(dualFctVec_F, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"DualFct_F_it{s}")
                 saveCurve1D(dualFctVec_G, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"DualFct_G_it{s}")
                 saveCurve1D(dualFctVec_Total, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"DualFct_Total_it{s}")
-                saveCurve1D(primalDualGabVec, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"primalDualGabVec_it{s}")
+                saveCurve1D(primalDualGabVec, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"primalDualGabVec_it{s}", "loglog")
                 saveCurve1D(breakConditionVecPrimal, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"CPErrorPrimal_it{s}", "loglog")
                 saveCurve1D(breakConditionVecDual, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"CPErrorDual_it{s}", "loglog")
                 saveCurve1D(breakConditionVecUpdate, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"CPErrorUpdate_it{s}", "loglog")

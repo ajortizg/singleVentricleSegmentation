@@ -7,62 +7,7 @@
 #include <stdio.h>
 
 #include "coreDefines.h"
-
-// for debugging
-// #define CUDA_ERROR_CHECK
-// #define CUDA_TIMING
-
-#define cudaSafeCall( err ) __cnnCudaSafeCall( err, __FILE__, __LINE__ )
-
-inline void __cnnCudaSafeCall( cudaError_t err, const char *file, const int line )
-{
-#ifdef CUDA_ERROR_CHECK
-  if ( cudaSuccess != err )
-  {
-    fprintf( stderr, "cudaSafeCall() failed at %s:%i : %s\n", file, line, cudaGetErrorString( err ) );
-    exit( -1 );
-  }
-#endif
-  return;
-}
-
-
-#ifdef CUDA_TIMING
-class CudaTimer
-{
-public:
-  CudaTimer() 
-  {
-    cudaEventCreate(&start_);
-    cudaEventCreate(&stop_);
-  }
-
-  ~CudaTimer() 
-  {
-    cudaEventDestroy(start_);
-    cudaEventDestroy(stop_);
-  }
-
-  void start() 
-  {
-    cudaEventRecord(start_, 0);
-  }
-
-  float elapsed() 
-  {
-    cudaEventRecord(stop_);
-    cudaEventSynchronize(stop_);
-    float t = 0;
-    cudaEventElapsedTime(&t, start_, stop_);
-    return t;
-  }
-
-private:
-  cudaEvent_t start_;
-  cudaEvent_t stop_;
-};
-#endif
-
+#include "cudaDebug.cuh"
 
 
 //=========================================================
@@ -182,6 +127,7 @@ torch::Tensor cuda_ROF2D_proxPrimal( const torch::Tensor &primalVariable,
                                      const MeshInfo2D &meshInfo)
 {
   TORCH_CHECK(primalVariable.dim() == 2, "Expected 2 tensor");
+  TORCH_CHECK(inputImage.dim() == 2, "Expected 2 tensor");
 
   const int NX = meshInfo.getNX();
   const int LX = meshInfo.getLX();

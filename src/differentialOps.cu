@@ -7,87 +7,13 @@
 #include <stdio.h>
 
 #include "coreDefines.h"
-
-// for debugging
-// #define CUDA_ERROR_CHECK
-// #define CUDA_TIMING
-
-#define cudaSafeCall( err ) __cnnCudaSafeCall( err, __FILE__, __LINE__ )
-
-inline void __cnnCudaSafeCall( cudaError_t err, const char *file, const int line )
-{
-#ifdef CUDA_ERROR_CHECK
-  if ( cudaSuccess != err )
-  {
-    fprintf( stderr, "cudaSafeCall() failed at %s:%i : %s\n", file, line, cudaGetErrorString( err ) );
-    exit( -1 );
-  }
-#endif
-  return;
-}
-
-
-#ifdef CUDA_TIMING
-class CudaTimer
-{
-public:
-  CudaTimer() 
-  {
-    cudaEventCreate(&start_);
-    cudaEventCreate(&stop_);
-  }
-
-  ~CudaTimer() 
-  {
-    cudaEventDestroy(start_);
-    cudaEventDestroy(stop_);
-  }
-
-  void start() 
-  {
-    cudaEventRecord(start_, 0);
-  }
-
-  float elapsed() 
-  {
-    cudaEventRecord(stop_);
-    cudaEventSynchronize(stop_);
-    float t = 0;
-    cudaEventElapsedTime(&t, start_, stop_);
-    return t;
-  }
-
-private:
-  cudaEvent_t start_;
-  cudaEvent_t stop_;
-};
-#endif
-
+#include "boundary.cuh"
+#include "cudaDebug.cuh"
 
 
 //=========================================================
 // CUDA kernels
 //=========================================================
-
-template <typename T>
-__global__ void cuda_nabla1d_cd_forward_bdryZero_kernel(
-  const torch::PackedTensorAccessor32<T,1,torch::RestrictPtrTraits> b,
-  const int NX, const float hX,
-  torch::PackedTensorAccessor32<T,2,torch::RestrictPtrTraits> Db)
-{
-  int ix = blockDim.x * blockIdx.x + threadIdx.x;
-
-  if (ix < NX )
-  {
-      Db[ix][0] = (ix > 0) ? 
-                            (ix < NX-1) ? 
-                              0.5*(b[ix+1] - b[ix-1])/hX
-                              : 
-                              -0.5*b[ix-1]/hX
-                            : 
-                            0.5*b[ix+1]/hX;
-  }
-}
 
 template <typename T>
 __global__ void cuda_nabla1d_cd_forward_bdryNearest_kernel(
@@ -148,29 +74,6 @@ __global__ void cuda_nabla1d_cd_forward_bdryReflect_kernel(
                               0.5*(b[ix] - b[ix-1])/hX
                             : 
                             0.5*(b[ix+1] - b[ix])/hX;
-  }
-}
-
-
-
-template <typename T>
-__global__ void cuda_divergence1d_cd_backward_bdryZero_kernel(
-  const torch::PackedTensorAccessor32<T,2,torch::RestrictPtrTraits> p,
-  const int NX, const float hX,
-  torch::PackedTensorAccessor32<T,1,torch::RestrictPtrTraits> divp)
-{
-  int ix = blockDim.x * blockIdx.x + threadIdx.x;
-
-  if (ix < NX )
-  {
-      T divp_x = (ix > 0) ? 
-                            (ix < NX - 1 ) ? 
-                               0.5*(p[ix-1][0] - p[ix+1][0]) 
-                               : 
-                               0.5*p[ix-1][0] 
-                              :
-                              -0.5*p[ix+1][0];
-      divp[ix] = divp_x/hX;
   }
 }
 
@@ -240,36 +143,6 @@ __global__ void cuda_divergence1d_cd_backward_bdryReflect_kernel(
   }
 }
 
-
-template <typename T>
-__global__ void cuda_nabla2d_cd_forward_bdryZero_kernel(
-  const torch::PackedTensorAccessor32<T,2,torch::RestrictPtrTraits> b,
-  const int NY, const int NX,
-  const float hY, const float hX,
-  torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> Db)
-{
-  int ix = blockDim.x * blockIdx.x + threadIdx.x;
-  int iy = blockDim.y * blockIdx.y + threadIdx.y;
-
-  if (ix < NX && iy < NY )
-  {
-      Db[iy][ix][0] = (ix > 0) ? 
-                            (ix < NX-1) ? 
-                              0.5*(b[iy][ix+1] - b[iy][ix-1])/hX
-                              : 
-                              -0.5*b[iy][ix-1]/hX
-                            : 
-                            0.5*b[iy][ix+1]/hX;
-
-      Db[iy][ix][1] = (iy > 0) ? 
-                            (iy < NY-1) ? 
-                              0.5*(b[iy+1][ix] - b[iy-1][ix])/hY
-                              : 
-                              -0.5*b[iy-1][ix]/hY
-                            : 
-                            0.5*b[iy+1][ix]/hY;
-  }
-}
 
 template <typename T>
 __global__ void cuda_nabla2d_cd_forward_bdryNearest_kernel(
@@ -361,39 +234,6 @@ __global__ void cuda_nabla2d_cd_forward_bdryReflect_kernel(
   }
 }
 
-
-
-template <typename T>
-__global__ void cuda_divergence2d_cd_backward_bdryZero_kernel(
-  const torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> p,
-  const int NY, const int NX,
-  const float hY, const float hX,
-  torch::PackedTensorAccessor32<T,2,torch::RestrictPtrTraits> divp)
-{
-  int ix = blockDim.x * blockIdx.x + threadIdx.x;
-  int iy = blockDim.y * blockIdx.y + threadIdx.y;
-
-  if (ix < NX && iy < NY )
-  {
-      T divp_x = (ix > 0) ? 
-                            (ix < NX - 1 ) ? 
-                               0.5*(p[iy][ix-1][0] - p[iy][ix+1][0]) 
-                               : 
-                               0.5*p[iy][ix-1][0]
-                              :
-                              -0.5*p[iy][ix+1][0];
-
-      T divp_y = (iy > 0) ? 
-                            (iy < NY - 1 ) ? 
-                               0.5*(p[iy-1][ix][1] - p[iy+1][ix][1]) 
-                               : 
-                               0.5*p[iy-1][ix][1]
-                              :
-                              -0.5*p[iy+1][ix][1];
-
-      divp[iy][ix] = divp_x/hX + divp_y/hY;
-  }
-}
 
 template <typename T>
 __global__ void cuda_divergence2d_cd_backward_bdryNearest_kernel(
@@ -488,40 +328,6 @@ __global__ void cuda_divergence2d_cd_backward_bdryReflect_kernel(
                               0.5*(-p[iy][ix][1] - p[iy+1][ix][1]);
 
       divp[iy][ix] = divp_x/hX + divp_y/hY;
-  }
-}
-
-
-template <typename T>
-__global__ void cuda_nabla2d_cd_forwardVectorField_bdryZero_kernel(
-  const torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> b,
-  const int NY, const int NX,
-  const float hY, const float hX,
-  torch::PackedTensorAccessor32<T,4,torch::RestrictPtrTraits> Db)
-{
-  int ix = blockDim.x * blockIdx.x + threadIdx.x;
-  int iy = blockDim.y * blockIdx.y + threadIdx.y;
-
-  if (ix < NX && iy < NY )
-  {
-    for(int comp=0; comp<2; ++comp )
-    {
-      Db[iy][ix][comp][0] = (ix > 0) ? 
-                              (ix < NX-1) ? 
-                                0.5*(b[iy][ix+1][comp] - b[iy][ix-1][comp])/hX
-                                : 
-                                -0.5*b[iy][ix-1][comp]/hX
-                            : 
-                            0.5*b[iy][ix+1][comp]/hX;
-
-      Db[iy][ix][comp][1] = (iy > 0) ? 
-                              (iy < NY-1) ? 
-                                0.5*(b[iy+1][ix][comp] - b[iy-1][ix][comp])/hY
-                                : 
-                                -0.5*b[iy-1][ix][comp]/hY
-                            : 
-                            0.5*b[iy+1][ix][comp]/hY;
-    }
   }
 }
 
@@ -626,41 +432,6 @@ __global__ void cuda_nabla2d_cd_forwardVectorField_bdryReflect_kernel(
 
 
 template <typename T>
-__global__ void cuda_divergence2d_cd_backwardVectorField_bdryZero_kernel(
-  const torch::PackedTensorAccessor32<T,4,torch::RestrictPtrTraits> p,
-  const int NY, const int NX,
-  const float hY, const float hX,
-  torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> divp)
-{
-  int ix = blockDim.x * blockIdx.x + threadIdx.x;
-  int iy = blockDim.y * blockIdx.y + threadIdx.y;
-
-  if (ix < NX && iy < NY )
-  {
-    for(int comp=0; comp<2; ++comp )
-    {
-      T divp_x = (ix > 0) ? 
-                            (ix < NX - 1 ) ? 
-                               0.5*(p[iy][ix-1][comp][0] - p[iy][ix+1][comp][0]) 
-                               : 
-                               0.5*p[iy][ix-1][comp][0] 
-                              :
-                              -0.5*p[iy][ix+1][comp][0];
-
-      T divp_y = (iy > 0) ? 
-                            (iy < NY - 1 ) ? 
-                               0.5*(p[iy-1][ix][comp][1] - p[iy+1][ix][comp][1]) 
-                               : 
-                               0.5*p[iy-1][ix][comp][1] 
-                              :
-                              -0.5*p[iy+1][ix][comp][1];
-
-      divp[iy][ix][comp] = divp_x/hX + divp_y/hY;
-    }
-  }
-}
-
-template <typename T>
 __global__ void cuda_divergence2d_cd_backwardVectorField_bdryNearest_kernel(
   const torch::PackedTensorAccessor32<T,4,torch::RestrictPtrTraits> p,
   const int NY, const int NX,
@@ -762,48 +533,6 @@ __global__ void cuda_divergence2d_cd_backwardVectorField_bdryReflect_kernel(
 
       divp[iy][ix][comp] = divp_x/hX + divp_y/hY;
     }
-  }
-}
-
-
-
-
-template <typename T>
-__global__ void cuda_nabla3d_cd_forward_bdryZero_kernel(
-  const torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> b,
-  const int NZ, const int NY, const int NX,
-  const float hZ, const float hY, const float hX,
-  torch::PackedTensorAccessor32<T,4,torch::RestrictPtrTraits> Db)
-{
-  int ix = blockDim.x * blockIdx.x + threadIdx.x;
-  int iy = blockDim.y * blockIdx.y + threadIdx.y;
-  int iz = blockDim.z * blockIdx.z + threadIdx.z;
-
-  if (ix < NX && iy < NY && iz < NZ)
-  {
-      Db[iz][iy][ix][0] = (ix > 0) ? 
-                            (ix < NX-1) ? 
-                              0.5*(b[iz][iy][ix+1] - b[iz][iy][ix-1])/hX
-                              : 
-                              -0.5*b[iz][iy][ix-1]/hX
-                            : 
-                            0.5*b[iz][iy][ix+1]/hX;
-
-      Db[iz][iy][ix][1] = (iy > 0) ? 
-                            (iy < NY-1) ? 
-                              0.5*(b[iz][iy+1][ix] - b[iz][iy-1][ix])/hY
-                              : 
-                              -0.5*b[iz][iy-1][ix]/hY
-                            : 
-                            0.5*b[iz][iy+1][ix]/hY;
-
-      Db[iz][iy][ix][2] = (iz > 0) ? 
-                            (iz < NZ-1) ? 
-                              0.5*(b[iz+1][iy][ix] - b[iz-1][iy][ix])/hZ
-                              : 
-                              -0.5*b[iz-1][iy][ix]/hZ
-                            : 
-                            0.5*b[iz+1][iy][ix]/hZ;
   }
 }
 
@@ -922,48 +651,6 @@ __global__ void cuda_nabla3d_cd_forward_bdryReflect_kernel(
                               0.5*(b[iz][iy][ix] - b[iz-1][iy][ix])/hZ
                             : 
                             0.5*(b[iz+1][iy][ix] - b[iz][iy][ix])/hZ;
-  }
-}
-
-
-template <typename T>
-__global__ void cuda_divergence3d_cd_backward_bdryZero_kernel(
-  const torch::PackedTensorAccessor32<T,4,torch::RestrictPtrTraits> p,
-  const int NZ, const int NY, const int NX,
-  const float hZ, const float hY, const float hX,
-  torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> divp)
-{
-  int ix = blockDim.x * blockIdx.x + threadIdx.x;
-  int iy = blockDim.y * blockIdx.y + threadIdx.y;
-  int iz = blockDim.z * blockIdx.z + threadIdx.z;
-
-  if (ix < NX && iy < NY && iz < NZ )
-  {
-      T divp_x = (ix > 0) ? 
-                            (ix < NX - 1 ) ? 
-                               0.5*(p[iz][iy][ix-1][0] - p[iz][iy][ix+1][0]) 
-                               : 
-                               0.5*p[iz][iy][ix-1][0]
-                              :
-                              -0.5*p[iz][iy][ix+1][0];
-
-      T divp_y = (iy > 0) ? 
-                            (iy < NY - 1 ) ? 
-                               0.5*(p[iz][iy-1][ix][1] - p[iz][iy+1][ix][1]) 
-                               : 
-                               0.5*p[iz][iy-1][ix][1]
-                              :
-                              -0.5*p[iz][iy+1][ix][1];
-
-      T divp_z = (iz > 0) ? 
-                            (iz < NZ - 1 ) ? 
-                               0.5*(p[iz-1][iy][ix][2] - p[iz+1][iy][ix][2]) 
-                               : 
-                               0.5*p[iz-1][iy][ix][2]
-                              :
-                              -0.5*p[iz+1][iy][ix][2];
-
-      divp[iz][iy][ix] = divp_x/hX + divp_y/hY + divp_z/hZ;
   }
 }
 
@@ -1091,49 +778,6 @@ __global__ void cuda_divergence3d_cd_backward_bdryReflect_kernel(
   }
 }
 
-
-template <typename T>
-__global__ void cuda_nabla3d_cd_forwardVectorField_bdryZero_kernel(
-  const torch::PackedTensorAccessor32<T,4,torch::RestrictPtrTraits> b,
-  const int NZ, const int NY, const int NX,
-  const float hZ, const float hY, const float hX,
-  torch::PackedTensorAccessor32<T,5,torch::RestrictPtrTraits> Db)
-{
-  int ix = blockDim.x * blockIdx.x + threadIdx.x;
-  int iy = blockDim.y * blockIdx.y + threadIdx.y;
-  int iz = blockDim.z * blockIdx.z + threadIdx.z;
-
-  if (ix < NX && iy < NY && iz < NZ)
-  {
-    for(int comp=0; comp<3; ++comp )
-    {
-      Db[iz][iy][ix][comp][0] = (ix > 0) ? 
-                                  (ix < NX-1) ? 
-                                    0.5*(b[iz][iy][ix+1][comp] - b[iz][iy][ix-1][comp])/hX
-                                    : 
-                                    -0.5*b[iz][iy][ix-1][comp]/hX
-                                  : 
-                                  0.5*b[iz][iy][ix+1][comp];
-
-      Db[iz][iy][ix][comp][1] = (iy > 0) ? 
-                                  (iy < NY-1) ? 
-                                    0.5*(b[iz][iy+1][ix][comp] - b[iz][iy-1][ix][comp])/hY
-                                    : 
-                                    -0.5*b[iz][iy-1][ix][comp]/hY
-                                  : 
-                                  0.5*b[iz][iy+1][ix][comp]/hY;
-
-      Db[iz][iy][ix][comp][2] = (iz > 0) ? 
-                                  (iz < NZ-1) ? 
-                                    0.5*(b[iz+1][iy][ix][comp] - b[iz-1][iy][ix][comp])/hZ
-                                    : 
-                                    -0.5*b[iz-1][iy][ix][comp]/hZ
-                                  : 
-                                  0.5*b[iz+1][iy][ix][comp]/hZ;
-    }
-  }
-}
-
 template <typename T>
 __global__ void cuda_nabla3d_cd_forwardVectorField_bdryNearest_kernel(
   const torch::PackedTensorAccessor32<T,4,torch::RestrictPtrTraits> b,
@@ -1256,51 +900,6 @@ __global__ void cuda_nabla3d_cd_forwardVectorField_bdryReflect_kernel(
                               0.5*(b[iz][iy][ix][comp] - b[iz-1][iy][ix][comp])/hZ
                             : 
                             0.5*(b[iz+1][iy][ix][comp] - b[iz][iy][ix][comp])/hZ;
-    }
-  }
-}
-
-
-template <typename T>
-__global__ void cuda_divergence3d_cd_backwardVectorField_bdryZero_kernel(
-  const torch::PackedTensorAccessor32<T,5,torch::RestrictPtrTraits> p,
-  const int NZ, const int NY, const int NX,
-  const float hZ, const float hY, const float hX,
-  torch::PackedTensorAccessor32<T,4,torch::RestrictPtrTraits> divp)
-{
-  int ix = blockDim.x * blockIdx.x + threadIdx.x;
-  int iy = blockDim.y * blockIdx.y + threadIdx.y;
-  int iz = blockDim.z * blockIdx.z + threadIdx.z;
-
-  if (ix < NX && iy < NY && iz < NZ )
-  {
-    for(int comp=0; comp<3; ++comp )
-    {
-      T divp_x = (ix > 0) ? 
-                            (ix < NX - 1 ) ? 
-                               0.5*(p[iz][iy][ix-1][comp][0] - p[iz][iy][ix+1][comp][0]) 
-                               : 
-                               0.5*p[iz][iy][ix-1][comp][0]
-                              :
-                              -0.5*p[iz][iy][ix+1][comp][0];
-
-      T divp_y = (iy > 0) ? 
-                            (iy < NY - 1 ) ? 
-                               0.5*(p[iz][iy-1][ix][comp][1] - p[iz][iy+1][ix][comp][1]) 
-                               : 
-                               0.5*p[iz][iy-1][ix][comp][1]
-                              :
-                              -0.5*p[iz][iy+1][ix][comp][1];
-
-      T divp_z = (iz > 0) ? 
-                            (iz < NZ - 1 ) ? 
-                               0.5*(p[iz-1][iy][ix][comp][2] - p[iz+1][iy][ix][comp][2]) 
-                               : 
-                               0.5*p[iz-1][iy][ix][comp][2]
-                              :
-                              -0.5*p[iz+1][iy][ix][comp][2];
-
-      divp[iz][iy][ix][comp] = divp_x/hX + divp_y/hY + divp_z/hZ;
     }
   }
 }
@@ -1464,16 +1063,6 @@ torch::Tensor cuda_nabla1d_cd_forward(
 
   switch(boundary)
   {
-    case BOUNDARY_ZERO:
-    AT_DISPATCH_FLOATING_TYPES(b.type(), "nabla1d_cd_forward", ([&]{
-      cuda_nabla1d_cd_forward_bdryZero_kernel<scalar_t><<<numBlocks, blockSize>>>(
-        b.packed_accessor32<scalar_t,1,torch::RestrictPtrTraits>(),
-        NX,
-        hX,
-        Db.packed_accessor32<scalar_t,2,torch::RestrictPtrTraits>());
-    }));
-    cudaSafeCall(cudaGetLastError());
-    break;
 
     case BOUNDARY_NEAREST:
     AT_DISPATCH_FLOATING_TYPES(b.type(), "nabla1d_cd_forward", ([&]{
@@ -1539,16 +1128,6 @@ torch::Tensor cuda_divergence1d_cd_backward(
 
 switch(boundary)
   {
-    case BOUNDARY_ZERO:
-      AT_DISPATCH_FLOATING_TYPES(p.type(), "divergence1d_cd_backward", ([&]{
-        cuda_divergence1d_cd_backward_bdryZero_kernel<scalar_t><<<numBlocks, blockSize>>>(
-          p.packed_accessor32<scalar_t,2,torch::RestrictPtrTraits>(),
-          NX, 
-          hX,
-          divp.packed_accessor32<scalar_t,1,torch::RestrictPtrTraits>());
-      }));
-      cudaSafeCall(cudaGetLastError());
-      break;
 
       case BOUNDARY_NEAREST:
       AT_DISPATCH_FLOATING_TYPES(p.type(), "divergence1d_cd_backward", ([&]{
@@ -1616,16 +1195,6 @@ torch::Tensor cuda_nabla2d_cd_forward(
 
   switch(boundary)
   {
-    case BOUNDARY_ZERO:
-      AT_DISPATCH_FLOATING_TYPES(b.type(), "nabla2d_cd_forward", ([&]{
-        cuda_nabla2d_cd_forward_bdryZero_kernel<scalar_t><<<numBlocks, blockSize>>>(
-          b.packed_accessor32<scalar_t,2,torch::RestrictPtrTraits>(),
-          NY, NX,
-          hY, hX,
-          Db.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>());
-      }));
-      cudaSafeCall(cudaGetLastError());
-     break;
 
       case BOUNDARY_NEAREST:
       AT_DISPATCH_FLOATING_TYPES(b.type(), "nabla2d_cd_forward", ([&]{
@@ -1694,16 +1263,6 @@ torch::Tensor cuda_divergence2d_cd_backward(
 
   switch(boundary)
   {
-    case BOUNDARY_ZERO:
-      AT_DISPATCH_FLOATING_TYPES(p.type(), "divergence2d_cd_backward", ([&]{
-        cuda_divergence2d_cd_backward_bdryZero_kernel<scalar_t><<<numBlocks, blockSize>>>(
-          p.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>(),
-          NY, NX,
-          hY, hX,
-          divp.packed_accessor32<scalar_t,2,torch::RestrictPtrTraits>());
-      }));
-      cudaSafeCall(cudaGetLastError());
-    break;
 
     case BOUNDARY_NEAREST:
       AT_DISPATCH_FLOATING_TYPES(p.type(), "divergence2d_cd_backward", ([&]{
@@ -1773,16 +1332,6 @@ torch::Tensor cuda_nabla2d_cd_forwardVectorField(
 
   switch(boundary)
   {
-    case BOUNDARY_ZERO:
-      AT_DISPATCH_FLOATING_TYPES(b.type(), "nabla2d_cd_forwardVectorField", ([&]{
-        cuda_nabla2d_cd_forwardVectorField_bdryZero_kernel<scalar_t><<<numBlocks, blockSize>>>(
-          b.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>(),
-          NY, NX,
-          hY, hX,
-          Db.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>());
-      }));
-      cudaSafeCall(cudaGetLastError());
-    break;
 
     case BOUNDARY_NEAREST:
       AT_DISPATCH_FLOATING_TYPES(b.type(), "nabla2d_cd_forwardVectorField", ([&]{
@@ -1849,16 +1398,6 @@ torch::Tensor cuda_divergence2d_cd_backwardVectorField(
 
   switch(boundary)
   {
-    case BOUNDARY_ZERO:
-      AT_DISPATCH_FLOATING_TYPES(p.type(), "divergence2d_cd_backwardVectorField", ([&]{
-        cuda_divergence2d_cd_backwardVectorField_bdryZero_kernel<scalar_t><<<numBlocks, blockSize>>>(
-          p.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>(),
-          NY, NX,
-          hY, hX,
-          divp.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>());
-      }));
-      cudaSafeCall(cudaGetLastError());
-    break;
 
     case BOUNDARY_NEAREST:
       AT_DISPATCH_FLOATING_TYPES(p.type(), "divergence2d_cd_backwardVectorField", ([&]{
@@ -1931,16 +1470,6 @@ torch::Tensor cuda_nabla3d_cd_forward(
 
   switch(boundary)
   {
-    case BOUNDARY_ZERO:
-      AT_DISPATCH_FLOATING_TYPES(b.type(), "nabla3d_cd_forward", ([&]{
-        cuda_nabla3d_cd_forward_bdryZero_kernel<scalar_t><<<numBlocks, blockSize>>>(
-          b.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>(),
-          NZ, NY, NX,
-          hZ, hY, hX,
-          Db.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>());
-      }));
-      cudaSafeCall(cudaGetLastError());
-    break;
 
     case BOUNDARY_NEAREST:
       AT_DISPATCH_FLOATING_TYPES(b.type(), "nabla3d_cd_forward", ([&]{
@@ -2012,16 +1541,6 @@ torch::Tensor cuda_divergence3d_cd_backward(
 
   switch(boundary)
   {
-    case BOUNDARY_ZERO:
-      AT_DISPATCH_FLOATING_TYPES(p.type(), "divergence3d_cd_backward", ([&]{
-        cuda_divergence3d_cd_backward_bdryZero_kernel<scalar_t><<<numBlocks, blockSize>>>(
-          p.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>(),
-          NZ, NY, NX,
-          hZ, hY, hX,
-          divp.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>());
-      }));
-      cudaSafeCall(cudaGetLastError());
-    break;
 
     case BOUNDARY_NEAREST:
       AT_DISPATCH_FLOATING_TYPES(p.type(), "divergence3d_cd_backward", ([&]{
@@ -2093,16 +1612,6 @@ torch::Tensor cuda_nabla3d_cd_forwardVectorField(
 
   switch(boundary)
   {
-    case BOUNDARY_ZERO:
-      AT_DISPATCH_FLOATING_TYPES(b.type(), "nabla3d_cd_forwardVectorField", ([&]{
-        cuda_nabla3d_cd_forwardVectorField_bdryZero_kernel<scalar_t><<<numBlocks, blockSize>>>(
-          b.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>(),
-          NZ, NY, NX,
-          hZ, hY, hX,
-          Db.packed_accessor32<scalar_t,5,torch::RestrictPtrTraits>());
-      }));
-      cudaSafeCall(cudaGetLastError());
-    break;
 
     case BOUNDARY_NEAREST:
       AT_DISPATCH_FLOATING_TYPES(b.type(), "nabla3d_cd_forwardVectorField", ([&]{
@@ -2173,16 +1682,6 @@ torch::Tensor cuda_divergence3d_cd_backwardVectorField(
 
   switch(boundary)
   {
-    case BOUNDARY_ZERO:
-      AT_DISPATCH_FLOATING_TYPES(p.type(), "divergence3d_cd_backwardVectorField", ([&]{
-        cuda_divergence3d_cd_backwardVectorField_bdryZero_kernel<scalar_t><<<numBlocks, blockSize>>>(
-          p.packed_accessor32<scalar_t,5,torch::RestrictPtrTraits>(),
-          NZ, NY, NX,
-          hZ, hY, hX,
-          divp.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>());
-      }));
-      cudaSafeCall(cudaGetLastError());
-    break;
 
     case BOUNDARY_NEAREST:
       AT_DISPATCH_FLOATING_TYPES(p.type(), "divergence3d_cd_backwardVectorField", ([&]{

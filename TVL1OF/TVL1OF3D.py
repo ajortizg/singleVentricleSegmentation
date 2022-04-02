@@ -1,13 +1,13 @@
 #==================================
 import sys
 import os
+import configparser
 import math
 import numpy as np
-# from scipy import ndimage
+import nibabel as nib
 import torch
 import time
 from tqdm import tqdm
-import configparser
 
 
 sys.path.append("../utils")
@@ -28,12 +28,35 @@ sys.path.append(pythonOps_lib_path)
 from opticalFlow_cuda_ext import opticalFlow
 
 
-#InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_LINEAR
-#InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_CUBIC_HERMITESPLINE
+
+import torch.nn.functional as F
+
+def generateGaussianKernel3D(sigma):
+    kernelSize = int(sigma * 5)
+    if kernelSize % 2 == 0:
+        kernelSize += 1
+    ts = torch.linspace(-kernelSize // 2, kernelSize // 2 + 1, kernelSize)
+    gauss = torch.exp((-(ts / sigma)**2 / 2))
+    kernel = gauss / gauss.sum()
+
+    return kernel
+
+def applyGaussianBlur3D(vol, sigma):
+
+    # 3D convolution
+    vol_in = vol.reshape(1, 1, *vol.shape)
+    k = generateGaussianKernel3D(sigma)
+    k3d = torch.einsum('i,j,k->ijk', k, k, k).cuda()
+    k3d = k3d / k3d.sum()
+    vol_3d = F.conv3d(vol_in, k3d.reshape(1, 1, *k3d.shape), stride=1, padding=len(k) // 2)
+    vol_out = vol_3d.reshape(*vol.shape)
+
+    return vol_out
 
 
 class TVL1OpticalFlow3D:
     def __init__(self,saveDir,config):
+        self.config = config
         self.saveDir = saveDir
         self.NUM_SCALES = config.getint('PARAMETERS', 'NUM_SCALES')
         self.MAX_WARPS = config.getint('PARAMETERS', 'MAX_WARPS')
@@ -45,48 +68,62 @@ class TVL1OpticalFlow3D:
         self.tau = config.getfloat('PARAMETERS', 'tau')
         self.theta = config.getfloat('PARAMETERS', 'theta')
         self.gamma = config.getfloat('PARAMETERS', 'gamma')
-        #interpolation
+        # blurring
+        self.useGaussianBlur = config.getboolean("PARAMETERS","useGaussianBlur")
+        self.GaussianBlurSigma = config.getfloat('PARAMETERS', 'GaussianBlurSigma')
+        # interpolation
         interType = config.get('PARAMETERS', 'InterpolationType')
-        self.InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_LINEAR
+        self.InterpolationTypeCuda = None
         if interType == "LINEAR":
             self.InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_LINEAR
         elif interType == "CUBIC_HERMITESPLINE":
             self.InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_CUBIC_HERMITESPLINE
+        else:
+            raise Exception("wrong InterpolationType in configParser")
         #boundary
         boundaryType = config.get('PARAMETERS', 'BoundaryType')
-        self.BoundaryTypeCuda = opticalFlow.BoundaryType.BOUNDARY_ZERO
-        if boundaryType == "ZERO":
-            self.BoundaryTypeCuda = opticalFlow.BoundaryType.BOUNDARY_ZERO
-        elif boundaryType == "NEAREST":
+        self.BoundaryTypeCuda = None
+        if boundaryType == "NEAREST":
             self.BoundaryTypeCuda = opticalFlow.BoundaryType.BOUNDARY_NEAREST
         elif boundaryType == "MIRROR":
             self.BoundaryTypeCuda = opticalFlow.BoundaryType.BOUNDARY_MIRROR
         elif boundaryType == "REFLECT":
             self.BoundaryTypeCuda = opticalFlow.BoundaryType.BOUNDARY_REFLECT
+        else:
+            raise Exception("wrong BoundaryType in configParser")
         #cuda
         cuda_availabe = config.get('DEVICE', 'cuda_availabe')
         self.DEVICE = "cuda" if cuda_availabe else "cpu"
+        #debug
         self.saveDirDebug = os.path.sep.join([self.saveDir, "debug"])
         self.useDebugOutput = config.getboolean("DEBUG","useDebugOutput")
         if self.useDebugOutput:
             os.makedirs(self.saveDirDebug)
 
+
+    def getMeshLength(self,config,NZ,NY,NX):
+        LenghtType = config.get('PARAMETERS', 'LenghtType')
+        if LenghtType == "numDofs":
+            LZ = NZ-1
+            LY = NY-1
+            LX = NX-1
+            return LZ, LY, LX
+        elif LenghtType == "fixed":
+            LZ = config.getfloat('PARAMETERS', "LenghtZ")
+            LY = config.getfloat('PARAMETERS', "LenghtY")
+            LX = config.getfloat('PARAMETERS', "LenghtX")
+            return LZ, LY, LX
+
     def generatePyramid(self, I0, I1, u, p):
 
-        # TODO should be done directly for input values
-        # Normalize the data between 0 and 1
-        # I0 = self.normalize(I0)
-        # I1 = self.normalize(I1)
-
-        # TODO necessary?
         # Smooth inputs with a Gaussian filter
-        # I0 = ndimage.gaussian_filter(I0, sigma=SIGMA)
-        # I1 = ndimage.gaussian_filter(I1, sigma=SIGMA)
+        if self.useGaussianBlur:
+            I0 = applyGaussianBlur3D(I0,self.GaussianBlurSigma)
+            I1 = applyGaussianBlur3D(I1,self.GaussianBlurSigma)
 
         # List for volumes pyramids
         NZ, NY, NX = I0.shape[0], I0.shape[1], I0.shape[2]
-        #TODO possibly change lenght scale
-        LZ, LY, LX = NZ-1, NY-1, NX-1
+        LZ, LY, LX = self.getMeshLength(self.config, NZ, NY, NX)
         #meshInfo3D_python = MeshInfo3D(NZ,NY,NX,LZ,LY,LX)
         meshInfo3D_cuda = opticalFlow.MeshInfo3D(NZ,NY,NX,LZ,LY,LX)
 
@@ -95,7 +132,7 @@ class TVL1OpticalFlow3D:
         NZ_restr, NY_restr, NX_restr = NZ, NY, NX
         for s in range(1, self.NUM_SCALES):
             NZ_restr, NY_restr, NX_restr = math.ceil(0.5*NZ_restr), math.ceil(0.5*NY_restr), math.ceil(0.5*NX_restr)
-            LZ_restr, LY_restr, LX_restr = NZ_restr-1, NY_restr-1, NX_restr-1
+            LZ_restr, LY_restr, LX_restr = self.getMeshLength(self.config, NZ_restr, NY_restr, NX_restr)
             meshInfos.append(opticalFlow.MeshInfo3D(NZ_restr,NY_restr,NX_restr,LZ_restr,LY_restr,LX_restr))
 
         #lists for pyramid
@@ -106,9 +143,9 @@ class TVL1OpticalFlow3D:
 
         # Create the pyramid
         for s in range(1, self.NUM_SCALES):
-            prolongationOp_cuda = opticalFlow.Prolongation3D(meshInfos[s-1],meshInfos[s])
-            I0s.append(prolongationOp_cuda.forward(I0s[s-1],self.InterpolationTypeCuda))
-            I1s.append(prolongationOp_cuda.forward(I1s[s-1],self.InterpolationTypeCuda))
+            prolongationOp_cuda = opticalFlow.Prolongation3D(meshInfos[s-1],meshInfos[s],self.InterpolationTypeCuda,self.BoundaryTypeCuda)
+            I0s.append(prolongationOp_cuda.forward(I0s[s-1]))
+            I1s.append(prolongationOp_cuda.forward(I1s[s-1]))
             us.append(torch.zeros([meshInfos[s].getNZ(),meshInfos[s].getNY(),meshInfos[s].getNX(),3]).float().to(self.DEVICE))
             ps.append(torch.zeros([meshInfos[s].getNZ(),meshInfos[s].getNY(),meshInfos[s].getNX(),3,3]).float().to(self.DEVICE))
 
@@ -138,8 +175,8 @@ class TVL1OpticalFlow3D:
                 break
 
             # Prolongate the optical flow and dual variables to the next pyramid level
-            prolongationOp_cuda = opticalFlow.Prolongation3D(meshInfos[s],meshInfos[s-1])
-            us[s-1] = prolongationOp_cuda.forwardVectorField(us[s],self.InterpolationTypeCuda)
+            prolongationOp_cuda = opticalFlow.Prolongation3D(meshInfos[s],meshInfos[s-1],self.InterpolationTypeCuda,self.BoundaryTypeCuda)
+            us[s-1] = prolongationOp_cuda.forwardVectorField(us[s])
             #factor LXNew/LXOld, ...
             us[s-1][:,:,:,0] *= meshInfos[s-1].getLX() / meshInfos[s].getLX()
             us[s-1][:,:,:,1] *= meshInfos[s-1].getLY() / meshInfos[s].getLY()
@@ -148,9 +185,11 @@ class TVL1OpticalFlow3D:
             #TODO Dirichlet boundary condition for p?
             # ps[s] = self.dirichlet(ps[s])
 
-            ps[s-1] = prolongationOp_cuda.forwardMatrixField(ps[s],self.InterpolationTypeCuda)
+            ps[s-1] = prolongationOp_cuda.forwardMatrixField(ps[s])
 
             #TODO prolongation factor for p?
+        
+        return us[0], ps[0]
 
 
     def computeOnSingleStep(self, s, I0, I1, u, p, meshInfo):
@@ -162,15 +201,15 @@ class TVL1OpticalFlow3D:
         # Compute target image gradients
         #nablaOp = Nabla3D_Central(meshInfo)
         nablaOp = opticalFlow.Nabla3D_CD(meshInfo,self.BoundaryTypeCuda)
-        warpingOp = opticalFlow.Warping3D(meshInfo)
+        warpingOp = opticalFlow.Warping3D(meshInfo,self.InterpolationTypeCuda,self.BoundaryTypeCuda)
         I1_grad = nablaOp.forward(I1)
 
         z = u
 
         for w in range(self.MAX_WARPS):
             # Compute the warping of the target image and its derivatives
-            I1_warped = warpingOp.forward(I1,u,self.InterpolationTypeCuda)
-            I1_warped_grad = warpingOp.forwardVectorField(I1_grad,u,self.InterpolationTypeCuda)
+            I1_warped = warpingOp.forward(I1,u)
+            I1_warped_grad = warpingOp.forwardVectorField(I1_grad,u)
             # Constant part of the rho function
             #rho_c = I1_warped - u[:, :, :, 0] * I1_warped_grad[:, :, :, 0] - u[:, :, :, 1] * I1_warped_grad[:, :, :, 1] - u[:, :, :, 2] * I1_warped_grad[:, :, :, 2] - I0
             rho_c = I1_warped - torch.sum(u * I1_warped_grad, dim=3) - I0
@@ -245,13 +284,21 @@ class TVL1OpticalFlow3D:
         plotOpticalFlow3D(u.cpu().detach().numpy(), "u", saveDirStep, step)
         save_slices(I0,f"I0_it{step}.png", saveDirStep)
         save_slices(I1,f"I1_it{step}.png", saveDirStep)
-        warpingOp = opticalFlow.Warping3D(meshInfo)
-        I1_warped = warpingOp.forward(I1,u,self.InterpolationTypeCuda)
+        warpingOp = opticalFlow.Warping3D(meshInfo,self.InterpolationTypeCuda,self.BoundaryTypeCuda)
+        I1_warped = warpingOp.forward(I1,u)
         save_slices(I1_warped, f"I1_warped_it{step}.png", saveDirStep)
-        save_slices(torch.abs(I1_warped-I0), f"Diff_I1warped_to_I0_it{step}.png", saveDirStep)
 
         save_single_zslices(I0, saveDirStep, "I0Slices", 1., 0)
         save_single_zslices(I1_warped, saveDirStep, "I1WarpedSlices", 1., 0)
+
+
+        diff = torch.abs(I1_warped-I0)
+        save_slices(diff, f"Diff_I1warped_to_I0_it{step}.png", saveDirStep)
+        save_single_zslices(diff, saveDirStep, "Diff_I1warped_to_I0_Slices", 1., 0)
+        print("norm of diff = ", diff.norm().item() )
+        numZSlices = diff.shape[0]
+        for z in range(numZSlices):
+            print(" norm of diff(z=", z, ") = ", diff[z,:,:].norm().item() )
         
         flowName = f"flow_it{step}.pt"
         fileNameFlow = os.path.join(saveDirStep, flowName) 
@@ -260,6 +307,53 @@ class TVL1OpticalFlow3D:
         dualName = f"dual_it{step}.pt"
         fileNameDual = os.path.join(saveDirStep, dualName) 
         torch.save(p, fileNameDual)
+
+    def warpMask(self,mask,u,t0,saveDir):
+
+        print("warp with optical flow for time step: ", t0)
+        print("norm of u = ", u.norm().item() )
+
+        # flowName = "flow_it0.pt"
+        # fileNameFlow = os.path.join(saveDirStep, flowName) 
+        # u = torch.load(fileNameFlow, map_location=torch.device(DEVICE))
+
+        NZ, NY, NX = mask.shape[0], mask.shape[1], mask.shape[2]
+        LZ, LY, LX = self.getMeshLength(self.config, NZ, NY, NX)
+        meshInfo = opticalFlow.MeshInfo3D(NZ,NY,NX,LZ,LY,LX)
+
+        warpingOp = opticalFlow.Warping3D(meshInfo,self.InterpolationTypeCuda,self.BoundaryTypeCuda)
+        mask_warped = warpingOp.forward(mask,u)
+
+        save3D_torch_to_nifty(mask_warped,saveDir,f"mask_warped_time{t0}.nii")
+
+        save_slices(mask_warped, f"mask_warped_time{t0}.png", saveDir)
+        save_single_zslices(mask_warped, saveDir, "mask_warped_slices", 1., 2)
+
+        #TODO
+        #add mask to mri images 
+        saveDirMRISlices = os.path.join(saveDir, "it0/I0Slices")
+        saveDirMaskSlices = os.path.join(saveDir, "mask_slices")
+        saveDirSumSlices = os.path.join(saveDir, "sum_slices")
+        if not os.path.exists(saveDirSumSlices):
+             os.makedirs(saveDirSumSlices)
+        for z in range(0,NZ):
+           fileNameMRISlice = os.path.join(saveDirMRISlices, f"colorimg_z{z}.png") 
+           img_mri = cv2.imread(fileNameMRISlice)
+           fileNameMaskSlice = os.path.join(saveDirMaskSlices, f"colorimg_z{z}.png") 
+           img_mask = cv2.imread(fileNameMaskSlice)
+           fileNameSumSlice = os.path.join(saveDirSumSlices, f"sumimg_z{z}.png")
+           img_sum = img_mri + img_mask 
+           cv2.imwrite(fileNameSumSlice,img_sum)
+           fileNameSumSliceInvert = os.path.join(saveDirSumSlices, f"invertsumimg_z{z}.png")
+           img_sum_invert = 255. - img_sum
+           cv2.imwrite(fileNameSumSliceInvert,img_sum_invert)
+
+        return mask_warped
+
+
+
+
+
 
     # def updateDualVariable(self,u,v,p,meshInfo):
     #     nablaOp = opticalFlow.Nabla3D_CD(meshInfo)

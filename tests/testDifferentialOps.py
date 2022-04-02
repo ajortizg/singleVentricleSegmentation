@@ -116,21 +116,23 @@ meshInfo1D_python = mesh.MeshInfo1D(NX1D,LX1D)
 meshInfo1D_cuda = opticalFlow.MeshInfo1D(NX1D,LX1D)
 dimVec1D = torch.Size([NX1D])
 
-NY2D = 129
-NX2D = 257
+NY2D = 5
+NX2D = 6
+# NY2D = 129
+# NX2D = 257
 LY2D = 8.
 LX2D = 2.
 meshInfo2D_python = mesh.MeshInfo2D(NY2D,NX2D,LY2D,LX2D)
 meshInfo2D_cuda = opticalFlow.MeshInfo2D(NY2D,NX2D,LY2D,LX2D)
 dimVec2D = torch.Size([NY2D,NX2D])
 
-NZ3D = 3
+NZ3D = 5
 NY3D = 4
 NX3D = 5
 # NZ3D = 17
 # NY3D = 129
 # NX3D = 257
-LZ3D = 0.5
+LZ3D = 1.
 LY3D = 8.
 LX3D = 2.
 meshInfo3D_python = mesh.MeshInfo3D(NZ3D,NY3D,NX3D,LZ3D,LY3D,LX3D)
@@ -179,7 +181,20 @@ print("check diff ops for vector fields in cuda:")
 print("==========================================")
 print("\n")
 
-boundaryList = [opticalFlow.BoundaryType.BOUNDARY_ZERO,opticalFlow.BoundaryType.BOUNDARY_NEAREST,opticalFlow.BoundaryType.BOUNDARY_MIRROR,opticalFlow.BoundaryType.BOUNDARY_REFLECT]
+boundaryList = [opticalFlow.BoundaryType.BOUNDARY_NEAREST,opticalFlow.BoundaryType.BOUNDARY_MIRROR,opticalFlow.BoundaryType.BOUNDARY_REFLECT]
+
+
+for boundary in boundaryList:
+    print("check adjointness in cuda for 1d cd with", boundary, ": ", end=" ")
+    nabla1DCDOpCuda_bdry = opticalFlow.Nabla1D_CD(meshInfo1D_cuda,boundary)
+    testVecForwardVector = torch.randn([NX1D]).cuda()
+    D_testVecForwardVector_cuda = nabla1DCDOpCuda_bdry.forward(testVecForwardVector)
+    testVecBackwardVector = torch.randn(D_testVecForwardVector_cuda.shape).cuda()
+    div_testVecBackwardVector_cuda = nabla1DCDOpCuda_bdry.backward(testVecBackwardVector)
+    lhs_cuda =  D_testVecForwardVector_cuda.reshape(-1).dot(testVecBackwardVector.reshape(-1))
+    rhs_cuda =  div_testVecBackwardVector_cuda.reshape(-1).dot(testVecForwardVector.reshape(-1))
+    diff_cuda = torch.max(torch.abs(lhs_cuda-rhs_cuda)).item()
+    printColoredError(diff_cuda)
 
 for boundary in boundaryList:
     print("check adjointness in cuda for 2d cd with", boundary, ": ", end=" ")
