@@ -1,10 +1,14 @@
+import sys
 import nibabel as nib
 import numpy as np
 import os
 import pandas
 
-# from utils.config import *
 from TVL1OF.TVL1OF3D import *
+
+utils_lib_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'utils'))
+sys.path.append(utils_lib_path)
+import plots
 
 from opticalFlow_cuda_ext import opticalFlow
 
@@ -28,12 +32,7 @@ if __name__ == "__main__":
     #DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
     # create save directory
-    timestr = time.strftime("%Y%m%d-%H%M%S")
-    OUTPUT_PATH = config.get('DATA', 'OUTPUT_PATH')
-    saveDir = os.path.sep.join([OUTPUT_PATH, "TVL1OF3DBackward_" + timestr])
-    if not os.path.exists(saveDir):
-      os.makedirs(saveDir)
-    print("save results to directory: ", saveDir, "\n")
+    saveDir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), "TVL1OF3DBackward" )
 
     #save config file to save directory
     conifgOutput = os.path.sep.join([saveDir, "config.ini"])
@@ -79,33 +78,41 @@ if __name__ == "__main__":
     tSystole = rowPatient.loc[indexPatient, "Systole"]
     print("   * systole at time:  ", tSystole)
     print("   * diastole at time: ", tDiastole)
-    numTimeSteps = tDiastole - tSystole
+    numTimeSteps = abs(tDiastole - tSystole)
+    initTimeStep = min(tDiastole,tSystole)
+    finalTimeStep = max(tDiastole,tSystole)
     print("=======================================")
     print("\n")
 
     # load input masks 
-    saveDirTimeSystole = os.path.sep.join([saveDir, f"time{tSystole}"])
-    if not os.path.exists(saveDirTimeSystole):
-        os.makedirs(saveDirTimeSystole)
-    #saveDirTimeSystoleFinalStep = os.path.sep.join([saveDirTimeSystole, f"it0"])
     SEGMENTATIONS_SUBDIR_PATH = config.get('DATA', 'SEGMENTATIONS_SUBDIR_PATH')
     SEGMENTATIONS_PATH = os.path.sep.join([BASE_PATH_3D, SEGMENTATIONS_SUBDIR_PATH])
+
     nii_mask_load_systole = nib.load(os.path.sep.join([SEGMENTATIONS_PATH, PATIENT_NAME, PATIENT_NAME + "_Systole_Labelmap.nii"]))
     nii_mask_xyz_systole = nii_mask_load_systole.get_fdata()
-    ## swap from nibabel (X,Y,Z) to cuda-compatible (Z,Y,X):
     nii_mask_systole = np.swapaxes(nii_mask_xyz_systole, 0, 2)
     mask_systole = torch.from_numpy(nii_mask_systole).float().to(DEVICE)
-    # save3D_torch_to_nifty(mask_systole,saveDirTimeSystole,f"mask_warped_time{tSystole}.nii")
-    # save_slices(mask_systole, f"mask_Systole.png", saveDirTimeSystole)
-    # save_single_zslices(mask_systole, saveDirTimeSystole, "mask_slices", 1., 2)
+
+    nii_mask_load_diastole = nib.load(os.path.sep.join([SEGMENTATIONS_PATH, PATIENT_NAME, PATIENT_NAME + "_Diastole_Labelmap.nii"]))
+    nii_mask_xyz_diastole = nii_mask_load_diastole.get_fdata()
+    nii_mask_diastole = np.swapaxes(nii_mask_xyz_diastole, 0, 2)
+    mask_diastole = torch.from_numpy(nii_mask_diastole).float().to(DEVICE)
+
+    saveDirInitTime = os.path.sep.join([saveDir, f"time{initTimeStep}"])
+    if not os.path.exists(saveDirInitTime):
+        os.makedirs(saveDirInitTime)
 
     #initialization of optical flow and mask
     u = torch.zeros([NZ,NY,NX,3]).float().to(DEVICE)
     p = torch.zeros([NZ,NY,NX,3,3]).float().to(DEVICE)
-    mask = mask_systole.clone().detach()
+    mask = None
+    if initTimeStep == tSystole:
+      mask = mask_systole.clone().detach()
+    else:
+      mask = mask_diastole.clone().detach()
 
-    #for t in range(tSystole, tDiastole):
-    for t in range(tSystole, tSystole+2):
+
+    for t in range(initTimeStep, finalTimeStep):
       saveDirTimeStep = os.path.sep.join([saveDir, f"time{t}"])
       if not os.path.exists(saveDirTimeStep):
         os.makedirs(saveDirTimeStep)
@@ -117,6 +124,9 @@ if __name__ == "__main__":
       # Compute the optical flow
       alg = TVL1OpticalFlow3D(saveDirTimeStep,config)
       u,p = alg.computeOnPyramid(I0, I1, u, p)
+      # flowName = "flow_it0.pt"
+      # fileNameFlow = os.path.join(saveDirStep, flowName) 
+      # u = torch.load(fileNameFlow, map_location=torch.device(DEVICE))
 
       #save the old mask
       save3D_torch_to_nifty(mask,saveDirTimeStep,f"mask_time{t1}.nii")
@@ -125,57 +135,6 @@ if __name__ == "__main__":
 
       #warp mask with the computed optical flow
       mask = alg.warpMask(mask,u,t0,saveDirTimeStep)
-
-
-    # flowName = "flow_it0.pt"
-    # fileNameFlow = os.path.join(saveDirStep, flowName) 
-    # u = torch.load(fileNameFlow, map_location=torch.device(DEVICE))
-
-    # NZ, NY, NX = mask.shape[0], mask.shape[1], mask.shape[2]
-    # LZ, LY, LX = NZ-1, NY-1, NX-1
-    # meshInfo3D_cuda = opticalFlow.MeshInfo3D(NZ,NY,NX,LZ,LY,LX)
-    # #
-    # interType = config.get('PARAMETERS', 'InterpolationType')
-    # InterpolationTypeCuda = None
-    # if interType == "LINEAR":
-    #   InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_LINEAR
-    # elif interType == "CUBIC_HERMITESPLINE":
-    #   InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_CUBIC_HERMITESPLINE
-    # #
-    # boundaryType = config.get('PARAMETERS', 'BoundaryType')
-    # BoundaryTypeCuda = None
-    # if boundaryType == "NEAREST":
-    #     BoundaryTypeCuda = opticalFlow.BoundaryType.BOUNDARY_NEAREST
-    # elif boundaryType == "MIRROR":
-    #     BoundaryTypeCuda = opticalFlow.BoundaryType.BOUNDARY_MIRROR
-    # elif boundaryType == "REFLECT":
-    #     BoundaryTypeCuda = opticalFlow.BoundaryType.BOUNDARY_REFLECT
-    # else:
-    #     raise Exception("wrong BoundaryType in configParser")
-    # #
-    # warpingOp = opticalFlow.Warping3D(meshInfo3D_cuda,InterpolationTypeCuda,BoundaryTypeCuda)
-    # mask_warped = warpingOp.forward(mask,u)
-
-    # save_slices(mask_warped, f"mask_warped_time{t0}.png", saveDirStep)
-    # save_single_zslices(mask_warped, saveDirStep, "mask_warped_slices", 1., 2)
-
-    # #add mask to mri images 
-    # saveDirMRISlices = os.path.join(saveDirStep, "I0Slices")
-    # saveDirMaskSlices = os.path.join(saveDirStep, "mask_slices")
-    # saveDirSumSlices = os.path.join(saveDirStep, "sum_slices")
-    # if not os.path.exists(saveDirSumSlices):
-    #     os.makedirs(saveDirSumSlices)
-    # for z in range(0,NZ):
-    #   fileNameMRISlice = os.path.join(saveDirMRISlices, f"colorimg_z{z}.png") 
-    #   img_mri = cv2.imread(fileNameMRISlice)
-    #   fileNameMaskSlice = os.path.join(saveDirMaskSlices, f"colorimg_z{z}.png") 
-    #   img_mask = cv2.imread(fileNameMaskSlice)
-    #   fileNameSumSlice = os.path.join(saveDirSumSlices, f"sumimg_z{z}.png")
-    #   img_sum = img_mri + img_mask 
-    #   cv2.imwrite(fileNameSumSlice,img_sum)
-    #   fileNameSumSliceInvert = os.path.join(saveDirSumSlices, f"invertsumimg_z{z}.png")
-    #   img_sum_invert = 255. - img_sum
-    #   cv2.imwrite(fileNameSumSliceInvert,img_sum_invert)
 
 
     # #TODO swap result (Z,Y,X) back to (X,Y,Z):

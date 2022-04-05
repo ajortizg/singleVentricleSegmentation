@@ -1,5 +1,6 @@
 #include <pybind11/pybind11.h>
 #include "differentialOps.h"
+#include "anisotropicDifferentialOps.h"
 #include "prolongationOps.h"
 #include "warpingOps.h"
 #include "opticalFlowOps.h"
@@ -90,9 +91,27 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
 
 
   //=======================================
+  // anisotropicDifferentialOps
+  //======================================= 
+
+  py::class_<AnisotropicNabla2D>(m,"AnisotropicNabla2D")
+        .def(py::init<const MeshInfo2D&, const float, const float>())
+        .def("computeTangentVecs", &AnisotropicNabla2D::computeTangentVecs)
+        .def("forwardVectorField", &AnisotropicNabla2D::forwardVectorField)
+        .def("backwardVectorField", &AnisotropicNabla2D::backwardVectorField);
+
+  py::class_<AnisotropicNabla3D>(m,"AnisotropicNabla3D")
+        .def(py::init<const MeshInfo3D&, const float, const float>())
+        .def("computeTangentVecs", &AnisotropicNabla3D::computeTangentVecs)
+        .def("forwardVectorField", &AnisotropicNabla3D::forwardVectorField)
+        .def("backwardVectorField", &AnisotropicNabla3D::backwardVectorField);
+
+
+  //=======================================
   // interpolation
   //======================================= 
   py::enum_<InterpolationType>(m, "InterpolationType")
+    .value("INTERPOLATE_NEAREST", InterpolationType::INTERPOLATE_NEAREST)
     .value("INTERPOLATE_LINEAR", InterpolationType::INTERPOLATE_LINEAR)
     .value("INTERPOLATE_CUBIC_HERMITESPLINE", InterpolationType::INTERPOLATE_CUBIC_HERMITESPLINE)
 //     .value("INTERPOLATE_CUBIC_BSPLINE", InterpolationType::INTERPOLATE_CUBIC_BSPLINE)

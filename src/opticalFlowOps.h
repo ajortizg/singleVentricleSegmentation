@@ -9,21 +9,6 @@
 // CUDA forward declarations
 //=======================================
 
-
-//old
-// torch::Tensor cuda_TVL1OF_threshold( const torch::Tensor &u, const torch::Tensor &rho, 
-//                                      const torch::Tensor &I1_warped_gradx, const torch::Tensor &I1_warped_grady, const torch::Tensor &I1_warped_gradz,  
-//                                      const float LT,
-//                                      const MeshInfo3D &meshInfo);
-
-
-// void cuda_TVL1OF_updateDualVariable(torch::Tensor &u, const torch::Tensor &v, torch::Tensor &p,
-//                                  const float TAU, const float THETA
-//                                  const MeshInfo3D &meshInfo);
-
-//new: CP
-
-
 // float cuda_TVL1OF2D_PrimalFct( const float primalFctWeight_Matching,
 //                                const torch::Tensor &rho, 
 //                                const MeshInfo2D &meshInfo);
@@ -62,31 +47,6 @@ torch::Tensor cuda_TVL1OF3D_proxDual( const torch::Tensor &dualVariable,
 //=======================================
 // C++ interface
 //=======================================
-
-//old
-  // torch::Tensor TVL1OF_threshold(const torch::Tensor &u, const torch::Tensor &rho, 
-  //                                const torch::Tensor &I1_warped_gradx, const torch::Tensor &I1_warped_grady, const torch::Tensor &I1_warped_gradz,
-  //                                const float LT,
-  //                                const MeshInfo3D &meshInfo){
-  //   CHECK_INPUT(u);
-  //   CHECK_INPUT(rho);
-  //   CHECK_INPUT(I1_warped_gradx);
-  //   CHECK_INPUT(I1_warped_grady);
-  //   CHECK_INPUT(I1_warped_gradz);
-  //   return cuda_TVL1OF_threshold(u,rho,I1_warped_gradx,I1_warped_grady,I1_warped_gradz,LT,meshInfo);
-  // }
-
-  // void TVL1OF_updateDualVariable(torch::Tensor &u, const torch::Tensor &v, torch::Tensor &p,
-  //                                const float TAU, const float THETA
-  //                                const MeshInfo3D &meshInfo){
-  //   CHECK_INPUT(u);
-  //   CHECK_INPUT(v);
-  //   CHECK_INPUT(p);
-  //   cuda_TVL1OF_updateDualVariable(u,v,p,TAU,THETA,meshInfo);
-  // }
-
-
-//new: CP
 
 // float TVL1OF2D_PrimalFct( const float primalFctWeight_Matching,
 //                           const torch::Tensor &rho,

@@ -1,3 +1,5 @@
+
+import sys
 import numpy as np
 import nibabel as nib
 import os
@@ -5,13 +7,9 @@ import pandas
 import configparser
 import time
 
-def createSaveDirectory(OUTPUT_PATH, name ):
-    timestr = time.strftime("%Y%m%d-%H%M%S")
-    saveDir = os.path.sep.join([OUTPUT_PATH, name + "_" + timestr])
-    if not os.path.exists(saveDir):
-      os.makedirs(saveDir)
-    print("save results to directory: ", saveDir, "\n")
-    return saveDir
+utils_lib_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../utils'))
+sys.path.append(utils_lib_path)
+import plots
 
 def getRangeOfMask_xyz(mask):
     x,y,z = np.nonzero(mask)
@@ -22,7 +20,7 @@ if __name__ == "__main__":
     print("\n\n")
     print("==================================================")
     print("==================================================")
-    print("        preprocessing data:")
+    print("  preprocessing data: cutting out heart region    ")
     print("==================================================")
     print("==================================================")
     print("\n\n")
@@ -32,7 +30,7 @@ if __name__ == "__main__":
     config.read('parser/configTVL1OF3D.ini')
 
     # create save directory
-    saveDir = createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), "preprocessing3D" )
+    saveDir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), "preprocessing3D_cut" )
 
     #save config file to save directory
     conifgOutput = os.path.sep.join([saveDir, "config.ini"])
@@ -57,12 +55,8 @@ if __name__ == "__main__":
     zshifts = np.zeros(numDataFiles)
 
     #
-    saveDir4D = os.path.sep.join([saveDir, VOLUMES_SUBDIR_PATH])
-    if not os.path.exists(saveDir4D):
-        os.makedirs(saveDir4D)
-    saveDirSegmentations = os.path.sep.join([saveDir, SEGMENTATIONS_SUBDIR_PATH])
-    if not os.path.exists(saveDirSegmentations):
-        os.makedirs(saveDirSegmentations)
+    saveDir4D = plots.createSubDirectory(saveDir, VOLUMES_SUBDIR_PATH)
+    saveDirSegmentations = plots.createSubDirectory(saveDir, SEGMENTATIONS_SUBDIR_PATH)
 
     for index, row in df.iterrows():
 

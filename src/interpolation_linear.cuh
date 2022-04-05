@@ -1,3 +1,6 @@
+#ifndef __INTERPOLATION_LINEAR_CUH_
+#define __INTERPOLATION_LINEAR_CUH_
+
 #include <torch/extension.h>
 #include <cuda.h>
 #include <cuda_runtime.h>
@@ -307,3 +310,5 @@ __device__ T cuda_interpolateMatrixField3d_trilinear(const torch::PackedTensorAc
 
   return out;
 }
+
+#endif

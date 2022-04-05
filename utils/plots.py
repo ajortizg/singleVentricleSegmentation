@@ -12,11 +12,30 @@ import matplotlib.pyplot as plt
 import cv2
 import numpy as np
 import math
+import time
 
 #scipy
 # from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 # from skimage import measure
 # from mpl_toolkits.mplot3d import axes3d
+
+##########################
+# general helper functions
+#########################
+def createSaveDirectory(OUTPUT_PATH, name ):
+    timestr = time.strftime("%Y%m%d-%H%M%S")
+    saveDir = os.path.sep.join([OUTPUT_PATH, name + "_" + timestr])
+    if not os.path.exists(saveDir):
+      os.makedirs(saveDir)
+    print("save results to directory: ", saveDir, "\n")
+    return saveDir
+
+def createSubDirectory(saveDir, SUBDIR_PATH ):
+    subDir = os.path.sep.join([saveDir, SUBDIR_PATH])
+    if not os.path.exists(subDir):
+        os.makedirs(subDir)
+    return subDir
+
 
 ##########################
 # pytorch input

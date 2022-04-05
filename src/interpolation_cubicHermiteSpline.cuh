@@ -1,3 +1,6 @@
+#ifndef __INTERPOLATION_CUBICHS_CUH_
+#define __INTERPOLATION_CUBICHS_CUH_
+
 #include <torch/extension.h>
 #include <cuda.h>
 #include <cuda_runtime.h>
@@ -343,3 +346,5 @@ __device__ T cuda_interpolateMatrixField3d_tricubicHermiteSpline(const torch::Pa
 
   return out;
 }
+
+#endif

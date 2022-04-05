@@ -31,14 +31,9 @@ on windows:
 
 ## TODOs
 
-* distinguish cases where diastole > systole or vice-versa
-
-### Regularizer
-* directional TV
-
-### preprocessing
-* cut out heart region (based on the two segmentations), save shifts to recover the object in the original files
-* refine in z-direction
+### saving
+* nifty header
+* cutting/prolongation: variable tolerance for cutting, prolongation of 4d data and mask: so far both by nearest neighbor
 
 ### tests
 * compare u,p on different levels, scaling correct?

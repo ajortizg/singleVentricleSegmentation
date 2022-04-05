@@ -16,9 +16,6 @@ from utils.flow_viz import *
 # utils_lib_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../utils'))
 # sys.path.append(utils_lib_path)
 
-# sys.path.append("../pythonOps/")
-# from pythonOps.mesh import *
-# from pythonOps.differentialOps import *
 pythonOps_lib_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../pythonOps'))
 sys.path.append(pythonOps_lib_path)
 # import mesh
@@ -56,13 +53,19 @@ class TVL1OpticalFlow2D:
         self.NUM_SCALES = config.getint('PARAMETERS', 'NUM_SCALES')
         self.MAX_WARPS = config.getint('PARAMETERS', 'MAX_WARPS')
         self.MAX_OUTER_ITERATIONS = config.getint('PARAMETERS', 'MAX_OUTER_ITERATIONS')
-        self.primalFctWeight_Matching = config.getfloat('PARAMETERS', 'primalFctWeight_Matching')
-        self.dualFctWeight_TV = config.getfloat('PARAMETERS', 'dualFctWeight_TV')
+        self.weight_Matching = config.getfloat('PARAMETERS', 'weight_Matching')
+        self.weight_TV = config.getfloat('PARAMETERS', 'weight_TV')
         self.PRIMALDUAL_ALGO_TYPE = config.getint('PARAMETERS', 'PRIMALDUAL_ALGO_TYPE')
         self.sigma = config.getfloat('PARAMETERS', 'sigma')
         self.tau = config.getfloat('PARAMETERS', 'tau')
         self.theta = config.getfloat('PARAMETERS', 'theta')
         self.gamma = config.getfloat('PARAMETERS', 'gamma')
+        # anisotropic differential op
+        self.useAnisotropicDifferentialOp = config.getboolean("PARAMETERS","useAnisotropicDifferentialOp")
+        self.anisotropicDifferentialOp_alpha, self.anisotropicDifferentialOp_beta = None, None
+        if self.useAnisotropicDifferentialOp:
+            self.anisotropicDifferentialOp_alpha = config.getfloat("PARAMETERS","anisotropicDifferentialOp_alpha")
+            self.anisotropicDifferentialOp_beta = config.getfloat("PARAMETERS","anisotropicDifferentialOp_beta")
         # blurring
         self.useGaussianBlur = config.getboolean("PARAMETERS","useGaussianBlur")
         self.GaussianBlurSigma = config.getfloat('PARAMETERS', 'GaussianBlurSigma')
@@ -193,6 +196,14 @@ class TVL1OpticalFlow2D:
         warpingOp = opticalFlow.Warping2D(meshInfo,self.InterpolationTypeCuda,self.BoundaryTypeCuda)
         I1_grad = nablaOp.forward(I1)
 
+        #optionally apply anisotropic differential op 
+        scalars = torch.zeros([meshInfo.getNY(),meshInfo.getNX()]).float().to(self.DEVICE)
+        normals = torch.zeros([meshInfo.getNY(),meshInfo.getNX(),2]).float().to(self.DEVICE)
+        tangents = torch.zeros([meshInfo.getNY(),meshInfo.getNX(),2]).float().to(self.DEVICE)
+        if self.useAnisotropicDifferentialOp:
+            anistropicNablaOp = opticalFlow.AnisotropicNabla2D(meshInfo,self.anisotropicDifferentialOp_alpha,self.anisotropicDifferentialOp_beta)
+            scalars,normals,tangents = anistropicNablaOp.computeTangentVecs(I1_grad)
+
         z = u
 
         for w in range(self.MAX_WARPS):
@@ -221,7 +232,10 @@ class TVL1OpticalFlow2D:
                 # update of dual variable
                 pold = p
                 z_grad = nablaOp.forwardVectorField(z)
-                dualVariable = p + sigma * z_grad
+                Dz_grad = z_grad
+                if self.useAnisotropicDifferentialOp:
+                    Dz_grad = anistropicNablaOp.forwardVectorField(z_grad,scalars,normals,tangents)
+                dualVariable = p + sigma * Dz_grad
                 # #start test
                 # z_grad_compx = nablaOp.forward(z[:,:,0].contiguous())
                 # z_grad_compy = nablaOp.forward(z[:,:,1].contiguous())
@@ -234,12 +248,12 @@ class TVL1OpticalFlow2D:
                 # print("diff z_grad_y.norm=",torch.norm(z_grad_compy - z_grad[:,:,1,:]).item())
                 # print("dualVariable.norm=",torch.norm(dualVariable).item())
                 # #end test
-                p = opticalFlow.TVL1OF2D_proxDual( dualVariable, sigma, self.dualFctWeight_TV, meshInfo)
-                if self.dualFctWeight_TV == 0.:
+                p = opticalFlow.TVL1OF2D_proxDual( dualVariable, sigma, self.weight_TV, meshInfo)
+                if self.weight_TV == 0.:
                    p = torch.zeros([meshInfo.getNY(),meshInfo.getNX(),2,2]).float().to(self.DEVICE)
                 #debug
                 breakConditionVecDual[n] = torch.norm(p-pold).item()
-                dualFctVec[n] = self.dualFctWeight_TV * torch.sum(torch.norm(p, dim=3))
+                dualFctVec[n] = self.weight_TV * torch.sum(torch.norm(p, dim=3))
 
 
                 # update of primal variable
@@ -255,16 +269,19 @@ class TVL1OpticalFlow2D:
                 # print("diff=",torch.norm(testVec1 - testVec2).item())
                 # #print("rho.norm = ", torch.norm(rho).item() )
                 #end test
-                p_div = nablaOp.backwardVectorField(p)
-                primalVariable = u - tau * p_div
-                u = opticalFlow.TVL1OF2D_proxPrimal(primalVariable, tau, self.primalFctWeight_Matching, rho, I1_warped_grad, meshInfo )
-                # if self.primalFctWeight_Matching == 0.:
+                Dp = p
+                if self.useAnisotropicDifferentialOp:
+                    Dp = anistropicNablaOp.backwardVectorField(p,scalars,normals,tangents)
+                Dp_div = nablaOp.backwardVectorField(Dp)
+                primalVariable = u - tau * Dp_div
+                u = opticalFlow.TVL1OF2D_proxPrimal(primalVariable, tau, self.weight_Matching, rho, I1_warped_grad, meshInfo )
+                # if self.weight_Matching == 0.:
                 #     u = torch.zeros([meshInfo.getNY(),meshInfo.getNX(),2]).float().to(self.DEVICE)
                 # debug
                 breakConditionVecPrimal[n] = torch.norm(u-uold).item()
-                #primalFctVec[n] = opticalFlow.TVL1OF2D_PrimalFct(primalFctWeight_Matching, rho, meshInfo )
+                #primalFctVec[n] = opticalFlow.TVL1OF2D_PrimalFct(weight_Matching, rho, meshInfo )
                 rho_new = rho_c + torch.sum(u * I1_warped_grad, dim=2)
-                primalFctVec[n] = self.primalFctWeight_Matching * torch.sum(torch.abs(rho_new))
+                primalFctVec[n] = self.weight_Matching * torch.sum(torch.abs(rho_new))
 
                 #update of stepsizes
                 if self.PRIMALDUAL_ALGO_TYPE == 1:

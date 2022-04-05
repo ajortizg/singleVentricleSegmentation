@@ -61,20 +61,28 @@ class TVL1OpticalFlow3D:
         self.NUM_SCALES = config.getint('PARAMETERS', 'NUM_SCALES')
         self.MAX_WARPS = config.getint('PARAMETERS', 'MAX_WARPS')
         self.MAX_OUTER_ITERATIONS = config.getint('PARAMETERS', 'MAX_OUTER_ITERATIONS')
-        self.primalFctWeight_Matching = config.getfloat('PARAMETERS', 'primalFctWeight_Matching')
-        self.dualFctWeight_TV = config.getfloat('PARAMETERS', 'dualFctWeight_TV')
+        self.weight_Matching = config.getfloat('PARAMETERS', 'weight_Matching')
+        self.weight_TV = config.getfloat('PARAMETERS', 'weight_TV')
         self.PRIMALDUAL_ALGO_TYPE = config.getint('PARAMETERS', 'PRIMALDUAL_ALGO_TYPE')
         self.sigma = config.getfloat('PARAMETERS', 'sigma')
         self.tau = config.getfloat('PARAMETERS', 'tau')
         self.theta = config.getfloat('PARAMETERS', 'theta')
         self.gamma = config.getfloat('PARAMETERS', 'gamma')
+        # anisotropic differential op
+        self.useAnisotropicDifferentialOp = config.getboolean("PARAMETERS","useAnisotropicDifferentialOp")
+        self.anisotropicDifferentialOp_alpha, self.anisotropicDifferentialOp_beta = None, None
+        if self.useAnisotropicDifferentialOp:
+            self.anisotropicDifferentialOp_alpha = config.getfloat("PARAMETERS","anisotropicDifferentialOp_alpha")
+            self.anisotropicDifferentialOp_beta = config.getfloat("PARAMETERS","anisotropicDifferentialOp_beta")
         # blurring
         self.useGaussianBlur = config.getboolean("PARAMETERS","useGaussianBlur")
         self.GaussianBlurSigma = config.getfloat('PARAMETERS', 'GaussianBlurSigma')
         # interpolation
         interType = config.get('PARAMETERS', 'InterpolationType')
         self.InterpolationTypeCuda = None
-        if interType == "LINEAR":
+        if interType == "NEAREST":
+            self.InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_NEAREST
+        elif interType == "LINEAR":
             self.InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_LINEAR
         elif interType == "CUBIC_HERMITESPLINE":
             self.InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_CUBIC_HERMITESPLINE
@@ -204,6 +212,15 @@ class TVL1OpticalFlow3D:
         warpingOp = opticalFlow.Warping3D(meshInfo,self.InterpolationTypeCuda,self.BoundaryTypeCuda)
         I1_grad = nablaOp.forward(I1)
 
+        #optionally apply anisotropic differential op 
+        scalars = torch.zeros([meshInfo.getNZ(),meshInfo.getNY(),meshInfo.getNX()]).float().to(self.DEVICE)
+        normals = torch.zeros([meshInfo.getNZ(),meshInfo.getNY(),meshInfo.getNX(),3]).float().to(self.DEVICE)
+        tangents1 = torch.zeros([meshInfo.getNZ(),meshInfo.getNY(),meshInfo.getNX(),3]).float().to(self.DEVICE)
+        tangents2 = torch.zeros([meshInfo.getNZ(),meshInfo.getNY(),meshInfo.getNX(),3]).float().to(self.DEVICE)
+        if self.useAnisotropicDifferentialOp:
+            anistropicNablaOp = opticalFlow.AnisotropicNabla3D(meshInfo,self.anisotropicDifferentialOp_alpha,self.anisotropicDifferentialOp_beta)
+            scalars,normals,tangents1,tangents2 = anistropicNablaOp.computeTangentVecs(I1_grad)
+
         z = u
 
         for w in range(self.MAX_WARPS):
@@ -229,10 +246,13 @@ class TVL1OpticalFlow3D:
                 # update of dual variable
                 pold = p
                 z_grad = nablaOp.forwardVectorField(z)
-                dualVariable = p + sigma * z_grad
-                p = opticalFlow.TVL1OF3D_proxDual( dualVariable, sigma, self.dualFctWeight_TV, meshInfo)
+                Dz_grad = z_grad
+                if self.useAnisotropicDifferentialOp:
+                    Dz_grad = anistropicNablaOp.forwardVectorField(z_grad,scalars,normals,tangents1,tangents2)
+                dualVariable = p + sigma * Dz_grad
+                p = opticalFlow.TVL1OF3D_proxDual( dualVariable, sigma, self.weight_TV, meshInfo)
                 breakConditionVecDual[n] = torch.norm(p-pold).item()
-                if self.dualFctWeight_TV == 0.:
+                if self.weight_TV == 0.:
                    p = torch.zeros([meshInfo.getNZ(),meshInfo.getNY(),meshInfo.getNX(),3,3]).float().to(self.DEVICE)
 
                 # update of primal variable
@@ -241,11 +261,14 @@ class TVL1OpticalFlow3D:
                 #rho = rho_c + u[:, :, :, 0] * I1_warped_grad[:, :, :, 0] + u[:, :, :, 1] * I1_warped_grad[:, :, :, 1] + u[:, :, :, 2] * I1_warped_grad[:, :, :, 2]
                 rho = rho_c + torch.sum(u * I1_warped_grad, dim=3)
                 #print("rho.norm = ", torch.norm(rho).item() )
-                p_div = nablaOp.backwardVectorField(p)
-                primalVariable = u - tau * p_div
-                u = opticalFlow.TVL1OF3D_proxPrimal(primalVariable, tau, self.primalFctWeight_Matching, rho, I1_warped_grad, meshInfo )
+                Dp = p 
+                if self.useAnisotropicDifferentialOp:
+                    Dp = anistropicNablaOp.backwardVectorField(p,scalars,normals,tangents1,tangents2)
+                Dp_div = nablaOp.backwardVectorField(Dp)
+                primalVariable = u - tau * Dp_div
+                u = opticalFlow.TVL1OF3D_proxPrimal(primalVariable, tau, self.weight_Matching, rho, I1_warped_grad, meshInfo )
                 breakConditionVecPrimal[n] = torch.norm(u-uold).item()
-                # if self.primalFctWeight_Matching == 0.:
+                # if self.weight_Matching == 0.:
                 #     u = torch.zeros([meshInfo.getNZ(),meshInfo.getNY(),meshInfo.getNX(),3]).float().to(self.DEVICE)
 
                 #update of stepsizes
@@ -282,7 +305,9 @@ class TVL1OpticalFlow3D:
             os.makedirs(saveDirStep)
 
         plotOpticalFlow3D(u.cpu().detach().numpy(), "u", saveDirStep, step)
+        save3D_torch_to_nifty(I0,saveDirStep,f"I0.nii")
         save_slices(I0,f"I0_it{step}.png", saveDirStep)
+        save3D_torch_to_nifty(I1,saveDirStep,f"I1.nii")
         save_slices(I1,f"I1_it{step}.png", saveDirStep)
         warpingOp = opticalFlow.Warping3D(meshInfo,self.InterpolationTypeCuda,self.BoundaryTypeCuda)
         I1_warped = warpingOp.forward(I1,u)
@@ -325,7 +350,6 @@ class TVL1OpticalFlow3D:
         mask_warped = warpingOp.forward(mask,u)
 
         save3D_torch_to_nifty(mask_warped,saveDir,f"mask_warped_time{t0}.nii")
-
         save_slices(mask_warped, f"mask_warped_time{t0}.png", saveDir)
         save_single_zslices(mask_warped, saveDir, "mask_warped_slices", 1., 2)
 

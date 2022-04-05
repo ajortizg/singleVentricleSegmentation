@@ -8,14 +8,148 @@
 #include <stdio.h>
 
 #include "coreDefines.h"
-#include "interpolation_cubicHermiteSpline.cu"
-#include "interpolation_linear.cu"
+// #include "interpolation_cubicHermiteSpline.cu"
+// #include "interpolation_linear.cu"
+// #include "interpolation_nearest.cu"
+#include "interpolation.cuh"
 #include "boundary.cuh"
 #include "cudaDebug.cuh"
 
 
 
 // CUDA kernels
+
+//==========================================
+// nearest
+//==========================================
+
+template <typename T>
+__global__ void cuda_warp1d_nearest_kernel(
+  const torch::PackedTensorAccessor32<T,1,torch::RestrictPtrTraits> u,
+  const torch::PackedTensorAccessor32<T,2,torch::RestrictPtrTraits> phi,
+  const int NX, const float LX, const float hX,
+  const int boundary,
+  torch::PackedTensorAccessor32<T,1,torch::RestrictPtrTraits> u_warped)
+{
+  int ix = blockDim.x * blockIdx.x + threadIdx.x;
+  if (ix < NX )
+  {
+    const T dx = phi[ix][0];
+    const T coord_x_warped = ix * hX + dx;
+    u_warped[ix] = cuda_interpolate1d_nearest(u, NX, LX, hX, boundary, coord_x_warped );
+  }  
+}
+
+template <typename T>
+__global__ void cuda_warp2d_nearest_kernel(
+  const torch::PackedTensorAccessor32<T,2,torch::RestrictPtrTraits> u,
+  const torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> phi,
+  const int NY, const int NX,
+  const float LY, const float LX,
+  const float hY, const float hX,
+  const int boundary,
+  torch::PackedTensorAccessor32<T,2,torch::RestrictPtrTraits> u_warped)
+{
+  int ix = blockDim.x * blockIdx.x + threadIdx.x;
+  int iy = blockDim.y * blockIdx.y + threadIdx.y;
+
+  if (ix < NX && iy < NY )
+  {
+    const T dx = phi[iy][ix][0];
+    const T dy = phi[iy][ix][1];
+    const T coord_x_warped = ix * hX + dx;
+    const T coord_y_warped = iy * hY + dy;
+    u_warped[iy][ix] = cuda_interpolate2d_nearest(u, NY, NX, LY, LX, hY, hX, boundary, coord_y_warped, coord_x_warped);
+  }
+}
+
+template <typename T>
+__global__ void cuda_warpVectorField2d_nearest_kernel(
+  const torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> u,
+  const torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> phi,
+  const int NY, const int NX,
+  const float LY, const float LX,
+  const float hY, const float hX,
+  const int numComp,
+  const int boundary,
+  torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> u_warped)
+{
+  int ix = blockDim.x * blockIdx.x + threadIdx.x;
+  int iy = blockDim.y * blockIdx.y + threadIdx.y;
+
+  if (ix < NX && iy < NY )
+  {
+    const T dx = phi[iy][ix][0];
+    const T dy = phi[iy][ix][1];
+    const T coord_x_warped = ix * hX + dx;
+    const T coord_y_warped = iy * hY + dy;
+    for(int comp=0; comp<numComp; ++comp)
+    {
+      u_warped[iy][ix][comp] = cuda_interpolateVectorField2d_nearest(u, NY, NX, LY, LX, hY, hX, boundary, coord_y_warped, coord_x_warped, comp);
+    }
+  }
+}
+
+template <typename T>
+__global__ void cuda_warp3d_nearest_kernel(
+  const torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> u,
+  const torch::PackedTensorAccessor32<T,4,torch::RestrictPtrTraits> phi,
+  const int NZ, const int NY, const int NX,
+  const float LZ, const float LY, const float LX,
+  const float hZ, const float hY, const float hX,
+  const int boundary,
+  torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> u_warped)
+{
+  int ix = blockDim.x * blockIdx.x + threadIdx.x;
+  int iy = blockDim.y * blockIdx.y + threadIdx.y;
+  int iz = blockDim.z * blockIdx.z + threadIdx.z;
+
+  if (ix < NX && iy < NY && iz < NZ )
+  {
+    const T dx = phi[iz][iy][ix][0];
+    const T dy = phi[iz][iy][ix][1];
+    const T dz = phi[iz][iy][ix][2];
+    const T coord_x_warped = ix * hX + dx;
+    const T coord_y_warped = iy * hY + dy;
+    const T coord_z_warped = iz * hZ + dz;
+    u_warped[iz][iy][ix] = cuda_interpolate3d_nearest(u, NZ, NY, NX, LZ, LY, LX, hZ, hY, hX, boundary, coord_z_warped, coord_y_warped, coord_x_warped);
+  }
+}
+
+template <typename T>
+__global__ void cuda_warpVectorField3d_nearest_kernel(
+  const torch::PackedTensorAccessor32<T,4,torch::RestrictPtrTraits> u,
+  const torch::PackedTensorAccessor32<T,4,torch::RestrictPtrTraits> phi,
+  const int NZ, const int NY, const int NX,
+  const float LZ, const float LY, const float LX,
+  const float hZ, const float hY, const float hX,
+  const int numComp,
+  const int boundary,
+  torch::PackedTensorAccessor32<T,4,torch::RestrictPtrTraits> u_warped)
+{
+  int ix = blockDim.x * blockIdx.x + threadIdx.x;
+  int iy = blockDim.y * blockIdx.y + threadIdx.y;
+  int iz = blockDim.z * blockIdx.z + threadIdx.z;
+
+  if (ix < NX && iy < NY && iz < NZ )
+  {
+    const T dx = phi[iz][iy][ix][0];
+    const T dy = phi[iz][iy][ix][1];
+    const T dz = phi[iz][iy][ix][2];
+    const T coord_x_warped = ix * hX + dx;
+    const T coord_y_warped = iy * hY + dy;
+    const T coord_z_warped = iz * hZ + dz;
+    for(int comp=0; comp<numComp; ++comp)
+    {
+      u_warped[iz][iy][ix][comp] = cuda_interpolateVectorField3d_nearest(u, NZ, NY, NX, LZ, LY, LX, hZ, hY, hX, boundary, coord_z_warped, coord_y_warped, coord_x_warped, comp);
+    }
+  }
+}
+
+//==========================================
+// linear
+//==========================================
+
 template <typename T>
 __global__ void cuda_warp1d_linear_kernel(
   const torch::PackedTensorAccessor32<T,1,torch::RestrictPtrTraits> u,
@@ -63,6 +197,7 @@ __global__ void cuda_warpVectorField2d_bilinear_kernel(
   const int NY, const int NX,
   const float LY, const float LX,
   const float hY, const float hX,
+  const int numComp,
   const int boundary,
   torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> u_warped)
 {
@@ -75,7 +210,7 @@ __global__ void cuda_warpVectorField2d_bilinear_kernel(
     const T dy = phi[iy][ix][1];
     const T coord_x_warped = ix * hX + dx;
     const T coord_y_warped = iy * hY + dy;
-    for(int comp=0; comp<2; ++comp)
+    for(int comp=0; comp<numComp; ++comp)
     {
       u_warped[iy][ix][comp] = cuda_interpolateVectorField2d_bilinear(u, NY, NX, LY, LX, hY, hX, boundary, coord_y_warped, coord_x_warped, comp);
     }
@@ -115,6 +250,7 @@ __global__ void cuda_warpVectorField3d_trilinear_kernel(
   const int NZ, const int NY, const int NX,
   const float LZ, const float LY, const float LX,
   const float hZ, const float hY, const float hX,
+  const int numComp,
   const int boundary,
   torch::PackedTensorAccessor32<T,4,torch::RestrictPtrTraits> u_warped)
 {
@@ -130,12 +266,16 @@ __global__ void cuda_warpVectorField3d_trilinear_kernel(
     const T coord_x_warped = ix * hX + dx;
     const T coord_y_warped = iy * hY + dy;
     const T coord_z_warped = iz * hZ + dz;
-    for(int comp=0; comp<3; ++comp)
+    for(int comp=0; comp<numComp; ++comp)
     {
       u_warped[iz][iy][ix][comp] = cuda_interpolateVectorField3d_trilinear(u, NZ, NY, NX, LZ, LY, LX, hZ, hY, hX, boundary, coord_z_warped, coord_y_warped, coord_x_warped, comp);
     }
   }
 }
+
+//==========================================
+// cubic hermite spline
+//==========================================
 
 template <typename T>
 __global__ void cuda_warp1d_cubicHermiteSpline_kernel(
@@ -184,6 +324,7 @@ __global__ void cuda_warpVectorField2d_bicubicHermiteSpline_kernel(
   const int NY, const int NX,
   const float LY, const float LX,
   const float hY, const float hX,
+  const int numComp,
   const int boundary,
   torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> u_warped)
 {
@@ -196,7 +337,7 @@ __global__ void cuda_warpVectorField2d_bicubicHermiteSpline_kernel(
     const T dy = phi[iy][ix][1];
     const T coord_x_warped = ix * hX + dx;
     const T coord_y_warped = iy * hY + dy;
-    for(int comp=0; comp<2; ++comp)
+    for(int comp=0; comp<numComp; ++comp)
     {
       u_warped[iy][ix][comp] = cuda_interpolateVectorField2d_bicubicHermiteSpline(u, NY, NX, LY, LX, hY, hX, boundary, coord_y_warped, coord_x_warped, comp);
     }
@@ -236,6 +377,7 @@ __global__ void cuda_warpVectorField3d_tricubicHermiteSpline_kernel(
   const int NZ, const int NY, const int NX,
   const float LZ, const float LY, const float LX,
   const float hZ, const float hY, const float hX,
+  const int numComp,
   const int boundary,
   torch::PackedTensorAccessor32<T,4,torch::RestrictPtrTraits> u_warped)
 {
@@ -251,7 +393,7 @@ __global__ void cuda_warpVectorField3d_tricubicHermiteSpline_kernel(
     const T coord_x_warped = ix * hX + dx;
     const T coord_y_warped = iy * hY + dy;
     const T coord_z_warped = iz * hZ + dz;
-    for(int comp=0; comp<3; ++comp )
+    for(int comp=0; comp<numComp; ++comp )
     {
       u_warped[iz][iy][ix][comp] = cuda_interpolateVectorField3d_tricubicHermiteSpline(u, NZ, NY, NX, LZ, LY, LX, hZ, hY, hX, boundary, coord_z_warped, coord_y_warped, coord_x_warped, comp);
     }
@@ -287,6 +429,18 @@ torch::Tensor cuda_warp1d(
 
 switch(interpolation)
 {
+    case INTERPOLATE_NEAREST:
+          AT_DISPATCH_FLOATING_TYPES(u.type(), "warp1d_nearest", ([&]{
+            cuda_warp1d_nearest_kernel<scalar_t><<<numBlocks, blockSize>>>(
+              u.packed_accessor32<scalar_t,1,torch::RestrictPtrTraits>(),
+              phi.packed_accessor32<scalar_t,2,torch::RestrictPtrTraits>(),
+              NX, LX, hX, 
+              boundary,
+              u_warped.packed_accessor32<scalar_t,1,torch::RestrictPtrTraits>());
+          }));
+          cudaSafeCall(cudaGetLastError());
+    break;
+
     case INTERPOLATE_LINEAR:
           AT_DISPATCH_FLOATING_TYPES(u.type(), "warp1d_linear", ([&]{
             cuda_warp1d_linear_kernel<scalar_t><<<numBlocks, blockSize>>>(
@@ -353,6 +507,20 @@ torch::Tensor cuda_warp2d(
 
   switch(interpolation)
   {
+    case INTERPOLATE_NEAREST:
+          AT_DISPATCH_FLOATING_TYPES(u.type(), "warp2d_nearest", ([&]{
+            cuda_warp2d_nearest_kernel<scalar_t><<<numBlocks, blockSize>>>(
+              u.packed_accessor32<scalar_t,2,torch::RestrictPtrTraits>(),
+              phi.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>(),
+              NY, NX,
+              LY, LX,
+              hY, hX,
+              boundary,
+              u_warped.packed_accessor32<scalar_t,2,torch::RestrictPtrTraits>());
+          }));
+          cudaSafeCall(cudaGetLastError());
+    break;
+
     case INTERPOLATE_LINEAR:
           AT_DISPATCH_FLOATING_TYPES(u.type(), "warp2d_bilinear", ([&]{
             cuda_warp2d_bilinear_kernel<scalar_t><<<numBlocks, blockSize>>>(
@@ -366,7 +534,6 @@ torch::Tensor cuda_warp2d(
           }));
           cudaSafeCall(cudaGetLastError());
     break;
-
 
     case INTERPOLATE_CUBIC_HERMITESPLINE:
         AT_DISPATCH_FLOATING_TYPES(u.type(), "warp2d_bicubic", ([&]{
@@ -406,12 +573,13 @@ torch::Tensor cuda_warpVectorField2d(
 
   const int NY = u.size(0);
   const int NX = u.size(1);
+  const int numComp = u.size(2);
   const float LY = meshInfo.getLY();
   const float LX = meshInfo.getLX();
   const float hY = meshInfo.gethY();
   const float hX = meshInfo.gethX();
 
-  auto u_warped = torch::zeros({NY,NX,2}, u.options());
+  auto u_warped = torch::zeros({NY,NX,numComp}, u.options());
 
   const dim3 blockSize(32, 32, 1); 
   const dim3 numBlocks((NX + blockSize.x - 1) / blockSize.x, (NY + blockSize.y - 1) / blockSize.y );
@@ -423,6 +591,21 @@ torch::Tensor cuda_warpVectorField2d(
 
   switch(interpolation)
   {
+    case INTERPOLATE_NEAREST:
+          AT_DISPATCH_FLOATING_TYPES(u.type(), "warpVectorField2d_nearest", ([&]{
+            cuda_warpVectorField2d_nearest_kernel<scalar_t><<<numBlocks, blockSize>>>(
+              u.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>(),
+              phi.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>(),
+              NY, NX,
+              LY, LX,
+              hY, hX,
+              numComp,
+              boundary,
+              u_warped.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>());
+          }));
+          cudaSafeCall(cudaGetLastError());
+    break;
+
     case INTERPOLATE_LINEAR:
           AT_DISPATCH_FLOATING_TYPES(u.type(), "warpVectorField2d_bilinear", ([&]{
             cuda_warpVectorField2d_bilinear_kernel<scalar_t><<<numBlocks, blockSize>>>(
@@ -431,6 +614,7 @@ torch::Tensor cuda_warpVectorField2d(
               NY, NX,
               LY, LX,
               hY, hX,
+              numComp,
               boundary,
               u_warped.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>());
           }));
@@ -445,6 +629,7 @@ torch::Tensor cuda_warpVectorField2d(
             NY, NX,
             LY, LX,
             hY, hX,
+            numComp,
             boundary,
             u_warped.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>());
         }));
@@ -496,6 +681,20 @@ torch::Tensor cuda_warp3d(
 
    switch(interpolation)
   {
+    case INTERPOLATE_NEAREST:
+        AT_DISPATCH_FLOATING_TYPES(u.type(), "warp3d_nearest", ([&]{
+          cuda_warp3d_nearest_kernel<scalar_t><<<numBlocks, blockSize>>>(
+            u.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>(),
+            phi.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>(),
+            NZ, NY, NX,
+            LZ, LY, LX,
+            hZ, hY, hX,
+            boundary,
+            u_warped.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>());
+        }));
+        cudaSafeCall(cudaGetLastError());
+        break;
+
     case INTERPOLATE_LINEAR:
         AT_DISPATCH_FLOATING_TYPES(u.type(), "warp3d_trilinear", ([&]{
           cuda_warp3d_trilinear_kernel<scalar_t><<<numBlocks, blockSize>>>(
@@ -550,6 +749,7 @@ torch::Tensor cuda_warpVectorField3d(
   const int NZ = u.size(0);
   const int NY = u.size(1);
   const int NX = u.size(2);
+  const int numComp = u.size(3);
   const float LZ = meshInfo.getLZ();
   const float LY = meshInfo.getLY();
   const float LX = meshInfo.getLX();
@@ -557,7 +757,7 @@ torch::Tensor cuda_warpVectorField3d(
   const float hY = meshInfo.gethY();
   const float hX = meshInfo.gethX();
 
-  auto u_warped = torch::zeros({NZ,NY,NX,3}, u.options());
+  auto u_warped = torch::zeros({NZ,NY,NX,numComp}, u.options());
 
   const dim3 blockSize(16, 16, 3); 
   const dim3 numBlocks((NX + blockSize.x - 1) / blockSize.x, (NY + blockSize.y - 1) / blockSize.y, (NZ + blockSize.z - 1) / blockSize.z );
@@ -569,6 +769,21 @@ torch::Tensor cuda_warpVectorField3d(
 
   switch(interpolation)
   {
+    case INTERPOLATE_NEAREST:
+        AT_DISPATCH_FLOATING_TYPES(u.type(), "warpVectorField3d_nearest", ([&]{
+          cuda_warpVectorField3d_nearest_kernel<scalar_t><<<numBlocks, blockSize>>>(
+            u.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>(),
+            phi.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>(),
+            NZ, NY, NX,
+            LZ, LY, LX,
+            hZ, hY, hX,
+            numComp,
+            boundary,
+            u_warped.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>());
+        }));
+        cudaSafeCall(cudaGetLastError());
+        break;
+
     case INTERPOLATE_LINEAR:
         AT_DISPATCH_FLOATING_TYPES(u.type(), "warpVectorField3d_trilinear", ([&]{
           cuda_warpVectorField3d_trilinear_kernel<scalar_t><<<numBlocks, blockSize>>>(
@@ -577,12 +792,12 @@ torch::Tensor cuda_warpVectorField3d(
             NZ, NY, NX,
             LZ, LY, LX,
             hZ, hY, hX,
+            numComp,
             boundary,
             u_warped.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>());
         }));
         cudaSafeCall(cudaGetLastError());
         break;
-
 
     case INTERPOLATE_CUBIC_HERMITESPLINE:
         AT_DISPATCH_FLOATING_TYPES(u.type(), "warpVectorField3d_tricubic", ([&]{
@@ -592,6 +807,7 @@ torch::Tensor cuda_warpVectorField3d(
             NZ, NY, NX,
             LZ, LY, LX,
             hZ, hY, hX,
+            numComp,
             boundary,
             u_warped.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>());
         }));
