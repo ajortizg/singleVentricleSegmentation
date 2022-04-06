@@ -114,7 +114,7 @@ if __name__ == "__main__":
         es = []
         for eA, eB in zip(eAs, eBs):
             ei = eA*(1-alpha[t]) + eB*(alpha[t])  # fwd (A -> B)
-            ei.voxelize(NZ, NY, NX, eA.value)
+            ei.create_voxels(grid, eA.constant, eA.value1, eA.value2)
             # ei = eA*(alpha[t]) + eB*(1.0-alpha[t])  # bwd (B -> A)
             es.append(ei)
 

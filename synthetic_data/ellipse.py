@@ -101,7 +101,7 @@ class Ellipsoid:
         CZ, CY, CX = NZ//2, NY//2, NX//2
 
         self.mask = (xx - self.cx - CX) ** 2 / self.rx**2 + (yy - self.cy - CY) ** 2 \
-            / self.ry**2 + (zz - self.cz-CZ) ** 2 / self.rz**2 <= 1.0
+            / self.ry**2 + (zz - self.cz - CZ) ** 2 / self.rz**2 <= 1.0
 
         # Rotation about the image center
         Rx = rotx(self.angx)
