@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from ellipse import Ellipsoid
 from transforms import rotx, roty, rotz
-import open3d as o3d
+# import open3d as o3d
 import utils
 from tqdm import trange
 import sys

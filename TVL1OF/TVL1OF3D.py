@@ -353,6 +353,10 @@ class TVL1OpticalFlow3D:
         save_slices(mask_warped, f"mask_warped_time{t0}.png", saveDir)
         save_single_zslices(mask_warped, saveDir, "mask_warped_slices", 1., 2)
 
+        maskName = f"masked_warped_time{t0}.pt"
+        fileNameMask = os.path.join(saveDir, maskName) 
+        torch.save(mask_warped, fileNameMask)
+
         #TODO
         #add mask to mri images 
         saveDirMRISlices = os.path.join(saveDir, "it0/I0Slices")

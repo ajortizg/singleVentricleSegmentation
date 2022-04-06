@@ -81,15 +81,10 @@ if __name__ == "__main__":
         # print(hdr.get_xyzt_units())
 
         #read time steps for diastole and systole
-        # rowPatient = df[df['Name'] == PATIENT_NAME]
-        # indexPatient = rowPatient.index[0]
-        # tDiastole = rowPatient.loc[indexPatient, "Diastole"]
-        # tSystole = rowPatient.loc[indexPatient, "Systole"]
         tDiastole = row["Diastole"]
         tSystole = row["Systole"]
         print("   * systole at time:  ", tSystole)
         print("   * diastole at time: ", tDiastole)
-        numTimeSteps = tDiastole - tSystole
         print("=======================================")
 
 

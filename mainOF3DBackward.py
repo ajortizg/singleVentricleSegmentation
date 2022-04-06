@@ -98,9 +98,10 @@ if __name__ == "__main__":
     nii_mask_diastole = np.swapaxes(nii_mask_xyz_diastole, 0, 2)
     mask_diastole = torch.from_numpy(nii_mask_diastole).float().to(DEVICE)
 
-    saveDirInitTime = os.path.sep.join([saveDir, f"time{initTimeStep}"])
-    if not os.path.exists(saveDirInitTime):
-        os.makedirs(saveDirInitTime)
+    saveDirInitTime = plots.createSubDirectory(saveDir,f"time{initTimeStep}")
+    # saveDirInitTime = os.path.sep.join([saveDir, f"time{initTimeStep}"])
+    # if not os.path.exists(saveDirInitTime):
+    #     os.makedirs(saveDirInitTime)
 
     #initialization of optical flow and mask
     u = torch.zeros([NZ,NY,NX,3]).float().to(DEVICE)
@@ -113,9 +114,10 @@ if __name__ == "__main__":
 
 
     for t in range(initTimeStep, finalTimeStep):
-      saveDirTimeStep = os.path.sep.join([saveDir, f"time{t}"])
-      if not os.path.exists(saveDirTimeStep):
-        os.makedirs(saveDirTimeStep)
+      saveDirTimeStep = plots.createSubDirectory(saveDir,f"time{t}")
+      # saveDirTimeStep = os.path.sep.join([saveDir, f"time{t}"])
+      # if not os.path.exists(saveDirTimeStep):
+      #   os.makedirs(saveDirTimeStep)
       #convert to torch for given time steps
       t0, t1 = t+1, t
       I0 = torch.from_numpy(nii_data[:,:,:,t0]).float().to(DEVICE)
@@ -135,7 +137,3 @@ if __name__ == "__main__":
 
       #warp mask with the computed optical flow
       mask = alg.warpMask(mask,u,t0,saveDirTimeStep)
-
-
-    # #TODO swap result (Z,Y,X) back to (X,Y,Z):
-    # #result_backSwap = np.swapaxes(result, 0, 2)

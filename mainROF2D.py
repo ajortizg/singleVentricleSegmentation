@@ -2,8 +2,6 @@
 import numpy as np
 import os
 import configparser
-# import pandas
-# import nibabel as nib
 from PIL import Image
 
 from ROF.ROF2D import *

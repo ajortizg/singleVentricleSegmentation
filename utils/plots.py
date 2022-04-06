@@ -65,12 +65,19 @@ def saveImage(input,saveDir,name,max_gray_value=1.):
     cv2.imwrite(pathNameA,factor_gray_value * img)
 
 
-def save3D_torch_to_nifty(mask_warped,saveDir,fileName):
-    nii_mask_warped_zyx = mask_warped.cpu().detach().numpy()
-    nii_mask_warped_xyz = np.swapaxes(nii_mask_warped_zyx, 0, 2)
-    nii_mask_warped = nib.Nifti1Image(nii_mask_warped_xyz, affine=np.eye(4))
-    outputFile_mask_warped = os.path.sep.join([saveDir, fileName])
-    nib.save(nii_mask_warped, outputFile_mask_warped)
+def save3D_torch_to_nifty(data,saveDir,fileName):
+    nii_data_zyx = data.cpu().detach().numpy()
+    nii_data_xyz = np.swapaxes(nii_data_zyx, 0, 2)
+    nii_img = nib.Nifti1Image(nii_data_xyz, affine=np.eye(4))
+    outputFile = os.path.sep.join([saveDir, fileName])
+    nib.save(nii_img, outputFile)
+
+def save4D_torch_to_nifty(data,saveDir,fileName):
+    nii_data_zyxt = data.cpu().detach().numpy()
+    nii_data_xyzt = np.swapaxes(nii_data_zyxt, 0, 2)
+    nii_img = nib.Nifti1Image(nii_data_xyzt, affine=np.eye(4))
+    outputFile = os.path.sep.join([saveDir, fileName])
+    nib.save(nii_img, outputFile)
 
 
 def save_single_zslices(image3D, saveDir, subdir, max_gray_value=1., color_channel = -1):

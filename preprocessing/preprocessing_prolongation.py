@@ -117,7 +117,6 @@ if __name__ == "__main__":
         tSystole = row["Systole"]
         print("   * systole at time:  ", tSystole)
         print("   * diastole at time: ", tDiastole)
-        numTimeSteps = tDiastole - tSystole
         print("=======================================")
 
 
