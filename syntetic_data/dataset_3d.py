@@ -2,7 +2,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 from ellipse import Ellipsoid
 from transforms import rotx, roty, rotz
-# import open3d as o3d
 import utils
 from tqdm import trange
 import sys
@@ -33,29 +32,33 @@ def combine_voxels(ellipsoids):
                     img[z, y, x] = e2.voxels[z, y, x]
                 elif e1.mask[z, y, x]:
                     img[z, y, x] = e1.voxels[z, y, x]
+                else:
+                    img[z, y, x] = 0.05
     return img
 
 
 # Size of voxel map
 NZ, NY, NX = 16, 352, 352
+grid = utils.create_grid(NZ, NY, NX)
+
 e1A = Ellipsoid(cx=0, cy=0, cz=0, rx=90, ry=150, rz=8, angx=0, angy=0, angz=0)
-e1A.voxelize(NZ, NY, NX, value=0.3)
+e1A.create_voxels(grid, False, value1=0.1, value2=0.3)
 e2A = Ellipsoid(cx=0, cy=0, cz=0, rx=50, ry=100, rz=8, angx=0, angy=0, angz=0)
-e2A.voxelize(NZ, NY, NX, value=0.6)
+e2A.create_voxels(grid, False, value1=0.3, value2=0.6)
 e3A = Ellipsoid(cx=0, cy=0, cz=0, rx=30, ry=50, rz=8, angx=0, angy=0, angz=0)
-e3A.voxelize(NZ, NY, NX, value=0.9)
+e3A.create_voxels(grid, False, value1=0.6, value2=0.9)
 eAs = [e1A, e2A, e3A]
 
 
 e1B = Ellipsoid(cx=10, cy=-10, cz=0, rx=90, ry=150,
                 rz=8, angx=0, angy=0, angz=-10)
-e1B.voxelize(NZ, NY, NX, value=0.3)
+e1B.create_voxels(grid, False, value1=0.1, value2=0.3)
 e2B = Ellipsoid(cx=10, cy=-18, cz=0, rx=50, ry=100,
                 rz=8, angx=0, angy=0, angz=15)
-e2B.voxelize(NZ, NY, NX, value=0.6)
+e2B.create_voxels(grid, False, value1=0.3, value2=0.6)
 e3B = Ellipsoid(cx=15, cy=-10, cz=0, rx=30, ry=50,
                 rz=8, angx=0, angy=0, angz=12)
-e3B.voxelize(NZ, NY, NX, value=0.9)
+e3B.create_voxels(grid, False, value1=0.6, value2=0.9)
 eBs = [e1B, e2B, e3B]
 
 
@@ -73,7 +76,7 @@ for i in trange(ts):
     es = []
     for eA, eB in zip(eAs, eBs):
         ei = eA*(1-alpha[i]) + eB*(alpha[i])  # fwd (A -> B)
-        ei.voxelize(NZ, NY, NX, eA.value)
+        ei.create_voxels(grid,  eA.constant, eA.value1, eA.value2)
 #         # ei = eA*(alpha[i]) + eB*(1.0-alpha[i])  # bwd (B -> A)
         # print(ei)
         es.append(ei)
@@ -84,14 +87,14 @@ for i in trange(ts):
 
     ellipsoids.append(es)
 
-t = 9
-e = ellipsoids[9]
+# t = 9
+# e = ellipsoids[9]
 
 
-img_t0 = combine_voxels(e)
+# img_t0 = combine_voxels(e)
 utils.plot_slices(imgA, str="A", block=False)
-utils.plot_slices(imgB, str="B", block=False)
-utils.plot_slices(img_t0, str="t0", block=True)
+utils.plot_slices(imgB, str="B", block=True)
+# utils.plot_slices(img_t0, str="t0", block=True)
 
 # fig = plt.figure()
 # ax = fig.add_subplot(111, projection='3d', aspect='auto')
