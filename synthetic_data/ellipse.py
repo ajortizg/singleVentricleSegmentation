@@ -1,5 +1,6 @@
 import numpy as np
 from transforms import rotx, roty, rotz
+import utils
 
 
 class Ellipse:
@@ -63,7 +64,7 @@ class Ellipsoid:
         self.angx = angx
         self. angy = angy
         self.angz = angz
-        self.bins = 900
+        self.bins = 200
         self.color = np.random.rand(3)
 
         self.compute()
@@ -83,29 +84,53 @@ class Ellipsoid:
 
         self.xyz = np.array([self.x, self.y, self.z])
 
-        self.pc = np.zeros((3, np.size(self.x)))
-        self.pc[0, :] = np.reshape(self.x, -1)
-        self.pc[1, :] = np.reshape(self.y, -1)
-        self.pc[2, :] = np.reshape(self.z, -1)
+        # self.pc = np.zeros((3, np.size(self.x)))
+        # self.pc[0, :] = np.reshape(self.x, -1)
+        # self.pc[1, :] = np.reshape(self.y, -1)
+        # self.pc[2, :] = np.reshape(self.z, -1)
 
-    def voxelize(self, NZ, NY, NX, value):
-        self.value = value
+
+    def create_voxels(self, grid, constant, value1, value2):
+        self.constant = constant
+        self.value1 = value1
+        self.value2 = value2
+        xx = grid[:, :, :, 0]
+        yy = grid[:, :, :, 1]
+        zz = grid[:, :, :, 2]
+        NZ, NY, NX, _ = grid.shape
         CZ, CY, CX = NZ//2, NY//2, NX//2
-        self.mask = np.full((NZ, NY, NX), False)
 
-        # Move sphere to center of voxel image coordinates
-        for i in range(self.pc.shape[1]):
-            s = (self.pc[:, i] + np.array([CX, CY, CZ])).astype(int)
-            if (s[0] >= NX or s[1] >= NY or s[2] >= NZ):
-                continue
-            self.mask[s[2], s[1], s[0]] = True
+        self.mask = (xx - self.cx - CX) ** 2 / self.rx**2 + (yy - self.cy - CY) ** 2 \
+            / self.ry**2 + (zz - self.cz - CZ) ** 2 / self.rz**2 <= 1.0
 
-        for z in range(1, NZ//2, 1):
-            self.mask[z, :, :] = self.mask[z-1, :, :] | self.mask[z, :, :]
-        for z in range(NZ-1, NZ//2, -1):
-            self.mask[z-1, :, :] = self.mask[z-1, :, :] | self.mask[z, :, :]
+        # Rotation about the image center
+        Rx = rotx(self.angx)
+        Ry = roty(self.angy)
+        Rz = rotz(self.angz)
+        Rot = Rz@Ry@Rx
+        Rot = np.linalg.inv(Rot)
+        tx = CX - Rot[0, 0] * CX - Rot[0, 1] * CY - Rot[0, 2] * CZ
+        ty = CY - Rot[1, 0] * CX - Rot[1, 1] * CY - Rot[1, 2] * CZ
+        tz = CZ - Rot[2, 0] * CX - Rot[2, 1] * CY - Rot[2, 2] * CZ
+        t = np.array([tx, ty, tz])
 
-        self.voxels = np.where(self.mask, value, 0.0)
+        grid_t = np.zeros((NZ, NY, NX, 3), dtype=np.float64)
+        for z in range(NZ):
+            for y in range(NY):
+                for x in range(NX):
+                    grid_t[z, y, x, :] = Rot@grid[z, y, x, :] + t
+
+        self.voxels = np.where(self.mask, 1.0, 0.0)
+        self.voxels = utils.warp_grid(self.voxels, grid_t)
+        self.mask = np.where(self.voxels > 0, True, False)
+
+        if not constant:
+            # Gray value linealy varing in x direction
+            gray = np.linspace(value1, value2, NX)
+            for x in range(NX):
+                self.voxels[:, :, x] = gray[x] * self.mask[:, :, x]
+        else:
+            self.voxels = np.where(self.mask, value1, 0.0)
 
     def rotate(self):
         Rx = rotx(self.angx)

@@ -11,7 +11,7 @@ import configparser
 import torch
 import pandas
 
-# import utils
+import utils
 
 utils_lib_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../utils'))
 sys.path.append(utils_lib_path)
@@ -79,21 +79,22 @@ if __name__ == "__main__":
 
     # Size of voxel map
     NZ, NY, NX = 16, 352, 352
+    grid = utils.create_grid(NZ, NY, NX)
     e1A = Ellipsoid(cx=0, cy=0, cz=0, rx=90, ry=150, rz=8, angx=0, angy=0, angz=0)
-    e1A.voxelize(NZ, NY, NX, value=0.3)
+    e1A.create_voxels(grid, False, value1=0.1, value2=0.3)
     e2A = Ellipsoid(cx=0, cy=0, cz=0, rx=50, ry=100, rz=8, angx=0, angy=0, angz=0)
-    e2A.voxelize(NZ, NY, NX, value=0.6)
+    e2A.create_voxels(grid, False, value1=0.3, value2=0.6)
     e3A = Ellipsoid(cx=0, cy=0, cz=0, rx=30, ry=50, rz=8, angx=0, angy=0, angz=0)
-    e3A.voxelize(NZ, NY, NX, value=0.9)
+    e3A.create_voxels(grid, False, value1=0.6, value2=0.9)
     eAs = [e1A, e2A, e3A]
 
 
     e1B = Ellipsoid(cx=10, cy=-10, cz=0, rx=90, ry=150, rz=8, angx=0, angy=0, angz=-10)
-    e1B.voxelize(NZ, NY, NX, value=0.3)
+    e1B.create_voxels(grid, False, value1=0.1, value2=0.3)
     e2B = Ellipsoid(cx=10, cy=-18, cz=0, rx=50, ry=100, rz=8, angx=0, angy=0, angz=15)
-    e2B.voxelize(NZ, NY, NX, value=0.6)
+    e2B.create_voxels(grid, False, value1=0.3, value2=0.6)
     e3B = Ellipsoid(cx=15, cy=-10, cz=0, rx=30, ry=50, rz=8, angx=0, angy=0, angz=12)
-    e3B.voxelize(NZ, NY, NX, value=0.9)
+    e3B.create_voxels(grid, False, value1=0.6, value2=0.9)
     eBs = [e1B, e2B, e3B]
 
 
@@ -106,8 +107,6 @@ if __name__ == "__main__":
     tSystole = 0
     tDiastole = 9
     alpha = np.linspace(0.0, 1.0, ts)
-    # ellipsoids = []
-    # flows = []
 
     data4d = torch.zeros([NZ,NY,NX,ts]).float().to(DEVICE)
 
@@ -115,7 +114,7 @@ if __name__ == "__main__":
         es = []
         for eA, eB in zip(eAs, eBs):
             ei = eA*(1-alpha[t]) + eB*(alpha[t])  # fwd (A -> B)
-            ei.voxelize(NZ, NY, NX, eA.value)
+            ei.create_voxels(grid, eA.constant, eA.value1, eA.value2)
             # ei = eA*(alpha[t]) + eB*(1.0-alpha[t])  # bwd (B -> A)
             es.append(ei)
 
