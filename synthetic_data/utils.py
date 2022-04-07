@@ -37,7 +37,10 @@ def scale_grid(grid):
     return grid
 
 
-def warp_grid(vol, grid):
+def warp_grid(vol, grid, mode="bilinear"):
+    """
+    mode = {bilinear, nearest}
+    """
     grid = scale_grid(grid)
     new_coords = torch.from_numpy(grid)
 
@@ -46,5 +49,5 @@ def warp_grid(vol, grid):
     vol.unsqueeze_(dim=0).unsqueeze_(dim=0)
 
     vol_w = F.grid_sample(vol, new_coords, align_corners=True,
-                          mode="bilinear", padding_mode="zeros")
+                          mode=mode, padding_mode="zeros")
     return vol_w.squeeze().numpy()
