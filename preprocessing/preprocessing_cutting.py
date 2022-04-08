@@ -66,6 +66,7 @@ if __name__ == "__main__":
         print("load data for patient: ", PATIENT_NAME)
         vol = nib.load(os.path.sep.join([VOLUMES_PATH, PATIENT_NAME + ".nii.gz"]))
         vol_hdr = vol.header
+        vol_affine = vol.affine
         nii_data_xyzt = vol.get_fdata()
         NX = nii_data_xyzt.shape[0]
         NY = nii_data_xyzt.shape[1]
@@ -73,17 +74,19 @@ if __name__ == "__main__":
         NT = nii_data_xyzt.shape[3]
         print("   * (NX,NY,NZ,NT) = ", NX, NY, NZ, NT )
         #test hdr 
-        # print("test header:")
-        # print("slope_inter = ", vol_hdr.get_slope_inter() )
-        # #print("slice_times = ", vol_hdr.get_slice_times() )
-        # print("slice_duration = ", vol_hdr.get_slice_duration() )
-        # print("get_sform = ", vol_hdr.get_sform() )
-        # print("get_qform = ", vol_hdr.get_qform() )
-        # print("get_n_slices = ", vol_hdr.get_n_slices() )
-        # print("get_intent = ", vol_hdr.get_intent() )
-        # print("get_dim_info = ", vol_hdr.get_dim_info() )
-        # print("get_data_shape = ", vol_hdr.get_data_shape() )
-        # print("get_best_affine = ", vol_hdr.get_best_affine() )
+        print("test header:")
+        print("slope_inter = ", vol_hdr.get_slope_inter() )
+        #print("slice_times = ", vol_hdr.get_slice_times() )
+        print("slice_duration = ", vol_hdr.get_slice_duration() )
+        print("get_sform = ", vol_hdr.get_sform() )
+        print("get_qform = ", vol_hdr.get_qform() )
+        print("get_n_slices = ", vol_hdr.get_n_slices() )
+        print("get_intent = ", vol_hdr.get_intent() )
+        print("get_dim_info = ", vol_hdr.get_dim_info() )
+        print("get_data_shape = ", vol_hdr.get_data_shape() )
+        print("get_best_affine = ", vol_hdr.get_best_affine() )
+        print("test affine:")
+        print("affine map = ", vol_affine)
         
 
         #
@@ -100,6 +103,7 @@ if __name__ == "__main__":
         # get input masks for diastole and systole 
         nii_mask_diastole_load = nib.load(os.path.sep.join([SEGMENTATIONS_PATH, PATIENT_NAME, PATIENT_NAME + "_Diastole_Labelmap.nii"]))
         hdr_mask_diastole = nii_mask_diastole_load.header
+        affine_mask_diastole = nii_mask_diastole_load.affine
         nii_mask_diastole_xyz = nii_mask_diastole_load.get_fdata()
         zmin_dia, zmax_dia, ymin_dia, ymax_dia, xmin_dia, xmax_dia = getRangeOfMask_xyz(nii_mask_diastole_xyz)
         print("\nrange of diastole:")
@@ -109,6 +113,7 @@ if __name__ == "__main__":
 
         nii_mask_systole_load = nib.load(os.path.sep.join([SEGMENTATIONS_PATH, PATIENT_NAME, PATIENT_NAME + "_Systole_Labelmap.nii"]))
         hdr_mask_systole = nii_mask_systole_load.header
+        affine_mask_systole = nii_mask_systole_load.affine
         nii_mask_systole_xyz = nii_mask_systole_load.get_fdata()
         zmin_sys, zmax_sys, ymin_sys, ymax_sys, xmin_sys, xmax_sys = getRangeOfMask_xyz(nii_mask_systole_xyz)
         print("\nrange of systole:")
@@ -147,7 +152,8 @@ if __name__ == "__main__":
         ni_img_4d_hdr.set_zooms( vol_hdr.get_zooms()  )
         #ni_img_4d_hdr.set_xyzt_units( vol_hdr.get_xyzt_units() )
         #img
-        ni_img_4d = nib.Nifti1Image(cutting_4d, affine=np.eye(4), header=ni_img_4d_hdr)
+        #ni_img_4d = nib.Nifti1Image(cutting_4d, affine=np.eye(4), header=ni_img_4d_hdr)
+        ni_img_4d = nib.Nifti1Image(cutting_4d, affine=vol_affine, header=ni_img_4d_hdr)
         #save
         outputFile_4d = os.path.sep.join([saveDir4D, PATIENT_NAME + ".nii.gz"])
         nib.save(ni_img_4d, outputFile_4d)
@@ -171,7 +177,7 @@ if __name__ == "__main__":
         hdr_mask_diastole_cutting.set_zooms( hdr_mask_diastole.get_zooms()  )
         #hdr_mask_diastole_cutting.set_xyzt_units( hdr_mask_diastole.get_xyzt_units() )
         #img
-        ni_img_diastole = nib.Nifti1Image(cutting_diastole, affine=np.eye(4), header=hdr_mask_diastole_cutting)
+        ni_img_diastole = nib.Nifti1Image(cutting_diastole, affine=affine_mask_diastole, header=hdr_mask_diastole_cutting)
         #save
         outputFile_diastole = os.path.sep.join([saveDirPatient, PATIENT_NAME + "_Diastole_Labelmap.nii"])
         nib.save(ni_img_diastole, outputFile_diastole)
@@ -183,7 +189,7 @@ if __name__ == "__main__":
         hdr_mask_systole_cutting.set_zooms( hdr_mask_systole.get_zooms()  )
         #hdr_mask_systole_cutting.set_xyzt_units( hdr_mask_systole.get_xyzt_units() )
         #img
-        ni_img_systole = nib.Nifti1Image(cutting_systole, affine=np.eye(4), header=hdr_mask_systole_cutting)
+        ni_img_systole = nib.Nifti1Image(cutting_systole, affine=affine_mask_systole, header=hdr_mask_systole_cutting)
         #save
         outputFile_systole = os.path.sep.join([saveDirPatient, PATIENT_NAME + "_Systole_Labelmap.nii"])
         nib.save(ni_img_systole, outputFile_systole)
