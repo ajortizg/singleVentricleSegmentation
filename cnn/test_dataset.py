@@ -9,11 +9,21 @@ from unet_3d import UNet3D
 import time
 from torchsummary import summary
 from dataset import SingleVentricleDataset
+from torchvision.transforms import Compose
+import custom_transforms as ct
+
 
 config = configparser.ConfigParser()
 config.read("parser/configCNN.ini")
+cuda_availabe = config.get('DEVICE', 'cuda_availabe')
+DEVICE = "cuda" if cuda_availabe and torch.cuda.is_available() else "cpu"
 
-ds = SingleVentricleDataset(config)
+
+transforms = Compose([
+    ct.ToTensor(torch.FloatTensor, DEVICE)
+])
+
+ds = SingleVentricleDataset(config, transforms)
 
 for i, (v, ms, md, ts, td) in enumerate(ds):
     print(ds.get_patient_name(i))
@@ -24,8 +34,14 @@ for i, (v, ms, md, ts, td) in enumerate(ds):
     print()
 
 
-cuda_availabe = config.get('DEVICE', 'cuda_availabe')
-DEVICE = "cuda" if cuda_availabe and torch.cuda.is_available() else "cpu"
+idx, found = ds.index_for_patient("Child_26")
+(v, ms, md, ts, td) = ds[idx]
+print(ds.get_patient_name(idx))
+print(v.shape, torch.amax(v), torch.amin(v))
+print(ms.shape, ms.dtype)
+print(md.shape)
+print(ts, td)
+
 
 net = UNet3D(config).to(DEVICE)
 net = torch.nn.DataParallel(net, device_ids=[0, 1])
