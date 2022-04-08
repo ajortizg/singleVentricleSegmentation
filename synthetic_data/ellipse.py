@@ -67,6 +67,7 @@ class Ellipsoid:
         self.bins = 200
         self.color = np.random.rand(3)
 
+        # Only for visualization
         self.compute()
 
     def compute(self):
@@ -88,7 +89,6 @@ class Ellipsoid:
         # self.pc[0, :] = np.reshape(self.x, -1)
         # self.pc[1, :] = np.reshape(self.y, -1)
         # self.pc[2, :] = np.reshape(self.z, -1)
-
 
     def create_voxels(self, grid, constant, value1, value2):
         self.constant = constant
@@ -120,8 +120,19 @@ class Ellipsoid:
                 for x in range(NX):
                     grid_t[z, y, x, :] = Rot@grid[z, y, x, :] + t
 
-        self.voxels = np.where(self.mask, 1.0, 0.0)
-        self.voxels = utils.warp_grid(self.voxels, grid_t)
+        self.voxels = np.zeros((NZ, NY, NX))
+
+        if not constant:
+            # Gray value linealy varing in x direction
+            gray = np.linspace(value1, value2, NX)
+            for x in range(NX):
+                self.voxels[:, :, x] = gray[x] * self.mask[:, :, x]
+        else:
+            self.voxels = np.where(self.mask, value1, 0.0)
+
+        self.voxels = utils.warp_grid(self.voxels, grid_t, mode="nearest")
+        # self.mask = utils.warp_grid(self.mask.astype(
+        #     np.float64), grid_t, mode="nearest")
         self.mask = np.where(self.voxels > 0, True, False)
 
         if not constant:

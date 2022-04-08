@@ -41,23 +41,23 @@ def combine_voxels(ellipsoids):
 NZ, NY, NX = 16, 352, 352
 grid = utils.create_grid(NZ, NY, NX)
 
-e1A = Ellipsoid(cx=0, cy=0, cz=0, rx=90, ry=150, rz=8, angx=0, angy=0, angz=0)
+e1A = Ellipsoid(cx=0, cy=0, cz=0, rx=90, ry=150, rz=9, angx=0, angy=0, angz=0)
 e1A.create_voxels(grid, False, value1=0.1, value2=0.3)
-e2A = Ellipsoid(cx=0, cy=0, cz=0, rx=50, ry=100, rz=8, angx=0, angy=0, angz=0)
+e2A = Ellipsoid(cx=0, cy=0, cz=0, rx=50, ry=100, rz=9, angx=0, angy=0, angz=0)
 e2A.create_voxels(grid, False, value1=0.3, value2=0.6)
-e3A = Ellipsoid(cx=0, cy=0, cz=0, rx=30, ry=50, rz=8, angx=0, angy=0, angz=0)
+e3A = Ellipsoid(cx=0, cy=0, cz=0, rx=30, ry=50, rz=9, angx=0, angy=0, angz=0)
 e3A.create_voxels(grid, False, value1=0.6, value2=0.9)
 eAs = [e1A, e2A, e3A]
 
 
 e1B = Ellipsoid(cx=10, cy=-10, cz=0, rx=90, ry=150,
-                rz=8, angx=0, angy=0, angz=-10)
+                rz=9, angx=0, angy=0, angz=-10)
 e1B.create_voxels(grid, False, value1=0.1, value2=0.3)
 e2B = Ellipsoid(cx=10, cy=-18, cz=0, rx=50, ry=100,
-                rz=8, angx=0, angy=0, angz=15)
+                rz=9, angx=0, angy=0, angz=15)
 e2B.create_voxels(grid, False, value1=0.3, value2=0.6)
 e3B = Ellipsoid(cx=15, cy=-10, cz=0, rx=30, ry=50,
-                rz=8, angx=0, angy=0, angz=12)
+                rz=9, angx=0, angy=0, angz=12)
 e3B.create_voxels(grid, False, value1=0.6, value2=0.9)
 eBs = [e1B, e2B, e3B]
 
@@ -69,8 +69,7 @@ imgB = combine_voxels(eBs)
 # Compute intermediate steps
 ts = 10
 alpha = np.linspace(0.0, 1.0, ts)
-ellipsoids = []
-flows = []
+# ellipsoids = []
 
 for i in trange(ts):
     es = []
@@ -82,10 +81,11 @@ for i in trange(ts):
         es.append(ei)
 
     img_t = combine_voxels(es)
-    np.save(f"output/vol/vol_{i}.npy", img_t)
-    np.save(f"output/mask/mask_{i}.npy", es[-1].mask)
+    np.save(f"data/Synthetic3D/NIFTI_4D_Datasets/vol_{i}.npy", img_t)
+    np.save(
+        f"data/Synthetic3D/NIFTI_Single_Ventricle_Segmentations/mask_{i}.npy", es[-1].mask)
 
-    ellipsoids.append(es)
+    # ellipsoids.append(es)
 
 # t = 9
 # e = ellipsoids[9]
