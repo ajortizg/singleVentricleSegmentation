@@ -55,9 +55,8 @@ if __name__ == "__main__":
     #DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
     # create save directories
-    saveDir = config.get('DATA', 'BASE_PATH_3D')
-    if not os.path.exists(saveDir):
-        os.makedirs(saveDir)
+    saveDir = config.get('DATA', 'OUTPUT_PATH')
+    saveDir = plots.createSaveDirectory(saveDir, "Synthetic3D")
     VOLUMES_PATH = plots.createSubDirectory(saveDir, config.get('DATA', 'VOLUMES_SUBDIR_PATH'))
     SEGMENTATIONS_PATH = plots.createSubDirectory(saveDir, config.get('DATA', 'SEGMENTATIONS_SUBDIR_PATH'))
     SEGMENTATIONS_FILE = os.path.sep.join([saveDir, config.get('DATA', 'SEGMENTATIONS_FILE_NAME')])
