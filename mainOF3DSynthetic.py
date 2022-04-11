@@ -37,7 +37,7 @@ if __name__ == "__main__":
     with open(conifg_output, 'w') as config_file:
         config.write(config_file)
 
-    transforms = Compose([ct.ToTensor(torch.FloatTensor, DEVICE)])
+    transforms = Compose([ct.ToTensor()])
     ds = SingleVentricleDataset(config, transforms)
 
     idx, found = ds.index_for_patient(PATIENT_NAME)
@@ -45,7 +45,8 @@ if __name__ == "__main__":
         print(PATIENT_NAME + " not found!")
         sys.exit()
 
-    (data, mask_systole, mask_diastole, systole_time, diastole_time) = ds[idx]
+    (data, mask_systole, mask_diastole,
+     systole_time, diastole_time, pn) = ds[idx]
     NZ, NY, NX, NT = data.shape
     print("\n====================================")
     print("Load data for patient: " + PATIENT_NAME)
@@ -65,17 +66,19 @@ if __name__ == "__main__":
     p = torch.zeros([NZ, NY, NX, 3, 3]).float().to(DEVICE)
     mask = None
     if init_timestep == systole_time:
-        mask = mask_systole.clone().detach()
+        mask = mask_systole.clone().detach().to(DEVICE)
     else:
-        mask = mask_diastole.clone().detach()
+        mask = mask_diastole.clone().detach().to(DEVICE)
 
     for t in range(init_timestep, final_timestep):
         save_timestep_dir = plots.createSubDirectory(save_dir, f"time{t}")
 
         # Compute the optical flow for given time steps
-        t0, t1 = t + 1, t
-        I0 = data[:, :, :, t0]
-        I1 = data[:, :, :, t1]
+        # t0, t1 = t + 1, t
+        t0, t1 = t, t + 1
+        print(f"{t1} -> {t}")
+        I0 = data[:, :, :, t0].to(DEVICE)
+        I1 = data[:, :, :, t1].to(DEVICE)
         alg = TVL1OpticalFlow3D(save_timestep_dir, config)
         u, p = alg.computeOnPyramid(I0, I1, u, p)
 

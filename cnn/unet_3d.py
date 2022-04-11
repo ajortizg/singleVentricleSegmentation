@@ -113,7 +113,7 @@ class Up3D(nn.Module):
             )
         else:
             self.upsample = nn.ConvTranspose3d(
-                in_ch, in_ch//2, kernel_size=2, stride=2)
+                in_ch, in_ch // 2, kernel_size=2, stride=2)
 
         self.conv = DoubleConv3D(
             in_ch, out_ch, dropout, dp, kernel_size=kernel_size, padding=padding)

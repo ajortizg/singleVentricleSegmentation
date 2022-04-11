@@ -5,11 +5,13 @@ import nibabel as nib
 import numpy as np
 import os
 import pandas
+import torch
 
 
 class SingleVentricleDataset(Dataset):
     def __init__(self, config, transforms=None):
         self.transforms = transforms
+        self.config = config
         base = config.get("DATA", "BASE_PATH_3D")
 
         self.masks_root = osp.join(base, config.get(
@@ -17,9 +19,9 @@ class SingleVentricleDataset(Dataset):
         self.volume_files = glob(osp.join(
             osp.join(base, config.get("DATA", "VOLUMES_SUBDIR_PATH")), "*.nii.gz"))
 
-        segmentations_file = osp.join(
+        masks_file = osp.join(
             base, config.get("DATA", "SEGMENTATIONS_FILE_NAME"))
-        self.df = pandas.read_excel(segmentations_file)
+        self.df = pandas.read_excel(masks_file)
 
     def __len__(self):
         return len(self.volume_files)
@@ -45,7 +47,7 @@ class SingleVentricleDataset(Dataset):
             mask_syst_zyx = self.transforms(mask_syst_zyx)
             mask_diast_zyx = self.transforms(mask_diast_zyx)
 
-        return (vol_zyxt, mask_syst_zyx, mask_diast_zyx, tsyst, tdias)
+        return (vol_zyxt, mask_syst_zyx, mask_diast_zyx, tsyst, tdias, patient_name)
 
     def get_patient_name(self, idx):
         return (self.volume_files[idx].split(os.sep)[-1]).split(".")[0]
@@ -62,15 +64,61 @@ class SingleVentricleDataset(Dataset):
             if patient_name == query:
                 found = True
                 return (idx, found)
-        
+
         return (-1, found)
-    
+
     def data_for_patient(self, patient_name):
         idx, found = self.index_for_patient(patient_name)
         if found:
             return self.__getitem__(idx)
         else:
-            return (None, None, None, None, None)
+            return (None, None, None, None, None, None)
 
-        
-                
+    def optflow_results(self, idx):
+        patient_name = self.get_patient_name(idx)
+        return self.optflow_results_for_patient(patient_name)
+
+    def optflow_results_for_patient(self, patient):
+        fwdof_dir = self.config.get('DATA', 'FWD_OPTFLOW_RESULTS_DIR')
+        bwdof_dir = self.config.get('DATA', 'BWD_OPTFLOW_RESULTS_DIR')
+        flow_name = "flow_it0.pt"
+        level = "it0"
+        fwd_flows = []
+        bwd_flows = []
+        # i = 0
+
+        fwd_patient_dir = osp.join(fwdof_dir, patient)
+        fwd_time_dirs = sorted(os.listdir(fwd_patient_dir))
+
+        bwd_patient_dir = osp.join(bwdof_dir, patient)
+        bwd_time_dirs = sorted(os.listdir(bwd_patient_dir), reverse=True)
+
+        assert len(fwd_time_dirs) == len(bwd_time_dirs)
+
+        for fwd_dir, bwd_dir in zip(fwd_time_dirs, bwd_time_dirs):
+            # Read forward optical flow
+            fwd_path = osp.join(fwd_patient_dir, fwd_dir)
+            if osp.isdir(fwd_path):
+                flow_path = osp.sep.join([fwd_path, level, flow_name])
+                u = torch.load(flow_path)
+                fwd_flows.append(u)
+
+            # Read backward optical flow
+            bwd_path = osp.join(bwd_patient_dir, bwd_dir)
+            if osp.isdir(bwd_path):
+                flow_path = osp.sep.join([bwd_path, level, flow_name])
+                u = torch.load(flow_path)
+                bwd_flows.append(u)
+
+            # cur_mask_path = osp.join(path, f"mask_time{i}.nii")
+            # mask = nib.load(cur_mask_path)
+            # cur_mask = np.swapaxes(mask.get_fdata(), 0, 2)
+            # cur_mask_torch = torch.from_numpy(cur_mask).type(torch.FloatTensor).to(self.device)
+
+            # i += 1
+            # warped_mask_path = osp.join(path, f"mask_warped_time{i}.nii")
+            # mask = nib.load(warped_mask_path)
+            # warp_mask = np.swapaxes(mask.get_fdata(), 0, 2)
+            # warp_mask_torch = torch.from_numpy(warp_mask).type(torch.FloatTensor).to(self.device)
+
+        return (fwd_flows, bwd_flows)
