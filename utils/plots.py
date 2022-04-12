@@ -13,6 +13,7 @@ import cv2
 import numpy as np
 import math
 import time
+from termcolor import colored
 
 #scipy
 # from mpl_toolkits.mplot3d.art3d import Poly3DCollection
@@ -35,6 +36,14 @@ def createSubDirectory(saveDir, SUBDIR_PATH ):
     if not os.path.exists(subDir):
         os.makedirs(subDir)
     return subDir
+
+def printColoredError( diff, tol=1.e-5, accTol=1.e-2 ):
+    if( diff < tol):
+        print(colored(diff, 'green'))
+    elif( diff < accTol ):
+        print(colored(diff, 'yellow'))
+    else:
+        print(colored(diff, 'red'))
 
 
 ##########################
@@ -65,19 +74,39 @@ def saveImage(input,saveDir,name,max_gray_value=1.):
     cv2.imwrite(pathNameA,factor_gray_value * img)
 
 
-def save3D_torch_to_nifty(data,saveDir,fileName):
+def save3D_torch_to_nifty(data,saveDir,fileName,affine):
+    #convert
     nii_data_zyx = data.cpu().detach().numpy()
     nii_data_xyz = np.swapaxes(nii_data_zyx, 0, 2)
-    nii_img = nib.Nifti1Image(nii_data_xyz, affine=np.eye(4))
+    #img
+    nii_img = nib.Nifti1Image(nii_data_xyz, affine=affine)
+    #save
     outputFile = os.path.sep.join([saveDir, fileName])
     nib.save(nii_img, outputFile)
 
-def save4D_torch_to_nifty(data,saveDir,fileName):
+def save4D_torch_to_nifty(data,saveDir,fileName,affine):
+    #convert
     nii_data_zyxt = data.cpu().detach().numpy()
     nii_data_xyzt = np.swapaxes(nii_data_zyxt, 0, 2)
-    nii_img = nib.Nifti1Image(nii_data_xyzt, affine=np.eye(4))
+    #img
+    nii_img = nib.Nifti1Image(nii_data_xyzt, affine=affine)
+    #save
     outputFile = os.path.sep.join([saveDir, fileName])
     nib.save(nii_img, outputFile)
+
+
+        # #convert
+        # prolongation_4d_np = prolongation_4d.cpu().detach().numpy()
+        # prolongation_4d_xyzt = np.swapaxes(prolongation_4d_np, 0, 2)
+        # #header 
+        # ni_img_4d_hdr = nib.nifti1.Nifti1Header()
+        # ni_img_4d_hdr.set_data_shape((NX_prolong,NY_prolong,NZ_prolong,NT))
+        # ni_img_4d_hdr.set_zooms( vol_hdr.get_zooms()  )
+        # #img
+        # ni_img_4d = nib.Nifti1Image(prolongation_4d_xyzt, affine=vol_affine, header=ni_img_4d_hdr)
+        # #save
+        # outputFile_4d = os.path.sep.join([saveDir4D, PATIENT_NAME + ".nii.gz"])
+        # nib.save(ni_img_4d, outputFile_4d)
 
 
 def save_single_zslices(image3D, saveDir, subdir, max_gray_value=1., color_channel = -1):

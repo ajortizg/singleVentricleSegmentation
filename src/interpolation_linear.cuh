@@ -24,10 +24,10 @@ __device__ T cuda_interpolate1d_linear(
        const torch::PackedTensorAccessor32<T,1,torch::RestrictPtrTraits> u, 
        const int NX, const float LX, const float hX,
        const int boundary,
-       const T coord_x_warped) {
-  const int ix_f = floorf(coord_x_warped / hX);
+       const T inter_coord_x) {
+  const int ix_f = floorf(inter_coord_x / hX);
   const int ix_c = ix_f + 1;
-  const T wx = coord_x_warped / hX - ix_f;
+  const T wx = inter_coord_x / hX - ix_f;
   const int ix_f_out = getIndexInterpolate(ix_f,NX,boundary);  
   const int ix_c_out = getIndexInterpolate(ix_c,NX,boundary);  
 
@@ -36,6 +36,40 @@ __device__ T cuda_interpolate1d_linear(
 
   T out = (1 - wx) * u_f;
   out += wx * u_c;
+
+  return out;
+}
+
+template <typename T>
+__device__ T cuda_interpolate1d_linear_backward(
+    const torch::PackedTensorAccessor32<T,1,torch::RestrictPtrTraits> u, 
+    const int NX, const float LX, const float hX,
+    const int boundary,
+    const T inter_coord_x,
+    const T forward_val_x,
+    torch::PackedTensorAccessor32<T,1,torch::RestrictPtrTraits> grad_u,
+    T &grad_phi_idx
+    //    torch::PackedTensorAccessor32<T,2,torch::RestrictPtrTraits> grad_phi 
+    ) {
+  
+  const int ix_f = floorf(inter_coord_x / hX );
+  const int ix_c = ix_f + 1;
+  const T wx = inter_coord_x / hX - ix_f;
+  const int ix_f_out = getIndexInterpolate(ix_f,NX,boundary);  
+  const int ix_c_out = getIndexInterpolate(ix_c,NX,boundary);
+
+  T u_f = u[ix_f_out];
+  T u_c = u[ix_c_out];
+
+  T out = (1 - wx) * u_f;
+  out += wx * u_c;
+
+  // Gradients wrt. the pixel values
+  atomicAdd( &(grad_u[ix_f_out]), (1 - wx) * forward_val_x);
+  atomicAdd( &(grad_u[ix_c_out]), wx * forward_val_x );
+
+  // Gradients wrt. the coordinates
+  grad_phi_idx += forward_val_x;
 
   return out;
 }
@@ -55,16 +89,16 @@ __device__ T cuda_interpolate2d_bilinear(const torch::PackedTensorAccessor32<T,2
                                          const float LY, const float LX,
                                          const float hY, const float hX,
                                          const int boundary,
-                                         const T coord_y_warped, const T coord_x_warped) {
-  const int ix_f = floorf(coord_x_warped / hX );
+                                         const T inter_coord_y, const T inter_coord_x) {
+  const int ix_f = floorf(inter_coord_x / hX );
   const int ix_c = ix_f + 1;
-  const T wx = coord_x_warped / hX - ix_f;
+  const T wx = inter_coord_x / hX - ix_f;
   const int ix_f_out = getIndexInterpolate(ix_f,NX,boundary);  
   const int ix_c_out = getIndexInterpolate(ix_c,NX,boundary);
 
-  const int iy_f = floorf(coord_y_warped / hY );
+  const int iy_f = floorf(inter_coord_y / hY );
   const int iy_c = iy_f + 1;
-  const T wy = coord_y_warped / hY - iy_f;
+  const T wy = inter_coord_y / hY - iy_f;
   const int iy_f_out = getIndexInterpolate(iy_f,NY,boundary);  
   const int iy_c_out = getIndexInterpolate(iy_c,NY,boundary);
 
@@ -90,17 +124,17 @@ __device__ T cuda_interpolateVectorField2d_bilinear (const torch::PackedTensorAc
                                          const float LY, const float LX,
                                          const float hY, const float hX,
                                          const int boundary,
-                                         const T coord_y_warped, const T coord_x_warped,
+                                         const T inter_coord_y, const T inter_coord_x,
                                          const int comp) {
-  const int ix_f = floorf(coord_x_warped / hX );
+  const int ix_f = floorf(inter_coord_x / hX );
   const int ix_c = ix_f + 1;
-  const T wx = coord_x_warped / hX - ix_f;
+  const T wx = inter_coord_x / hX - ix_f;
   const int ix_f_out = getIndexInterpolate(ix_f,NX,boundary);  
   const int ix_c_out = getIndexInterpolate(ix_c,NX,boundary);
 
-  const int iy_f = floorf(coord_y_warped / hY );
+  const int iy_f = floorf(inter_coord_y / hY );
   const int iy_c = iy_f + 1;
-  const T wy = coord_y_warped / hY - iy_f;
+  const T wy = inter_coord_y / hY - iy_f;
   const int iy_f_out = getIndexInterpolate(iy_f,NY,boundary);  
   const int iy_c_out = getIndexInterpolate(iy_c,NY,boundary);
 
@@ -128,17 +162,17 @@ __device__ T cuda_interpolateMatrixField2d_bilinear(const torch::PackedTensorAcc
                                          const float LY, const float LX,
                                          const float hY, const float hX,
                                          const int boundary,
-                                         const T coord_y_warped, const T coord_x_warped,
+                                         const T inter_coord_y, const T inter_coord_x,
                                          const int comp_i, const int comp_j ) {
-  const int ix_f = floorf(coord_x_warped / hX );
+  const int ix_f = floorf(inter_coord_x / hX );
   const int ix_c = ix_f + 1;
-  const T wx = coord_x_warped / hX - ix_f;
+  const T wx = inter_coord_x / hX - ix_f;
   const int ix_f_out = getIndexInterpolate(ix_f,NX,boundary);  
   const int ix_c_out = getIndexInterpolate(ix_c,NX,boundary);
 
-  const int iy_f = floorf(coord_y_warped / hY );
+  const int iy_f = floorf(inter_coord_y / hY );
   const int iy_c = iy_f + 1;
-  const T wy = coord_y_warped / hY - iy_f;
+  const T wy = inter_coord_y / hY - iy_f;
   const int iy_f_out = getIndexInterpolate(iy_f,NY,boundary);  
   const int iy_c_out = getIndexInterpolate(iy_c,NY,boundary);
 
@@ -169,22 +203,22 @@ __device__ T cuda_interpolate3d_trilinear(const torch::PackedTensorAccessor32<T,
                                           const float LZ, const float LY, const float LX,
                                           const float hZ, const float hY, const float hX,
                                           const int boundary,
-                                          const T coord_z_warped, const T coord_y_warped, const T coord_x_warped) {
-  const int ix_f = floorf(coord_x_warped / hX );
+                                          const T inter_coord_t, const T inter_coord_y, const T inter_coord_x) {
+  const int ix_f = floorf(inter_coord_x / hX );
   const int ix_c = ix_f + 1;
-  const T wx = coord_x_warped / hX - ix_f;
+  const T wx = inter_coord_x / hX - ix_f;
   const int ix_f_out = getIndexInterpolate(ix_f,NX,boundary);  
   const int ix_c_out = getIndexInterpolate(ix_c,NX,boundary);
 
-  const int iy_f = floorf(coord_y_warped / hY );
+  const int iy_f = floorf(inter_coord_y / hY );
   const int iy_c = iy_f + 1;
-  const T wy = coord_y_warped / hY - iy_f;
+  const T wy = inter_coord_y / hY - iy_f;
   const int iy_f_out = getIndexInterpolate(iy_f,NY,boundary);  
   const int iy_c_out = getIndexInterpolate(iy_c,NY,boundary);
 
-  const int iz_f = floorf(coord_z_warped / hZ );
+  const int iz_f = floorf(inter_coord_t / hZ );
   const int iz_c = iz_f + 1;
-  const T wz = coord_z_warped / hZ - iz_f;
+  const T wz = inter_coord_t / hZ - iz_f;
   const int iz_f_out = getIndexInterpolate(iz_f,NZ,boundary);
   const int iz_c_out = getIndexInterpolate(iz_c,NZ,boundary);
 
@@ -219,23 +253,23 @@ __device__ T cuda_interpolateVectorField3d_trilinear(const torch::PackedTensorAc
                                           const float LZ, const float LY, const float LX,
                                           const float hZ, const float hY, const float hX,
                                           const int boundary,
-                                          const T coord_z_warped, const T coord_y_warped, const T coord_x_warped, 
+                                          const T inter_coord_t, const T inter_coord_y, const T inter_coord_x, 
                                           const int comp) {
-  const int ix_f = floorf(coord_x_warped / hX );
+  const int ix_f = floorf(inter_coord_x / hX );
   const int ix_c = ix_f + 1;
-  const T wx = coord_x_warped / hX - ix_f;
+  const T wx = inter_coord_x / hX - ix_f;
   const int ix_f_out = getIndexInterpolate(ix_f,NX,boundary);  
   const int ix_c_out = getIndexInterpolate(ix_c,NX,boundary);
 
-  const int iy_f = floorf(coord_y_warped / hY );
+  const int iy_f = floorf(inter_coord_y / hY );
   const int iy_c = iy_f + 1;
-  const T wy = coord_y_warped / hY - iy_f;
+  const T wy = inter_coord_y / hY - iy_f;
   const int iy_f_out = getIndexInterpolate(iy_f,NY,boundary);  
   const int iy_c_out = getIndexInterpolate(iy_c,NY,boundary);
 
-  const int iz_f = floorf(coord_z_warped / hZ );
+  const int iz_f = floorf(inter_coord_t / hZ );
   const int iz_c = iz_f + 1;
-  const T wz = coord_z_warped / hZ - iz_f;
+  const T wz = inter_coord_t / hZ - iz_f;
   const int iz_f_out = getIndexInterpolate(iz_f,NZ,boundary);
   const int iz_c_out = getIndexInterpolate(iz_c,NZ,boundary);
 
@@ -270,23 +304,23 @@ __device__ T cuda_interpolateMatrixField3d_trilinear(const torch::PackedTensorAc
                                           const float LZ, const float LY, const float LX,
                                           const float hZ, const float hY, const float hX,
                                           const int boundary,
-                                          const T coord_z_warped, const T coord_y_warped, const T coord_x_warped, 
+                                          const T inter_coord_t, const T inter_coord_y, const T inter_coord_x, 
                                           const int comp_i, const int comp_j ) {
-  const int ix_f = floorf(coord_x_warped / hX );
+  const int ix_f = floorf(inter_coord_x / hX );
   const int ix_c = ix_f + 1;
-  const T wx = coord_x_warped / hX - ix_f;
+  const T wx = inter_coord_x / hX - ix_f;
   const int ix_f_out = getIndexInterpolate(ix_f,NX,boundary);  
   const int ix_c_out = getIndexInterpolate(ix_c,NX,boundary);
 
-  const int iy_f = floorf(coord_y_warped / hY );
+  const int iy_f = floorf(inter_coord_y / hY );
   const int iy_c = iy_f + 1;
-  const T wy = coord_y_warped / hY - iy_f;
+  const T wy = inter_coord_y / hY - iy_f;
   const int iy_f_out = getIndexInterpolate(iy_f,NY,boundary);  
   const int iy_c_out = getIndexInterpolate(iy_c,NY,boundary);
 
-  const int iz_f = floorf(coord_z_warped / hZ );
+  const int iz_f = floorf(inter_coord_t / hZ );
   const int iz_c = iz_f + 1;
-  const T wz = coord_z_warped / hZ - iz_f;
+  const T wz = inter_coord_t / hZ - iz_f;
   const int iz_f_out = getIndexInterpolate(iz_f,NZ,boundary);
   const int iz_c_out = getIndexInterpolate(iz_c,NZ,boundary);
 

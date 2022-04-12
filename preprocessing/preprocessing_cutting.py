@@ -11,9 +11,37 @@ utils_lib_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../uti
 sys.path.append(utils_lib_path)
 import plots
 
-def getRangeOfMask_xyz(mask):
+def getRangeOfMask_xyz(mask,printRange=False,name="" ):
     x,y,z = np.nonzero(mask)
-    return np.min(z), np.max(z), np.min(y), np.max(y), np.min(x), np.max(x) 
+    xmin = np.min(x) 
+    xmax = np.max(x)
+    ymin = np.min(y) 
+    ymax = np.max(y)
+    zmin = np.min(z) 
+    zmax = np.max(z)
+    if printRange:
+        print("\nrange of mask", name, ":")
+        print("(xmin, xmax) = ", xmin, ",", xmax)
+        print("(ymin, ymax) = ", ymin, ",", ymax)
+        print("(zmin, zmax) = ", zmin, ",", zmax)
+    return zmin, zmax, ymin, ymax, xmin, xmax 
+
+def save_np_to_nifty(file,saveDir,fileName,hdr_old):
+    #header 
+    hdr = nib.nifti1.Nifti1Header()
+    hdr.set_data_shape(file.shape)
+    hdr.set_qform( hdr_old.get_qform() )
+    hdr.set_sform( hdr_old.get_sform() )
+    hdr.set_zooms( hdr_old.get_zooms() )
+    #img
+    ni_img = nib.Nifti1Image(file, affine=None, header=hdr)
+    #save
+    outputFile = os.path.sep.join([saveDir, fileName])
+    nib.save(ni_img, outputFile)
+    # print("old header:")
+    # print(hdr_old) 
+    # print("new header:")
+    # print(hdr) 
 
 if __name__ == "__main__":
 
@@ -66,32 +94,15 @@ if __name__ == "__main__":
         print("load data for patient: ", PATIENT_NAME)
         vol = nib.load(os.path.sep.join([VOLUMES_PATH, PATIENT_NAME + ".nii.gz"]))
         vol_hdr = vol.header
-        vol_affine = vol.affine
+        #vol_affine = vol.affine
         nii_data_xyzt = vol.get_fdata()
         NX = nii_data_xyzt.shape[0]
         NY = nii_data_xyzt.shape[1]
         NZ = nii_data_xyzt.shape[2]
         NT = nii_data_xyzt.shape[3]
         print("   * (NX,NY,NZ,NT) = ", NX, NY, NZ, NT )
-        #test hdr 
-        print("test header:")
-        print("slope_inter = ", vol_hdr.get_slope_inter() )
-        #print("slice_times = ", vol_hdr.get_slice_times() )
-        print("slice_duration = ", vol_hdr.get_slice_duration() )
-        print("get_sform = ", vol_hdr.get_sform() )
-        print("get_qform = ", vol_hdr.get_qform() )
-        print("get_n_slices = ", vol_hdr.get_n_slices() )
-        print("get_intent = ", vol_hdr.get_intent() )
-        print("get_dim_info = ", vol_hdr.get_dim_info() )
-        print("get_data_shape = ", vol_hdr.get_data_shape() )
-        print("get_best_affine = ", vol_hdr.get_best_affine() )
-        print("test affine:")
-        print("affine map = ", vol_affine)
-        
-
         #
         saveDirPatient = plots.createSubDirectory(saveDirSegmentations, PATIENT_NAME)
-
         #read time steps for diastole and systole
         tDiastole = row["Diastole"]
         tSystole = row["Systole"]
@@ -99,27 +110,19 @@ if __name__ == "__main__":
         print("   * diastole at time: ", tDiastole)
         print("=======================================")
 
-
-        # get input masks for diastole and systole 
+        # get input masks for diastole
         nii_mask_diastole_load = nib.load(os.path.sep.join([SEGMENTATIONS_PATH, PATIENT_NAME, PATIENT_NAME + "_Diastole_Labelmap.nii"]))
         hdr_mask_diastole = nii_mask_diastole_load.header
-        affine_mask_diastole = nii_mask_diastole_load.affine
+        #affine_mask_diastole = nii_mask_diastole_load.affine
         nii_mask_diastole_xyz = nii_mask_diastole_load.get_fdata()
-        zmin_dia, zmax_dia, ymin_dia, ymax_dia, xmin_dia, xmax_dia = getRangeOfMask_xyz(nii_mask_diastole_xyz)
-        print("\nrange of diastole:")
-        print("(xmin, xmax) = ", xmin_dia, ",", xmax_dia)
-        print("(ymin, ymax) = ", ymin_dia, ",", ymax_dia)
-        print("(zmin, zmax) = ", zmin_dia, ",", zmax_dia)
+        zmin_dia, zmax_dia, ymin_dia, ymax_dia, xmin_dia, xmax_dia = getRangeOfMask_xyz(nii_mask_diastole_xyz,printRange=True,name="diastole")
 
+        # get input masks for systole
         nii_mask_systole_load = nib.load(os.path.sep.join([SEGMENTATIONS_PATH, PATIENT_NAME, PATIENT_NAME + "_Systole_Labelmap.nii"]))
         hdr_mask_systole = nii_mask_systole_load.header
-        affine_mask_systole = nii_mask_systole_load.affine
+        #affine_mask_systole = nii_mask_systole_load.affine
         nii_mask_systole_xyz = nii_mask_systole_load.get_fdata()
-        zmin_sys, zmax_sys, ymin_sys, ymax_sys, xmin_sys, xmax_sys = getRangeOfMask_xyz(nii_mask_systole_xyz)
-        print("\nrange of systole:")
-        print("(xmin, xmax) = ", xmin_sys, ",", xmax_sys)
-        print("(ymin, ymax) = ", ymin_sys, ",", ymax_sys)
-        print("(zmin, zmax) = ", zmin_sys, ",", zmax_sys)
+        zmin_sys, zmax_sys, ymin_sys, ymax_sys, xmin_sys, xmax_sys = getRangeOfMask_xyz(nii_mask_systole_xyz,printRange=True,name="systole")
 
 
         xmin_total = max(0, min(xmin_dia,xmin_sys) - 10)
@@ -145,58 +148,16 @@ if __name__ == "__main__":
         cutting_diastole = nii_mask_diastole_xyz[xmin_total:xmax_total+1,ymin_total:ymax_total+1,zmin_total:zmax_total+1]
         cutting_systole = nii_mask_systole_xyz[xmin_total:xmax_total+1,ymin_total:ymax_total+1,zmin_total:zmax_total+1]
 
-        # save 4d as nifty
-        #header
-        ni_img_4d_hdr = nib.nifti1.Nifti1Header()
-        ni_img_4d_hdr.set_data_shape((NX_cut,NY_cut,NZ_cut,NT))
-        ni_img_4d_hdr.set_zooms( vol_hdr.get_zooms()  )
-        #ni_img_4d_hdr.set_xyzt_units( vol_hdr.get_xyzt_units() )
-        #img
-        #ni_img_4d = nib.Nifti1Image(cutting_4d, affine=np.eye(4), header=ni_img_4d_hdr)
-        ni_img_4d = nib.Nifti1Image(cutting_4d, affine=vol_affine, header=ni_img_4d_hdr)
-        #save
-        outputFile_4d = os.path.sep.join([saveDir4D, PATIENT_NAME + ".nii.gz"])
-        nib.save(ni_img_4d, outputFile_4d)
-        #test hdr 
-        # print("test header cutting:")
-        # print("slope_inter = ", ni_img_4d_hdr.get_slope_inter() )
-        # #print("slice_times = ", ni_img_4d_hdr.get_slice_times() )
-        # #print("slice_duration = ", ni_img_4d_hdr.get_slice_duration() )
-        # print("get_sform = ", ni_img_4d_hdr.get_sform() )
-        # print("get_qform = ", ni_img_4d_hdr.get_qform() )
-        # #print("get_n_slices = ", ni_img_4d_hdr.get_n_slices() )
-        # print("get_intent = ", ni_img_4d_hdr.get_intent() )
-        # print("get_dim_info = ", ni_img_4d_hdr.get_dim_info() )
-        # print("get_data_shape = ", ni_img_4d_hdr.get_data_shape() )
-        # print("get_best_affine = ", ni_img_4d_hdr.get_best_affine() )
+        #save to nifty
+        save_np_to_nifty(cutting_4d, saveDir4D, PATIENT_NAME + ".nii.gz", vol_hdr)
+        save_np_to_nifty(cutting_diastole, saveDirPatient, PATIENT_NAME + "_Diastole_Labelmap.nii", hdr_mask_diastole)
+        save_np_to_nifty(cutting_systole, saveDirPatient, PATIENT_NAME + "_Systole_Labelmap.nii", hdr_mask_systole)
 
-        #save diastole as nifty
-        #header 
-        hdr_mask_diastole_cutting = nib.nifti1.Nifti1Header()
-        hdr_mask_diastole_cutting.set_data_shape((NX_cut,NY_cut,NZ_cut))
-        hdr_mask_diastole_cutting.set_zooms( hdr_mask_diastole.get_zooms()  )
-        #hdr_mask_diastole_cutting.set_xyzt_units( hdr_mask_diastole.get_xyzt_units() )
-        #img
-        ni_img_diastole = nib.Nifti1Image(cutting_diastole, affine=affine_mask_diastole, header=hdr_mask_diastole_cutting)
-        #save
-        outputFile_diastole = os.path.sep.join([saveDirPatient, PATIENT_NAME + "_Diastole_Labelmap.nii"])
-        nib.save(ni_img_diastole, outputFile_diastole)
-
-        #save systole as nifty
-        #header 
-        hdr_mask_systole_cutting = nib.nifti1.Nifti1Header()
-        hdr_mask_systole_cutting.set_data_shape((NX_cut,NY_cut,NZ_cut))
-        hdr_mask_systole_cutting.set_zooms( hdr_mask_systole.get_zooms()  )
-        #hdr_mask_systole_cutting.set_xyzt_units( hdr_mask_systole.get_xyzt_units() )
-        #img
-        ni_img_systole = nib.Nifti1Image(cutting_systole, affine=affine_mask_systole, header=hdr_mask_systole_cutting)
-        #save
-        outputFile_systole = os.path.sep.join([saveDirPatient, PATIENT_NAME + "_Systole_Labelmap.nii"])
-        nib.save(ni_img_systole, outputFile_systole)
 
     #save data base with shifts
     df['xshifts'] = xshifts
     df['yshifts'] = yshifts
     df['zshifts'] = zshifts
     output_df = os.path.sep.join([saveDir, SEGMENTATIONS_FILE_NAME])
-    df.to_excel(output_df)  
+    df.to_excel(output_df)
+

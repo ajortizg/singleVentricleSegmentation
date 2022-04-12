@@ -41,6 +41,29 @@ __global__ void cuda_warp1d_nearest_kernel(
 }
 
 template <typename T>
+__global__ void cuda_warp1d_nearest_backward_kernel(
+  const torch::PackedTensorAccessor32<T,1,torch::RestrictPtrTraits> u,
+  const torch::PackedTensorAccessor32<T,2,torch::RestrictPtrTraits> phi,
+  const torch::PackedTensorAccessor32<T,1,torch::RestrictPtrTraits> forward_out,
+  const int NX, const float LX, const float hX,
+  const int boundary,
+  torch::PackedTensorAccessor32<T,1,torch::RestrictPtrTraits> grad_u,
+  torch::PackedTensorAccessor32<T,2,torch::RestrictPtrTraits> grad_phi )
+{
+  int ix = blockDim.x * blockIdx.x + threadIdx.x;
+  if (ix < NX )
+  {
+    const T dx = phi[ix][0];
+    const T coord_x_warped = ix * hX + dx;
+    const T forward_val_x = forward_out[ix];
+    T grad_phi_idx = 0;
+    cuda_interpolate1d_nearest_backward(u, NX, LX, hX, boundary, coord_x_warped, forward_val_x, grad_u, grad_phi_idx );
+    grad_phi[ix][0] = grad_phi_idx;
+  }  
+}
+
+
+template <typename T>
 __global__ void cuda_warp2d_nearest_kernel(
   const torch::PackedTensorAccessor32<T,2,torch::RestrictPtrTraits> u,
   const torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> phi,
@@ -168,6 +191,29 @@ __global__ void cuda_warp1d_linear_kernel(
 }
 
 template <typename T>
+__global__ void cuda_warp1d_linear_backward_kernel(
+  const torch::PackedTensorAccessor32<T,1,torch::RestrictPtrTraits> u,
+  const torch::PackedTensorAccessor32<T,2,torch::RestrictPtrTraits> phi,
+  const torch::PackedTensorAccessor32<T,1,torch::RestrictPtrTraits> forward_out,
+  const int NX, const float LX, const float hX,
+  const int boundary,
+  torch::PackedTensorAccessor32<T,1,torch::RestrictPtrTraits> grad_u,
+  torch::PackedTensorAccessor32<T,2,torch::RestrictPtrTraits> grad_phi )
+{
+  int ix = blockDim.x * blockIdx.x + threadIdx.x;
+  if (ix < NX )
+  {
+    const T dx = phi[ix][0];
+    const T coord_x_warped = ix * hX + dx;
+    const T forward_val_x = forward_out[ix];
+    T grad_phi_idx = 0;
+    cuda_interpolate1d_linear_backward(u, NX, LX, hX, boundary, coord_x_warped, forward_val_x, grad_u, grad_phi_idx );
+    grad_phi[ix][0] = grad_phi_idx;
+  }  
+}
+
+
+template <typename T>
 __global__ void cuda_warp2d_bilinear_kernel(
   const torch::PackedTensorAccessor32<T,2,torch::RestrictPtrTraits> u,
   const torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> phi,
@@ -292,6 +338,28 @@ __global__ void cuda_warp1d_cubicHermiteSpline_kernel(
     const T coord_x_warped = ix * hX + dx;
     u_warped[ix] = cuda_interpolate1d_cubicHermiteSpline(u, NX, LX, hX, boundary, coord_x_warped);
   }
+}
+
+template <typename T>
+__global__ void cuda_warp1d_cubicHermiteSpline_backward_kernel(
+  const torch::PackedTensorAccessor32<T,1,torch::RestrictPtrTraits> u,
+  const torch::PackedTensorAccessor32<T,2,torch::RestrictPtrTraits> phi,
+  const torch::PackedTensorAccessor32<T,1,torch::RestrictPtrTraits> forward_out,
+  const int NX, const float LX, const float hX,
+  const int boundary,
+  torch::PackedTensorAccessor32<T,1,torch::RestrictPtrTraits> grad_u,
+  torch::PackedTensorAccessor32<T,2,torch::RestrictPtrTraits> grad_phi )
+{
+  int ix = blockDim.x * blockIdx.x + threadIdx.x;
+  if (ix < NX )
+  {
+    const T dx = phi[ix][0];
+    const T coord_x_warped = ix * hX + dx;
+    const T forward_val_x = forward_out[ix];
+    T grad_phi_idx = 0;
+    cuda_interpolate1d_cubicHermiteSpline_backward(u, NX, LX, hX, boundary, coord_x_warped, forward_val_x, grad_u, grad_phi_idx );
+    grad_phi[ix][0] = grad_phi_idx;
+  }  
 }
 
 template <typename T>
@@ -476,6 +544,94 @@ switch(interpolation)
 
   return u_warped;
 }
+
+
+std::vector<torch::Tensor> cuda_warp1d_backward( 
+  const torch::Tensor u, 
+  const torch::Tensor phi, 
+  const torch::Tensor forward_out, 
+  const MeshInfo1D& meshInfo, 
+  const InterpolationType interpolation,
+  const BoundaryType boundary)
+{
+  TORCH_CHECK(u.dim() == 1, "Expected 1d tensor");
+  TORCH_CHECK(phi.dim() == 2, "Expected 2d tensor")
+  TORCH_CHECK(forward_out.dim() == 1, "Expected 1d tensor")
+
+  const int NX = u.size(0);
+  const float LX = meshInfo.getLX();
+  const float hX = meshInfo.gethX();
+
+  auto u_grad = torch::zeros_like(u);
+  auto phi_grad = torch::zeros_like(phi);
+
+  const dim3 blockSize(512, 1, 1); 
+  const dim3 numBlocks((NX + blockSize.x - 1) / blockSize.x );
+
+#ifdef CUDA_TIMING
+  CudaTimer cut;
+  cut.start();
+#endif
+
+switch(interpolation)
+{
+    case INTERPOLATE_NEAREST:
+          AT_DISPATCH_FLOATING_TYPES(u.type(), "warp1d_linear", ([&]{
+            cuda_warp1d_nearest_backward_kernel<scalar_t><<<numBlocks, blockSize>>>(
+              u.packed_accessor32<scalar_t,1,torch::RestrictPtrTraits>(),
+              phi.packed_accessor32<scalar_t,2,torch::RestrictPtrTraits>(),
+              forward_out.packed_accessor32<scalar_t,1,torch::RestrictPtrTraits>(),
+              NX, LX, hX, 
+              boundary,
+              u_grad.packed_accessor32<scalar_t,1,torch::RestrictPtrTraits>(),
+              phi_grad.packed_accessor32<scalar_t,2,torch::RestrictPtrTraits>()
+              );
+          }));
+          cudaSafeCall(cudaGetLastError());
+    break;
+
+    case INTERPOLATE_LINEAR:
+          AT_DISPATCH_FLOATING_TYPES(u.type(), "warp1d_linear", ([&]{
+            cuda_warp1d_linear_backward_kernel<scalar_t><<<numBlocks, blockSize>>>(
+              u.packed_accessor32<scalar_t,1,torch::RestrictPtrTraits>(),
+              phi.packed_accessor32<scalar_t,2,torch::RestrictPtrTraits>(),
+              forward_out.packed_accessor32<scalar_t,1,torch::RestrictPtrTraits>(),
+              NX, LX, hX, 
+              boundary,
+              u_grad.packed_accessor32<scalar_t,1,torch::RestrictPtrTraits>(),
+              phi_grad.packed_accessor32<scalar_t,2,torch::RestrictPtrTraits>()
+              );
+          }));
+          cudaSafeCall(cudaGetLastError());
+    break;
+
+    case INTERPOLATE_CUBIC_HERMITESPLINE:
+          AT_DISPATCH_FLOATING_TYPES(u.type(), "warp1d_linear", ([&]{
+            cuda_warp1d_cubicHermiteSpline_backward_kernel<scalar_t><<<numBlocks, blockSize>>>(
+              u.packed_accessor32<scalar_t,1,torch::RestrictPtrTraits>(),
+              phi.packed_accessor32<scalar_t,2,torch::RestrictPtrTraits>(),
+              forward_out.packed_accessor32<scalar_t,1,torch::RestrictPtrTraits>(),
+              NX, LX, hX, 
+              boundary,
+              u_grad.packed_accessor32<scalar_t,1,torch::RestrictPtrTraits>(),
+              phi_grad.packed_accessor32<scalar_t,2,torch::RestrictPtrTraits>()
+              );
+          }));
+          cudaSafeCall(cudaGetLastError());
+    break;
+
+} //end switch interpolation
+
+
+#ifdef CUDA_TIMING
+  cudaDeviceSynchronize();
+  std::cout << "forward time " << cut.elapsed() << std::endl;
+#endif
+
+  return {u_grad, phi_grad};
+}
+
+
 
 
 torch::Tensor cuda_warp2d(

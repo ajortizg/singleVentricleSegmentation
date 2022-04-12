@@ -122,7 +122,8 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
   //======================================= 
   py::class_<Warping1D>(m,"Warping1D")
       .def(py::init<const MeshInfo1D&, const InterpolationType, const BoundaryType>())
-      .def("forward", &Warping1D::forward);
+      .def("forward", &Warping1D::forward)
+      .def("backward", &Warping1D::backward);
 
   py::class_<Warping2D>(m,"Warping2D")
       .def(py::init<const MeshInfo2D&, const InterpolationType, const BoundaryType>())
