@@ -131,9 +131,9 @@ __device__ T cuda_interpolate1d_cubicHermiteSpline(
   T buff_x[4];
   for (int dx = -1; dx < 3; ++dx)
   {
-      const int c_ix_x = ix_f + dx;
-      const int c_ix_x_out = getIndexInterpolate(c_ix_x,NX,boundary);
-      buff_x[dx + 1] = u[c_ix_x_out];
+      const int c_id_x = ix_f + dx;
+      const int c_id_x_out = getIndexInterpolate(c_id_x,NX,boundary);
+      buff_x[dx + 1] = u[c_id_x_out];
   }
   T out = cuda_interpolate1d_cubicHermiteSpline_local<T>(buff_x, wx + 1);
   return out;
@@ -145,7 +145,7 @@ __device__ T cuda_interpolate1d_cubicHermiteSpline_backward(
     const int NX, const float LX, const float hX,
     const int boundary,
     const T inter_coord_x,
-    const T forward_val_x,
+    const T forward_val,
     torch::PackedTensorAccessor32<T,1,torch::RestrictPtrTraits> grad_u,
     T &grad_phi_idx
     //torch::PackedTensorAccessor32<T,2,torch::RestrictPtrTraits> grad_phi
@@ -158,20 +158,20 @@ __device__ T cuda_interpolate1d_cubicHermiteSpline_backward(
     // first perform interpolation
     for (int dx = -1; dx < 3; ++dx)
     {
-        const int c_ix_x = ix_f + dx;
-        const int c_ix_x_out = getIndexInterpolate(c_ix_x,NX,boundary);
-        buff_x[dx + 1] = u[c_ix_x_out];
+        const int c_id_x = ix_f + dx;
+        const int c_id_x_out = getIndexInterpolate(c_id_x,NX,boundary);
+        buff_x[dx + 1] = u[c_id_x_out];
     }
     T out = cuda_interpolate1d_cubicHermiteSpline_local<T>(buff_x, wx + 1);
 
     // backpolate the error
     T buff_grad_x[4];
-    cuda_interpolate1d_cubicHermiteSpline_backward_local<T>(buff_x, wx + 1, buff_grad_x, grad_phi_idx, forward_val_x );
+    cuda_interpolate1d_cubicHermiteSpline_backward_local<T>(buff_x, wx + 1, buff_grad_x, grad_phi_idx, forward_val );
     for (int dx = -1; dx < 3; ++dx)
     {
-      const int c_ix_x = ix_f + dx;
-      const int c_ix_x_out = getIndexInterpolate(c_ix_x,NX,boundary);
-      atomicAdd(&grad_u[c_ix_x_out], buff_grad_x[dx + 1]);
+      const int c_id_x = ix_f + dx;
+      const int c_id_x_out = getIndexInterpolate(c_id_x,NX,boundary);
+      atomicAdd(&grad_u[c_id_x_out], buff_grad_x[dx + 1]);
     }
 
     return out;
@@ -187,12 +187,13 @@ __device__ T cuda_interpolate1d_cubicHermiteSpline_backward(
 // scalar fields
 //=====================
 template <typename T>
-__device__ T cuda_interpolate2d_bicubicHermiteSpline(const torch::PackedTensorAccessor32<T,2,torch::RestrictPtrTraits> u, 
-                                        const int NY, const int NX,
-                                        const float LY, const float LX,
-                                        const float hY, const float hX,
-                                        const int boundary,
-                                        const T inter_coord_y, const T inter_coord_x) {
+__device__ T cuda_interpolate2d_bicubicHermiteSpline(
+      const torch::PackedTensorAccessor32<T,2,torch::RestrictPtrTraits> u, 
+      const int NY, const int NX,
+      const float LY, const float LX,
+      const float hY, const float hX,
+      const int boundary,
+      const T inter_coord_y, const T inter_coord_x) {
 
   const int ix_f = floorf(inter_coord_x / hX);
   const T wx = inter_coord_x / hX - ix_f;
@@ -204,20 +205,84 @@ __device__ T cuda_interpolate2d_bicubicHermiteSpline(const torch::PackedTensorAc
 
   for (int dy = -1; dy < 3; ++dy)
   {
-    const int c_ix_y = iy_f + dy;
-    const int c_ix_y_out = getIndexInterpolate(c_ix_y,NY,boundary);
+    const int c_id_y = iy_f + dy;
+    const int c_id_y_out = getIndexInterpolate(c_id_y,NY,boundary);
     for (int dx = -1; dx < 3; ++dx)
     {
-        const int c_ix_x = ix_f + dx;
-        const int c_ix_x_out = getIndexInterpolate(c_ix_x,NX,boundary);
-        buff_x[dx + 1] = u[c_ix_y_out][c_ix_x_out];
+        const int c_id_x = ix_f + dx;
+        const int c_id_x_out = getIndexInterpolate(c_id_x,NX,boundary);
+        buff_x[dx + 1] = u[c_id_y_out][c_id_x_out];
     }
     buff_y[dy + 1] = cuda_interpolate1d_cubicHermiteSpline_local<T>(buff_x, wx + 1);
   }
-
   T out = cuda_interpolate1d_cubicHermiteSpline_local<T>(buff_y, wy + 1);
 
   return out;
+}
+
+template <typename T>
+__device__ T cuda_interpolate2d_bicubicHermiteSpline_backward(
+      const torch::PackedTensorAccessor32<T,2,torch::RestrictPtrTraits> u, 
+      const int NY, const int NX,
+      const float LY, const float LX,
+      const float hY, const float hX,
+      const int boundary,
+      const T inter_coord_y, const T inter_coord_x,
+      const T forward_val,
+      torch::PackedTensorAccessor32<T,2,torch::RestrictPtrTraits> grad_u,
+      T &grad_phi_idy, T &grad_phi_idx
+      //torch::PackedTensorAccessor32<T,2,torch::RestrictPtrTraits> grad_phi
+     ) {
+  
+    const int ix_f = floorf(inter_coord_x / hX );
+    const T wx = inter_coord_x / hX - ix_f;
+    T buff_x[4];
+
+    const int iy_f = floorf(inter_coord_y / hY);
+    const T wy = inter_coord_y / hY - iy_f;
+    T buff_y[4];
+
+    // first perform interpolation
+    for (int dy = -1; dy < 3; ++dy)
+    {
+      const int c_id_y = iy_f + dy;
+      const int c_id_y_out = getIndexInterpolate(c_id_y,NY,boundary);
+      for (int dx = -1; dx < 3; ++dx)
+      {
+          const int c_id_x = ix_f + dx;
+          const int c_id_x_out = getIndexInterpolate(c_id_x,NX,boundary);
+          buff_x[dx + 1] = u[c_id_y_out][c_id_x_out];
+      }
+      buff_y[dy + 1] = cuda_interpolate1d_cubicHermiteSpline_local<T>(buff_x, wx + 1);
+    }
+    T out = cuda_interpolate1d_cubicHermiteSpline_local<T>(buff_y, wy + 1);
+
+    // backpolate the error
+    T buff_grad_y[4];
+    cuda_interpolate1d_cubicHermiteSpline_backward_local<T>(buff_y, wy+1, buff_grad_y, grad_phi_idy, forward_val );
+
+    T buff_grad_x[4];
+    for (int dy = -1; dy < 3; ++dy)
+    {
+      const int c_id_y = iy_f + dy;
+      const int c_id_y_out = getIndexInterpolate(c_id_y,NY,boundary);
+
+      // get the input values
+      for (int dx = -1; dx < 3; ++dx)
+      {
+          const int c_id_x = ix_f + dx;
+          const int c_id_x_out = getIndexInterpolate(c_id_x,NX,boundary);
+          buff_x[dx + 1] = u[c_id_y_out][c_id_x_out];
+      }
+      cuda_interpolate1d_cubicHermiteSpline_backward_local<T>(buff_x, wx+1, buff_grad_x, grad_phi_idx, buff_grad_y[dy+1] );
+      for (int dx = -1; dx < 3; ++dx)
+      {
+        const int c_id_x = ix_f + dx;
+        const int c_id_x_out = getIndexInterpolate(c_id_x,NX,boundary);
+        atomicAdd( &(grad_u[c_id_y_out][c_id_x_out]), buff_grad_x[dx + 1]);
+      }
+    }
+    return out;
 }
 
 
@@ -243,13 +308,13 @@ __device__ T cuda_interpolateVectorField2d_bicubicHermiteSpline( const torch::Pa
 
   for (int dy = -1; dy < 3; ++dy)
   {
-    const int c_ix_y = iy_f + dy;
-    const int c_ix_y_out = getIndexInterpolate(c_ix_y,NY,boundary);
+    const int c_id_y = iy_f + dy;
+    const int c_id_y_out = getIndexInterpolate(c_id_y,NY,boundary);
     for (int dx = -1; dx < 3; ++dx)
     {
-        const int c_ix_x = ix_f + dx;
-        const int c_ix_x_out = getIndexInterpolate(c_ix_x,NX,boundary);
-        buff_x[dx + 1] = u[c_ix_y_out][c_ix_x_out][comp];
+        const int c_id_x = ix_f + dx;
+        const int c_id_x_out = getIndexInterpolate(c_id_x,NX,boundary);
+        buff_x[dx + 1] = u[c_id_y_out][c_id_x_out][comp];
     }
     buff_y[dy + 1] = cuda_interpolate1d_cubicHermiteSpline_local<T>(buff_x, wx + 1);
   }
@@ -281,13 +346,13 @@ __device__ T cuda_interpolateMatrixField2d_bicubicHermiteSpline(const torch::Pac
 
   for (int dy = -1; dy < 3; ++dy)
   {
-    const int c_ix_y = iy_f + dy;
-    const int c_ix_y_out = getIndexInterpolate(c_ix_y,NY,boundary);
+    const int c_id_y = iy_f + dy;
+    const int c_id_y_out = getIndexInterpolate(c_id_y,NY,boundary);
     for (int dx = -1; dx < 3; ++dx)
     {
-        const int c_ix_x = ix_f + dx;
-        const int c_ix_x_out = getIndexInterpolate(c_ix_x,NX,boundary);
-        buff_x[dx + 1] = u[c_ix_y_out][c_ix_x_out][comp_i][comp_j];
+        const int c_id_x = ix_f + dx;
+        const int c_id_x_out = getIndexInterpolate(c_id_x,NX,boundary);
+        buff_x[dx + 1] = u[c_id_y_out][c_id_x_out][comp_i][comp_j];
     }
     buff_y[dy + 1] = cuda_interpolate1d_cubicHermiteSpline_local<T>(buff_x, wx + 1);
   }
@@ -305,12 +370,13 @@ __device__ T cuda_interpolateMatrixField2d_bicubicHermiteSpline(const torch::Pac
 // scalar fields
 //=====================
 template <typename T>
-__device__ T cuda_interpolate3d_tricubicHermiteSpline(const torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> u, 
-                                         const int NZ, const int NY, const int NX,
-                                         const float LZ, const float LY, const float LX,
-                                         const float hZ, const float hY, const float hX,
-                                         const int boundary,
-                                         const T inter_coord_z, const T inter_coord_y, const T inter_coord_x) {
+__device__ T cuda_interpolate3d_tricubicHermiteSpline(
+    const torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> u, 
+    const int NZ, const int NY, const int NX,
+    const float LZ, const float LY, const float LX,
+    const float hZ, const float hY, const float hX,
+    const int boundary,
+    const T inter_coord_z, const T inter_coord_y, const T inter_coord_x) {
 
   const int ix_f = floorf(inter_coord_x / hX);
   const T wx = inter_coord_x / hX - ix_f;
@@ -327,27 +393,120 @@ __device__ T cuda_interpolate3d_tricubicHermiteSpline(const torch::PackedTensorA
 
   for (int dz = -1; dz < 3; ++dz)
   {
-    const int c_ix_z = iz_f + dz;
-    const int c_ix_z_out = getIndexInterpolate(c_ix_z,NZ,boundary);
+    const int c_id_z = iz_f + dz;
+    const int c_id_z_out = getIndexInterpolate(c_id_z,NZ,boundary);
     for (int dy = -1; dy < 3; ++dy)
     {
-      const int c_ix_y = iy_f + dy;
-      const int c_ix_y_out = getIndexInterpolate(c_ix_y,NY,boundary);
+      const int c_id_y = iy_f + dy;
+      const int c_id_y_out = getIndexInterpolate(c_id_y,NY,boundary);
       for (int dx = -1; dx < 3; ++dx)
       {
-        const int c_ix_x = ix_f + dx;
-        const int c_ix_x_out = getIndexInterpolate(c_ix_x,NX,boundary);
-        buff_x[dx + 1] = u[c_ix_z_out][c_ix_y_out][c_ix_x_out];
+        const int c_id_x = ix_f + dx;
+        const int c_id_x_out = getIndexInterpolate(c_id_x,NX,boundary);
+        buff_x[dx + 1] = u[c_id_z_out][c_id_y_out][c_id_x_out];
       }
       buff_y[dy + 1] = cuda_interpolate1d_cubicHermiteSpline_local<T>(buff_x, wx + 1);
     }
     buff_z[dz + 1] = cuda_interpolate1d_cubicHermiteSpline_local<T>(buff_y, wy + 1);
   }
-
   T out = cuda_interpolate1d_cubicHermiteSpline_local<T>(buff_z, wz + 1);
 
   return out;
 }
+
+
+template <typename T>
+__device__ T cuda_interpolate3d_tricubicHermiteSpline_backward(
+      const torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> u, 
+      const int NZ, const int NY, const int NX,
+      const float LZ, const float LY, const float LX,
+      const float hZ, const float hY, const float hX,
+      const int boundary,
+      const T inter_coord_z, const T inter_coord_y, const T inter_coord_x,
+      const T forward_val,
+      torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> grad_u,
+      T &grad_phi_idz, T &grad_phi_idy, T &grad_phi_idx
+      //torch::PackedTensorAccessor32<T,2,torch::RestrictPtrTraits> grad_phi
+     ) {
+  
+    const int ix_f = floorf(inter_coord_x / hX);
+    const T wx = inter_coord_x / hX - ix_f;
+
+    const int iy_f = floorf(inter_coord_y / hY);
+    const T wy = inter_coord_y / hY - iy_f;
+
+    const int iz_f = floorf(inter_coord_z / hZ);
+    const T wz = inter_coord_z / hZ - iz_f;
+
+    T buff_z[4];
+    T buff_y[4];
+    T buff_x[4];
+
+    // first perform interpolation
+    for (int dz = -1; dz < 3; ++dz)
+    {
+      const int c_id_z = iz_f + dz;
+      const int c_id_z_out = getIndexInterpolate(c_id_z,NZ,boundary);
+      for (int dy = -1; dy < 3; ++dy)
+      {
+        const int c_id_y = iy_f + dy;
+        const int c_id_y_out = getIndexInterpolate(c_id_y,NY,boundary);
+        for (int dx = -1; dx < 3; ++dx)
+        {
+          const int c_id_x = ix_f + dx;
+          const int c_id_x_out = getIndexInterpolate(c_id_x,NX,boundary);
+          buff_x[dx + 1] = u[c_id_z_out][c_id_y_out][c_id_x_out];
+        }
+        buff_y[dy + 1] = cuda_interpolate1d_cubicHermiteSpline_local<T>(buff_x, wx + 1);
+      }
+      buff_z[dz + 1] = cuda_interpolate1d_cubicHermiteSpline_local<T>(buff_y, wy + 1);
+    }
+    T out = cuda_interpolate1d_cubicHermiteSpline_local<T>(buff_z, wz + 1);
+
+    // backpolate the error
+    T buff_grad_z[4];
+    cuda_interpolate1d_cubicHermiteSpline_backward_local<T>(buff_z, wz+1, buff_grad_z, grad_phi_idz, forward_val );
+
+    // for (int dz = -1; dz < 3; ++dz)
+    // {
+    //   const int c_id_z = iz_f + dz;
+    //   const int c_id_z_out = getIndexInterpolate(c_id_z,NZ,boundary);
+
+    //   for (int dy = -1; dy < 3; ++dy)
+    //   {
+    //       const int c_id_y = iy_f + dy;
+    //       const int c_id_y_out = getIndexInterpolate(c_id_y,NY,boundary);
+    //       buff_y[dy + 1] = u[c_id_z_out][c_id_y_out][c_id_x_out];
+    //   }
+    //   T buff_grad_y[4];
+    //   cuda_interpolate1d_cubicHermiteSpline_backward_local<T>(buff_y, wy+1, buff_grad_y, grad_phi_idy, buff_grad_z[dz+1] );
+    //   for (int dy = -1; dy < 3; ++dy)
+    //   {
+    //     const int c_id_y = iy_f + dy;
+    //     const int c_id_y_out = getIndexInterpolate(c_id_y,NY,boundary);
+
+    //     for (int dx = -1; dx < 3; ++dx)
+    //     {
+    //         const int c_id_x = ix_f + dx;
+    //         const int c_id_x_out = getIndexInterpolate(c_id_x,NX,boundary);
+    //         buff_x[dx + 1] = u[c_id_y_out][c_id_x_out];
+    //     }
+    //     T buff_grad_x[4];
+    //     cuda_interpolate1d_cubicHermiteSpline_backward_local<T>(buff_x, wx+1, buff_grad_x, grad_phi_idx, buff_grad_y[dy+1] );
+    //     for (int dx = -1; dx < 3; ++dx)
+    //     {
+    //       const int c_id_x = ix_f + dx;
+    //       const int c_id_x_out = getIndexInterpolate(c_id_x,NX,boundary);
+    //       atomicAdd( &(grad_u[c_id_y_out][c_id_x_out]), buff_grad_x[dx + 1]);
+    //     }
+    //   }
+
+    // }
+
+
+    return out;
+}
+
 
 //=====================
 // vector fields
@@ -376,17 +535,17 @@ __device__ T cuda_interpolateVectorField3d_tricubicHermiteSpline(const torch::Pa
 
   for (int dz = -1; dz < 3; ++dz)
   {
-    const int c_ix_z = iz_f + dz;
-    const int c_ix_z_out = getIndexInterpolate(c_ix_z,NZ,boundary);
+    const int c_id_z = iz_f + dz;
+    const int c_id_z_out = getIndexInterpolate(c_id_z,NZ,boundary);
     for (int dy = -1; dy < 3; ++dy)
     {
-      const int c_ix_y = iy_f + dy;
-      const int c_ix_y_out = getIndexInterpolate(c_ix_y,NY,boundary);
+      const int c_id_y = iy_f + dy;
+      const int c_id_y_out = getIndexInterpolate(c_id_y,NY,boundary);
       for (int dx = -1; dx < 3; ++dx)
       {
-        const int c_ix_x = ix_f + dx;
-        const int c_ix_x_out = getIndexInterpolate(c_ix_x,NX,boundary);
-        buff_x[dx + 1] = u[c_ix_z_out][c_ix_y_out][c_ix_x_out][comp];
+        const int c_id_x = ix_f + dx;
+        const int c_id_x_out = getIndexInterpolate(c_id_x,NX,boundary);
+        buff_x[dx + 1] = u[c_id_z_out][c_id_y_out][c_id_x_out][comp];
       }
       buff_y[dy + 1] = cuda_interpolate1d_cubicHermiteSpline_local<T>(buff_x, wx + 1);
     }
@@ -426,17 +585,17 @@ __device__ T cuda_interpolateMatrixField3d_tricubicHermiteSpline(const torch::Pa
 
   for (int dz = -1; dz < 3; ++dz)
   {
-    const int c_ix_z = iz_f + dz;
-    const int c_ix_z_out = getIndexInterpolate(c_ix_z,NZ,boundary);
+    const int c_id_z = iz_f + dz;
+    const int c_id_z_out = getIndexInterpolate(c_id_z,NZ,boundary);
     for (int dy = -1; dy < 3; ++dy)
     {
-      const int c_ix_y = iy_f + dy;
-      const int c_ix_y_out = getIndexInterpolate(c_ix_y,NY,boundary);
+      const int c_id_y = iy_f + dy;
+      const int c_id_y_out = getIndexInterpolate(c_id_y,NY,boundary);
       for (int dx = -1; dx < 3; ++dx)
       {
-        const int c_ix_x = ix_f + dx;
-        const int c_ix_x_out = getIndexInterpolate(c_ix_x,NX,boundary);
-        buff_x[dx + 1] = u[c_ix_z_out][c_ix_y_out][c_ix_x_out][comp_i][comp_j];
+        const int c_id_x = ix_f + dx;
+        const int c_id_x_out = getIndexInterpolate(c_id_x,NX,boundary);
+        buff_x[dx + 1] = u[c_id_z_out][c_id_y_out][c_id_x_out][comp_i][comp_j];
       }
       buff_y[dy + 1] = cuda_interpolate1d_cubicHermiteSpline_local<T>(buff_x, wx + 1);
     }

@@ -114,7 +114,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
     .value("INTERPOLATE_NEAREST", InterpolationType::INTERPOLATE_NEAREST)
     .value("INTERPOLATE_LINEAR", InterpolationType::INTERPOLATE_LINEAR)
     .value("INTERPOLATE_CUBIC_HERMITESPLINE", InterpolationType::INTERPOLATE_CUBIC_HERMITESPLINE)
-//     .value("INTERPOLATE_CUBIC_BSPLINE", InterpolationType::INTERPOLATE_CUBIC_BSPLINE)
+    //.value("INTERPOLATE_CUBIC_BSPLINE", InterpolationType::INTERPOLATE_CUBIC_BSPLINE)
     .export_values();
 
   //=======================================
@@ -128,11 +128,13 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
   py::class_<Warping2D>(m,"Warping2D")
       .def(py::init<const MeshInfo2D&, const InterpolationType, const BoundaryType>())
       .def("forward", &Warping2D::forward)
+      .def("backward", &Warping2D::backward)
       .def("forwardVectorField", &Warping2D::forwardVectorField);
 
   py::class_<Warping3D>(m,"Warping3D")
       .def(py::init<const MeshInfo3D&, const InterpolationType, const BoundaryType>())
       .def("forward", &Warping3D::forward)
+      .def("backward", &Warping3D::backward)
       .def("forwardVectorField", &Warping3D::forwardVectorField);
 
   //=======================================

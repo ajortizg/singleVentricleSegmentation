@@ -46,7 +46,7 @@ __device__ T cuda_interpolate1d_linear_backward(
     const int NX, const float LX, const float hX,
     const int boundary,
     const T inter_coord_x,
-    const T forward_val_x,
+    const T forward_val,
     torch::PackedTensorAccessor32<T,1,torch::RestrictPtrTraits> grad_u,
     T &grad_phi_idx
     //    torch::PackedTensorAccessor32<T,2,torch::RestrictPtrTraits> grad_phi 
@@ -65,11 +65,11 @@ __device__ T cuda_interpolate1d_linear_backward(
   out += wx * u_c;
 
   // Gradients wrt. the pixel values
-  atomicAdd( &(grad_u[ix_f_out]), (1 - wx) * forward_val_x);
-  atomicAdd( &(grad_u[ix_c_out]), wx * forward_val_x );
+  atomicAdd( &(grad_u[ix_f_out]), (1 - wx) * forward_val);
+  atomicAdd( &(grad_u[ix_c_out]), wx * forward_val );
 
   // Gradients wrt. the coordinates
-  grad_phi_idx += forward_val_x;
+  grad_phi_idx += forward_val;
 
   return out;
 }
@@ -111,6 +111,55 @@ __device__ T cuda_interpolate2d_bilinear(const torch::PackedTensorAccessor32<T,2
   out += (1 - wy) * wx * u_cf;
   out += wy * (1 - wx) * u_fc;
   out += wy * wx * u_cc;
+
+  return out;
+}
+
+template <typename T>
+__device__ T cuda_interpolate2d_bilinear_backward(
+    const torch::PackedTensorAccessor32<T,2,torch::RestrictPtrTraits> u, 
+    const int NY, const int NX, 
+    const float LY, const float LX,
+    const float hY, const float hX,
+    const int boundary,
+    const T inter_coord_y, const T inter_coord_x,
+    const T forward_val,
+    torch::PackedTensorAccessor32<T,2,torch::RestrictPtrTraits> grad_u,
+    T &grad_phi_idy, T &grad_phi_idx
+    //    torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> grad_phi 
+    ) {
+  
+  const int ix_f = floorf(inter_coord_x / hX );
+  const int ix_c = ix_f + 1;
+  const T wx = inter_coord_x / hX - ix_f;
+  const int ix_f_out = getIndexInterpolate(ix_f,NX,boundary);  
+  const int ix_c_out = getIndexInterpolate(ix_c,NX,boundary);
+
+  const int iy_f = floorf(inter_coord_y / hY );
+  const int iy_c = iy_f + 1;
+  const T wy = inter_coord_y / hY - iy_f;
+  const int iy_f_out = getIndexInterpolate(iy_f,NY,boundary);  
+  const int iy_c_out = getIndexInterpolate(iy_c,NY,boundary);
+
+  T u_ff = u[iy_f_out][ix_f_out];
+  T u_fc = u[iy_c_out][ix_f_out];
+  T u_cf = u[iy_f_out][ix_c_out];
+  T u_cc = u[iy_c_out][ix_c_out];
+
+  T out = (1 - wy) * (1 - wx) * u_ff;
+  out += (1 - wy) * wx * u_cf;
+  out += wy * (1 - wx) * u_fc;
+  out += wy * wx * u_cc;
+
+  // Gradients wrt. the pixel values
+  atomicAdd( &(grad_u[iy_f_out][ix_f_out]), (1 - wy) * (1 - wx) * forward_val );
+  atomicAdd( &(grad_u[iy_c_out][ix_f_out]),  wy * (1 - wx) * forward_val );
+  atomicAdd( &(grad_u[iy_f_out][ix_c_out]), (1 - wy) * wx * forward_val );
+  atomicAdd( &(grad_u[iy_c_out][ix_c_out]), wy * wx * forward_val );
+
+  // Gradients wrt. the coordinates
+  grad_phi_idx += ((1 - wy) * (u_cf - u_ff) + wy * (u_cc - u_fc)) * forward_val;
+  grad_phi_idy += ((1 - wx) * (u_fc - u_ff) + wx * (u_cc - u_cf)) * forward_val;
 
   return out;
 }
@@ -198,12 +247,13 @@ __device__ T cuda_interpolateMatrixField2d_bilinear(const torch::PackedTensorAcc
 // scalar fields
 //=====================
 template <typename T>
-__device__ T cuda_interpolate3d_trilinear(const torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> u,
-                                          const int NZ, const int NY, const int NX,
-                                          const float LZ, const float LY, const float LX,
-                                          const float hZ, const float hY, const float hX,
-                                          const int boundary,
-                                          const T inter_coord_t, const T inter_coord_y, const T inter_coord_x) {
+__device__ T cuda_interpolate3d_trilinear(
+    const torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> u,
+    const int NZ, const int NY, const int NX,
+    const float LZ, const float LY, const float LX,
+    const float hZ, const float hY, const float hX,
+    const int boundary,
+    const T inter_coord_t, const T inter_coord_y, const T inter_coord_x) {
   const int ix_f = floorf(inter_coord_x / hX );
   const int ix_c = ix_f + 1;
   const T wx = inter_coord_x / hX - ix_f;
@@ -243,6 +293,74 @@ __device__ T cuda_interpolate3d_trilinear(const torch::PackedTensorAccessor32<T,
   return out;
 }
 
+
+template <typename T>
+__device__ T cuda_interpolate3d_trilinear_backward(
+    const torch::PackedTensorAccessor32<T,2,torch::RestrictPtrTraits> u, 
+    const int NZ, const int NY, const int NX,
+    const float LZ, const float LY, const float LX,
+    const float hZ, const float hY, const float hX,
+    const int boundary,
+    const T inter_coord_t, const T inter_coord_y, const T inter_coord_x
+    const T forward_val,
+    torch::PackedTensorAccessor32<T,2,torch::RestrictPtrTraits> grad_u,
+    T &grad_phi_idz, T &grad_phi_idy, T &grad_phi_idx
+    //    torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> grad_phi 
+    ) {
+  
+  const int ix_f = floorf(inter_coord_x / hX );
+  const int ix_c = ix_f + 1;
+  const T wx = inter_coord_x / hX - ix_f;
+  const int ix_f_out = getIndexInterpolate(ix_f,NX,boundary);  
+  const int ix_c_out = getIndexInterpolate(ix_c,NX,boundary);
+
+  const int iy_f = floorf(inter_coord_y / hY );
+  const int iy_c = iy_f + 1;
+  const T wy = inter_coord_y / hY - iy_f;
+  const int iy_f_out = getIndexInterpolate(iy_f,NY,boundary);  
+  const int iy_c_out = getIndexInterpolate(iy_c,NY,boundary);
+
+  const int iz_f = floorf(inter_coord_t / hZ );
+  const int iz_c = iz_f + 1;
+  const T wz = inter_coord_t / hZ - iz_f;
+  const int iz_f_out = getIndexInterpolate(iz_f,NZ,boundary);
+  const int iz_c_out = getIndexInterpolate(iz_c,NZ,boundary);
+
+  T u_fff = u[iz_f_out][iy_f_out][ix_f_out];
+  T u_ffc = u[iz_c_out][iy_f_out][ix_f_out];
+  T u_fcf = u[iz_f_out][iy_c_out][ix_f_out];
+  T u_fcc = u[iz_c_out][iy_c_out][ix_f_out];
+  T u_cff = u[iz_f_out][iy_f_out][ix_c_out];
+  T u_cfc = u[iz_c_out][iy_f_out][ix_c_out];
+  T u_ccf = u[iz_f_out][iy_c_out][ix_c_out];
+  T u_ccc = u[iz_c_out][iy_c_out][ix_c_out];
+
+  T out = (1 - wz) * (1 - wy) * (1 - wx) * u_fff;
+  out += wz * (1 - wy) * (1 - wx) * u_ffc;
+  out += (1 - wz) * (1 - wy) * wx * u_cff;
+  out += wz * (1 - wy) * wx * u_cfc;
+  out += (1 - wz) * wy * (1 - wx) * u_fcf;
+  out += wz * wy * (1 - wx) * u_fcc;
+  out += (1 - wz) * wy * wx * u_ccf;
+  out += wz * wy * wx * u_ccc;
+
+  // Gradients wrt. the pixel values
+  atomicAdd( &(grad_u[iz_f_out][iy_f_out][ix_f_out]), (1 - wz) * (1 - wy) * (1 - wx) * forward_val );
+  atomicAdd( &(grad_u[iz_f_out][iy_c_out][ix_f_out]), (1 - wz) *  wy * (1 - wx) * forward_val );
+  atomicAdd( &(grad_u[iz_f_out][iy_f_out][ix_c_out]), (1 - wz) * (1 - wy) * wx * forward_val );
+  atomicAdd( &(grad_u[iz_f_out][iy_c_out][ix_c_out]), (1 - wz) * wy * wx * forward_val );
+  atomicAdd( &(grad_u[iz_c_out][iy_f_out][ix_f_out]), wz * (1 - wy) * (1 - wx) * forward_val );
+  atomicAdd( &(grad_u[iz_c_out][iy_c_out][ix_f_out]), wz * wy * (1 - wx) * forward_val );
+  atomicAdd( &(grad_u[iz_c_out][iy_f_out][ix_c_out]), wz * (1 - wy) * wx * forward_val );
+  atomicAdd( &(grad_u[iz_c_out][iy_c_out][ix_c_out]), wz * wy * wx * forward_val );
+
+  // Gradients wrt. the coordinates
+  grad_phi_idx += ((1 - wx) * (u_fc - u_ff) + wx * (u_cc - u_cf)) * forward_val;
+  grad_phi_idy += ((1 - wy) * (u_cf - u_ff) + wy * (u_cc - u_fc)) * forward_val;
+  grad_phi_idz += ((1 - wz) * (u_fc - u_ff) + wz * (u_cc - u_cf)) * forward_val;
+
+  return out;
+}
 
 //=====================
 // vector fields

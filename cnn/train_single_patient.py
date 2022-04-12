@@ -88,6 +88,8 @@ for e in range(1):
         # Forward mask propagation
         u = fwd_of[j].unsqueeze(dim=0).to(DEVICE)
         mt = net(warp(mts[-1], grid + u))
+        #TODO mt = net(myWarp(mts[-1], u))
+
         mts.append(mt)
 
     # mtts.append(mts[-1])
