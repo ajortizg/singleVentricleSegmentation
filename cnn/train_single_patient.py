@@ -92,12 +92,9 @@ for e in range(1000):
         # Forward mask propagation
         u = fwd_of[j].unsqueeze(dim=0).to(DEVICE)
         mt = net(warp(mts[-1], grid + u))
-<<<<<<< HEAD
         mt = F.sigmoid(mt)
-=======
         #TODO mt = net(myWarp(mts[-1], u))
 
->>>>>>> 67332d7988c219ede99a9853720d9815d930136e
         mts.append(mt)
 
     # mtts.append(mts[-1])
