@@ -1,19 +1,18 @@
-import matplotlib.pyplot as plt
 import numpy as np
 from ellipse import Ellipsoid
-from tqdm import trange
 import sys
 import os
+from tqdm import trange
 import configparser
 # import nibabel as nib
 import torch
 import pandas
-import utils
+import os.path as osp
 
-utils_lib_path = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), '../utils'))
+utils_lib_path = osp.abspath(osp.join(osp.dirname(__file__), '../utils'))
 sys.path.append(utils_lib_path)
 import plots
+import torch_warping
 
 
 def combine_voxels(ellipsoids):
@@ -36,6 +35,24 @@ def combine_voxels(ellipsoids):
     return img
 
 
+def create_ellipsoid(config, name, grid):
+    params_str = config.get('PARAMETERS', name).replace(" ", "")
+    params = list(map(float, params_str.split(',')))
+    constant = config.getboolean('PARAMETERS', 'CONSTANT_GRAY')
+    e = Ellipsoid(cx=params[0],
+                  cy=params[1],
+                  cz=params[2],
+                  rx=params[3],
+                  ry=params[4],
+                  rz=params[5],
+                  angx=params[6],
+                  angy=params[7],
+                  angz=params[8]
+                  )
+    e.create_voxels(grid, constant=constant, value1=params[9], value2=params[10])
+    return e
+
+
 if __name__ == "__main__":
 
     print("\n\n")
@@ -49,14 +66,12 @@ if __name__ == "__main__":
     # load config parser
     config = configparser.ConfigParser()
     config.read('parser/configSynthetic3D.ini')
-    cuda_availabe = config.get('DEVICE', 'cuda_availabe')
-    DEVICE = "cuda" if cuda_availabe else "cpu"
-    # TODO include check from torch
-    #DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+    # use_cuda = config.get('DEVICE', 'USE_CUDA')
+    # DEVICE = 'cuda' if use_cuda and torch.cuda.is_available() else 'cpu'
 
     # create save directories
     saveDir = config.get('DATA', 'OUTPUT_PATH')
-    saveDir = plots.createSaveDirectory(saveDir, "Synthetic3D")
+    saveDir = plots.createSaveDirectory(saveDir, 'Synthetic3D')
     VOLUMES_PATH = plots.createSubDirectory(saveDir, config.get('DATA', 'VOLUMES_SUBDIR_PATH'))
     SEGMENTATIONS_PATH = plots.createSubDirectory(saveDir, config.get('DATA', 'SEGMENTATIONS_SUBDIR_PATH'))
     SEGMENTATIONS_FILE = os.path.sep.join([saveDir, config.get('DATA', 'SEGMENTATIONS_FILE_NAME')])
@@ -64,7 +79,7 @@ if __name__ == "__main__":
     df = pandas.DataFrame(columns=['Name', 'Systole', 'Diastole'])
 
     # save config file to save directory
-    conifgOutput = os.path.sep.join([saveDir, "config.ini"])
+    conifgOutput = os.path.sep.join([saveDir, 'config.ini'])
     with open(conifgOutput, 'w') as configfile:
         config.write(configfile)
 
@@ -73,32 +88,27 @@ if __name__ == "__main__":
     saveDirPatient = plots.createSubDirectory(SEGMENTATIONS_PATH, PATIENT_NAME)
 
     # Size of voxel map
-    NZ, NY, NX = 16, 352, 352
-    grid = utils.create_grid(NZ, NY, NX)
-    e1A = Ellipsoid(cx=0, cy=0, cz=0, rx=90, ry=150,
-                    rz=9, angx=0, angy=0, angz=0)
-    e1A.create_voxels(grid, False, value1=0.1, value2=0.3)
-    e2A = Ellipsoid(cx=0, cy=0, cz=0, rx=50, ry=100,
-                    rz=9, angx=0, angy=0, angz=0)
-    e2A.create_voxels(grid, False, value1=0.3, value2=0.6)
-    e3A = Ellipsoid(cx=0, cy=0, cz=0, rx=30, ry=50,
-                    rz=9, angx=0, angy=0, angz=0)
-    e3A.create_voxels(grid, False, value1=0.6, value2=0.9)
-    eAs = [e1A, e2A, e3A]
+    NZ = config.getint('PARAMETERS', 'NZ')
+    NY = config.getint('PARAMETERS', 'NY')
+    NX = config.getint('PARAMETERS', 'NX')
 
-    e1B = Ellipsoid(cx=10, cy=-10, cz=0, rx=90, ry=150,
-                    rz=9, angx=0, angy=0, angz=-10)
-    e1B.create_voxels(grid, False, value1=0.1, value2=0.3)
-    e2B = Ellipsoid(cx=10, cy=-18, cz=0, rx=50, ry=100,
-                    rz=9, angx=0, angy=0, angz=15)
-    e2B.create_voxels(grid, False, value1=0.3, value2=0.6)
-    e3B = Ellipsoid(cx=15, cy=-10, cz=0, rx=30, ry=50,
-                    rz=9, angx=0, angy=0, angz=12)
-    e3B.create_voxels(grid, False, value1=0.6, value2=0.9)
-    eBs = [e1B, e2B, e3B]
+    grid = torch_warping.create_grid(NZ, NY, NX).numpy()
+
+    eA1 = create_ellipsoid(config, 'eA1', grid)
+    eA2 = create_ellipsoid(config, 'eA2', grid)
+    eA3 = create_ellipsoid(config, 'eA3', grid)
+    eAs = [eA1, eA2, eA3]
+
+    eB1 = create_ellipsoid(config, 'eB1', grid)
+    eB2 = create_ellipsoid(config, 'eB2', grid)
+    eB3 = create_ellipsoid(config, 'eB3', grid)
+    eBs = [eB1, eB2, eB3]
 
     imgA = combine_voxels(eAs)
     imgB = combine_voxels(eBs)
+
+    plots.save_slices(torch.from_numpy(imgA), 'A.png', saveDir)
+    plots.save_slices(torch.from_numpy(imgB), 'B.png', saveDir)
 
     # Compute intermediate steps
     ts = 10
@@ -106,34 +116,34 @@ if __name__ == "__main__":
     tDiastole = 9
     alpha = np.linspace(0.0, 1.0, ts)
 
-    data4d = torch.zeros([NZ, NY, NX, ts]).float().to(DEVICE)
+    data4d = torch.zeros([NZ, NY, NX, ts]).float()
+
+    save_steps_dir = plots.createSubDirectory(saveDir, 'Steps')
 
     for t in trange(ts):
         es = []
         for eA, eB in zip(eAs, eBs):
-            ei = eA*(1-alpha[t]) + eB*(alpha[t])  # fwd (A -> B)
+            ei = eA * (1 - alpha[t]) + eB * (alpha[t])  # fwd (A -> B)
             ei.create_voxels(grid, eA.constant, eA.value1, eA.value2)
             # ei = eA*(alpha[t]) + eB*(1.0-alpha[t])  # bwd (B -> A)
             es.append(ei)
 
         img_t = combine_voxels(es)
+        plots.save_slices(torch.from_numpy(img_t), f'step_{t}.png', save_steps_dir)
 
-        mask = torch.from_numpy(es[-1].mask).float().to(DEVICE)
-        plots.save3D_torch_to_nifty(mask, saveDirPatient, f"mask_time{t}.nii")
+        mask = torch.from_numpy(es[-1].mask).float()
+        plots.save3D_torch_to_nifty(mask, saveDirPatient, f'mask_time{t}.nii')
 
         if t == tSystole:
-            plots.save3D_torch_to_nifty(
-                mask, saveDirPatient, PATIENT_NAME + "_Systole_Labelmap")
+            plots.save3D_torch_to_nifty(mask, saveDirPatient, PATIENT_NAME + '_Systole_Labelmap')
         if t == tDiastole:
-            plots.save3D_torch_to_nifty(
-                mask, saveDirPatient, PATIENT_NAME + "_Diastole_Labelmap")
+            plots.save3D_torch_to_nifty(mask, saveDirPatient, PATIENT_NAME + '_Diastole_Labelmap')
 
-        data4d[:, :, :, t] = torch.from_numpy(img_t).float().to(DEVICE)
+        data4d[:, :, :, t] = torch.from_numpy(img_t).float()
 
-    plots.save4D_torch_to_nifty(data4d, VOLUMES_PATH, PATIENT_NAME + ".nii.gz")
+    plots.save4D_torch_to_nifty(data4d, VOLUMES_PATH, PATIENT_NAME + '.nii.gz')
 
-    patient_row = {'Name': PATIENT_NAME,
-                   'Systole': tSystole, 'Diastole': tDiastole}
+    patient_row = {'Name': PATIENT_NAME, 'Systole': tSystole, 'Diastole': tDiastole}
     df_patient = pandas.DataFrame(patient_row, index=[0])
     df = pandas.concat([df, df_patient], ignore_index=True)
     df.to_excel(SEGMENTATIONS_FILE)

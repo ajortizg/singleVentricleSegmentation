@@ -1,9 +1,5 @@
-import numpy as np
 import math
-
-# small rotation
-# small translation
-# compression and gray value change
+import numpy as np
 
 
 def rotx(deg):

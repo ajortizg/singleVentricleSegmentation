@@ -9,18 +9,14 @@ import torch
 
 
 class SingleVentricleDataset(Dataset):
-    def __init__(self, config, transforms=None):
-        self.transforms = transforms
+    def __init__(self, config):
         self.config = config
-        base = config.get("DATA", "BASE_PATH_3D")
+        base = config.get('DATA', 'BASE_PATH_3D')
 
-        self.masks_root = osp.join(base, config.get(
-            "DATA", "SEGMENTATIONS_SUBDIR_PATH"))
-        self.volume_files = glob(osp.join(
-            osp.join(base, config.get("DATA", "VOLUMES_SUBDIR_PATH")), "*.nii.gz"))
+        self.masks_root = osp.join(base, config.get('DATA', 'SEGMENTATIONS_SUBDIR_PATH'))
+        self.volume_files = glob(osp.join(osp.join(base, config.get('DATA', 'VOLUMES_SUBDIR_PATH')), '*.nii.gz'))
 
-        masks_file = osp.join(
-            base, config.get("DATA", "SEGMENTATIONS_FILE_NAME"))
+        masks_file = osp.join(base, config.get('DATA', 'SEGMENTATIONS_FILE_NAME'))
         self.df = pandas.read_excel(masks_file)
 
     def __len__(self):
@@ -28,26 +24,23 @@ class SingleVentricleDataset(Dataset):
 
     def __getitem__(self, idx):
         # Load 4D nifty [x,y,z,t]
-        vol = nib.load(self.volume_files[idx])
-        vol_zyxt = np.swapaxes(vol.get_fdata(), 0, 2)
+        # vol = nib.load(self.volume_files[idx])
+        # vol_zyxt = np.swapaxes(vol.get_fdata(), 0, 2)
 
         # Read time steps for systole and diastole
         patient_name = self.get_patient_name(idx)
-        row_patient = self.df[self.df["Name"] == patient_name]
+        row_patient = self.df[self.df['Name'] == patient_name]
         index_patient = row_patient.index[0]
-        tsyst = row_patient.loc[index_patient, "Systole"]
-        tdias = row_patient.loc[index_patient, "Diastole"]
+        tsyst = int(row_patient.loc[index_patient, 'Systole'])
+        tdias = int(row_patient.loc[index_patient, 'Diastole'])
 
-        # Load segmentations masks
-        mask_syst_zyx = self.load_mask(patient_name, "_Systole_Labelmap.nii")
-        mask_diast_zyx = self.load_mask(patient_name, "_Diastole_Labelmap.nii")
+        # Load segmentations masks normalize between 0 and 1 and convert them to torch tensors
+        mask_syst_zyx = self.normalize(self.load_mask(patient_name, '_Systole_Labelmap.nii'))
+        mask_diast_zyx = self.normalize(self.load_mask(patient_name, '_Diastole_Labelmap.nii'))
+        mask_syst_zyx = torch.from_numpy(mask_syst_zyx).float()
+        mask_diast_zyx = torch.from_numpy(mask_diast_zyx).float()
 
-        if self.transforms is not None:
-            vol_zyxt = self.transforms(vol_zyxt)
-            mask_syst_zyx = self.transforms(mask_syst_zyx)
-            mask_diast_zyx = self.transforms(mask_diast_zyx)
-
-        return (vol_zyxt, mask_syst_zyx, mask_diast_zyx, tsyst, tdias, patient_name)
+        return (mask_syst_zyx, mask_diast_zyx, tsyst, tdias, patient_name)
 
     def get_patient_name(self, idx):
         return (self.volume_files[idx].split(os.sep)[-1]).split(".")[0]
@@ -81,8 +74,8 @@ class SingleVentricleDataset(Dataset):
     def optflow_results_for_patient(self, patient):
         fwdof_dir = self.config.get('DATA', 'FWD_OPTFLOW_RESULTS_DIR')
         bwdof_dir = self.config.get('DATA', 'BWD_OPTFLOW_RESULTS_DIR')
-        flow_name = "flow_it0.pt"
-        level = "it0"
+        flow_name = 'flow_it0.pt'
+        level = 'it0'
         fwd_flows = []
         bwd_flows = []
         # i = 0
@@ -122,3 +115,9 @@ class SingleVentricleDataset(Dataset):
             # warp_mask_torch = torch.from_numpy(warp_mask).type(torch.FloatTensor).to(self.device)
 
         return (fwd_flows, bwd_flows)
+
+    def normalize(self, x):
+        # Normalize between 0 and 1
+        min = np.amin(x)
+        max = np.amax(x)
+        return (x - min) / (max - min)

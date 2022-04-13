@@ -74,7 +74,7 @@ def saveImage(input,saveDir,name,max_gray_value=1.):
     cv2.imwrite(pathNameA,factor_gray_value * img)
 
 
-def save3D_torch_to_nifty(data,saveDir,fileName,affine):
+def save3D_torch_to_nifty(data,saveDir,fileName,affine=None):
     #convert
     nii_data_zyx = data.cpu().detach().numpy()
     nii_data_xyz = np.swapaxes(nii_data_zyx, 0, 2)
@@ -84,7 +84,7 @@ def save3D_torch_to_nifty(data,saveDir,fileName,affine):
     outputFile = os.path.sep.join([saveDir, fileName])
     nib.save(nii_img, outputFile)
 
-def save4D_torch_to_nifty(data,saveDir,fileName,affine):
+def save4D_torch_to_nifty(data,saveDir,fileName,affine=None):
     #convert
     nii_data_zyxt = data.cpu().detach().numpy()
     nii_data_xyzt = np.swapaxes(nii_data_zyxt, 0, 2)

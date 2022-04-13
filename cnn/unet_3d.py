@@ -52,6 +52,7 @@ class UNet3D(nn.Module):
             feats //= 2
 
         layers.append(nn.Conv3d(feats, num_classes, kernel_size=1))
+        self.sigmoid = nn.Sigmoid()
         self.layers = nn.ModuleList(layers)
         # self.to(DEVICE)
 
@@ -63,7 +64,7 @@ class UNet3D(nn.Module):
         # Up path
         for i, layer in enumerate(self.layers[self.num_layers: -1]):
             xi[-1] = layer(xi[-1], xi[-2 - i])
-        return self.layers[-1](xi[-1])
+        return (self.layers[-1](xi[-1]))
 
 
 class DoubleConv3D(nn.Module):
