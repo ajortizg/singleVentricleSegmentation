@@ -9,7 +9,7 @@ from opticalFlow_cuda_ext import opticalFlow
 
 # warpingOp1D = opticalFlow.Warping1D(meshInfo1D,interpolation,boundary)
 
-class WarpingOp1D(torch.autograd.Function):
+class WarpingOp1DFunction(torch.autograd.Function):
     @staticmethod
     def forward(ctx, image, flow, warpingOp):
         ctx.save_for_backward(image, flow)
@@ -20,32 +20,9 @@ class WarpingOp1D(torch.autograd.Function):
     def backward(ctx, grad_out):
         image, flow = ctx.saved_tensors
         grad_image, grad_flow = ctx.warpingOp.backward(image, flow, grad_out)
-        return grad_image, None, None
+        return grad_image, grad_flow, None
+        # return grad_image, None, None
 
 
 def warp1D(image: torch.Tensor, flow: torch.Tensor, warpingOp) -> torch.Tensor:
-    return WarpingOp1D().apply(image,flow,warpingOp)
-
-
-
-#test interface
-NX1D = 17
-LX1D = 2.
-meshInfo1D = opticalFlow.MeshInfo1D(NX1D,LX1D)
-
-warpingOp1D = opticalFlow.Warping1D(meshInfo1D,opticalFlow.InterpolationType.INTERPOLATE_LINEAR,opticalFlow.BoundaryType.BOUNDARY_MIRROR)
-
-image = torch.randn(NX1D).cuda()
-flow = torch.ones(NX1D,1).cuda()
-
-image.requires_grad_(True)
-flow.requires_grad_(True)
-
-out = warp1D(image,flow,warpingOp1D)
-print(out)
-
-loss = torch.sum(out**2)
-loss.backward()
-
-print(image.grad)
-print(flow.grad)
+    return WarpingOp1DFunction().apply(image,flow,warpingOp)

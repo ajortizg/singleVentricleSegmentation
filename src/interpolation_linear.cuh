@@ -253,7 +253,7 @@ __device__ T cuda_interpolate3d_trilinear(
     const float LZ, const float LY, const float LX,
     const float hZ, const float hY, const float hX,
     const int boundary,
-    const T inter_coord_t, const T inter_coord_y, const T inter_coord_x) {
+    const T inter_coord_z, const T inter_coord_y, const T inter_coord_x) {
   const int ix_f = floorf(inter_coord_x / hX );
   const int ix_c = ix_f + 1;
   const T wx = inter_coord_x / hX - ix_f;
@@ -266,9 +266,9 @@ __device__ T cuda_interpolate3d_trilinear(
   const int iy_f_out = getIndexInterpolate(iy_f,NY,boundary);  
   const int iy_c_out = getIndexInterpolate(iy_c,NY,boundary);
 
-  const int iz_f = floorf(inter_coord_t / hZ );
+  const int iz_f = floorf(inter_coord_z / hZ );
   const int iz_c = iz_f + 1;
-  const T wz = inter_coord_t / hZ - iz_f;
+  const T wz = inter_coord_z / hZ - iz_f;
   const int iz_f_out = getIndexInterpolate(iz_f,NZ,boundary);
   const int iz_c_out = getIndexInterpolate(iz_c,NZ,boundary);
 
@@ -296,14 +296,14 @@ __device__ T cuda_interpolate3d_trilinear(
 
 template <typename T>
 __device__ T cuda_interpolate3d_trilinear_backward(
-    const torch::PackedTensorAccessor32<T,2,torch::RestrictPtrTraits> u, 
+    const torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> u, 
     const int NZ, const int NY, const int NX,
     const float LZ, const float LY, const float LX,
     const float hZ, const float hY, const float hX,
     const int boundary,
-    const T inter_coord_t, const T inter_coord_y, const T inter_coord_x
+    const T inter_coord_z, const T inter_coord_y, const T inter_coord_x,
     const T forward_val,
-    torch::PackedTensorAccessor32<T,2,torch::RestrictPtrTraits> grad_u,
+    torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> grad_u,
     T &grad_phi_idz, T &grad_phi_idy, T &grad_phi_idx
     //    torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> grad_phi 
     ) {
@@ -320,9 +320,9 @@ __device__ T cuda_interpolate3d_trilinear_backward(
   const int iy_f_out = getIndexInterpolate(iy_f,NY,boundary);  
   const int iy_c_out = getIndexInterpolate(iy_c,NY,boundary);
 
-  const int iz_f = floorf(inter_coord_t / hZ );
+  const int iz_f = floorf(inter_coord_z / hZ );
   const int iz_c = iz_f + 1;
-  const T wz = inter_coord_t / hZ - iz_f;
+  const T wz = inter_coord_z / hZ - iz_f;
   const int iz_f_out = getIndexInterpolate(iz_f,NZ,boundary);
   const int iz_c_out = getIndexInterpolate(iz_c,NZ,boundary);
 
@@ -354,10 +354,11 @@ __device__ T cuda_interpolate3d_trilinear_backward(
   atomicAdd( &(grad_u[iz_c_out][iy_f_out][ix_c_out]), wz * (1 - wy) * wx * forward_val );
   atomicAdd( &(grad_u[iz_c_out][iy_c_out][ix_c_out]), wz * wy * wx * forward_val );
 
+  //TODO
   // Gradients wrt. the coordinates
-  grad_phi_idx += ((1 - wx) * (u_fc - u_ff) + wx * (u_cc - u_cf)) * forward_val;
-  grad_phi_idy += ((1 - wy) * (u_cf - u_ff) + wy * (u_cc - u_fc)) * forward_val;
-  grad_phi_idz += ((1 - wz) * (u_fc - u_ff) + wz * (u_cc - u_cf)) * forward_val;
+  // grad_phi_idx += ((1 - wx) * (u_fc - u_ff) + wx * (u_cc - u_cf)) * forward_val;
+  // grad_phi_idy += ((1 - wy) * (u_cf - u_ff) + wy * (u_cc - u_fc)) * forward_val;
+  // grad_phi_idz += ((1 - wz) * (u_fc - u_ff) + wz * (u_cc - u_cf)) * forward_val;
 
   return out;
 }
@@ -371,7 +372,7 @@ __device__ T cuda_interpolateVectorField3d_trilinear(const torch::PackedTensorAc
                                           const float LZ, const float LY, const float LX,
                                           const float hZ, const float hY, const float hX,
                                           const int boundary,
-                                          const T inter_coord_t, const T inter_coord_y, const T inter_coord_x, 
+                                          const T inter_coord_z, const T inter_coord_y, const T inter_coord_x, 
                                           const int comp) {
   const int ix_f = floorf(inter_coord_x / hX );
   const int ix_c = ix_f + 1;
@@ -385,9 +386,9 @@ __device__ T cuda_interpolateVectorField3d_trilinear(const torch::PackedTensorAc
   const int iy_f_out = getIndexInterpolate(iy_f,NY,boundary);  
   const int iy_c_out = getIndexInterpolate(iy_c,NY,boundary);
 
-  const int iz_f = floorf(inter_coord_t / hZ );
+  const int iz_f = floorf(inter_coord_z / hZ );
   const int iz_c = iz_f + 1;
-  const T wz = inter_coord_t / hZ - iz_f;
+  const T wz = inter_coord_z / hZ - iz_f;
   const int iz_f_out = getIndexInterpolate(iz_f,NZ,boundary);
   const int iz_c_out = getIndexInterpolate(iz_c,NZ,boundary);
 
@@ -422,7 +423,7 @@ __device__ T cuda_interpolateMatrixField3d_trilinear(const torch::PackedTensorAc
                                           const float LZ, const float LY, const float LX,
                                           const float hZ, const float hY, const float hX,
                                           const int boundary,
-                                          const T inter_coord_t, const T inter_coord_y, const T inter_coord_x, 
+                                          const T inter_coord_z, const T inter_coord_y, const T inter_coord_x, 
                                           const int comp_i, const int comp_j ) {
   const int ix_f = floorf(inter_coord_x / hX );
   const int ix_c = ix_f + 1;
@@ -436,9 +437,9 @@ __device__ T cuda_interpolateMatrixField3d_trilinear(const torch::PackedTensorAc
   const int iy_f_out = getIndexInterpolate(iy_f,NY,boundary);  
   const int iy_c_out = getIndexInterpolate(iy_c,NY,boundary);
 
-  const int iz_f = floorf(inter_coord_t / hZ );
+  const int iz_f = floorf(inter_coord_z / hZ );
   const int iz_c = iz_f + 1;
-  const T wz = inter_coord_t / hZ - iz_f;
+  const T wz = inter_coord_z / hZ - iz_f;
   const int iz_f_out = getIndexInterpolate(iz_f,NZ,boundary);
   const int iz_c_out = getIndexInterpolate(iz_c,NZ,boundary);
 
