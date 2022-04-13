@@ -20,7 +20,7 @@ class WarpingOp1D(torch.autograd.Function):
     def backward(ctx, grad_out):
         image, flow = ctx.saved_tensors
         grad_image, grad_flow = ctx.warpingOp.backward(image, flow, grad_out)
-        return grad_image, grad_flow, None
+        return grad_image, None, None
 
 
 def warp1D(image: torch.Tensor, flow: torch.Tensor, warpingOp) -> torch.Tensor:
