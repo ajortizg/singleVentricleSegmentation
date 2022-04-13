@@ -1,6 +1,12 @@
-import numpy as np
 from transforms import rotx, roty, rotz
-import utils
+import os.path as osp
+import numpy as np
+import sys
+import torch
+
+utils_lib_path = osp.abspath(osp.join(osp.dirname(__file__), '../utils'))
+sys.path.append(utils_lib_path)
+import torch_warping
 
 
 class Ellipse:
@@ -14,19 +20,19 @@ class Ellipse:
         self.compute()
 
     def compute(self):
-        theta = np.deg2rad(np.arange(0.0, 360.0, 1.0))
-        self.x = self.rx * np.cos(theta)
-        self.y = self.ry * np.sin(theta)
-        rad_ang = np.radians(self.angle)
-        R = np.array([
-            [np.cos(rad_ang), -np.sin(rad_ang)],
-            [np.sin(rad_ang), np.cos(rad_ang)],
+        theta = torch.deg2rad(torch.arange(0.0, 360.0, 1.0))
+        self.x = self.rx * torch.cos(theta)
+        self.y = self.ry * torch.sin(theta)
+        rad_ang = torch.radians(self.angle)
+        R = torch.array([
+            [torch.cos(rad_ang), -torch.sin(rad_ang)],
+            [torch.sin(rad_ang), torch.cos(rad_ang)],
         ])
 
-        self.x, self.y = np.dot(R, np.array([self.x, self.y]))
+        self.x, self.y = torch.dot(R, torch.array([self.x, self.y]))
         self.x += self.cx
         self.y += self.cy
-        self.xy = np.array([self.x, self.y])
+        self.xy = torch.array([self.x, self.y])
 
     def __sub__(self, other):
         return Ellipse(self.cx - other.cx,
@@ -65,13 +71,13 @@ class Ellipsoid:
         self. angy = angy
         self.angz = angz
         self.bins = 200
-        self.color = np.random.rand(3)
+        # self.color = np.random.rand(3)
 
         # Only for visualization
-        self.compute()
+        # self.compute()
 
     def compute(self):
-        u = np.linspace(0, 2*np.pi, self.bins)
+        u = np.linspace(0, 2 * np.pi, self.bins)
         v = np.linspace(0, np.pi, self.bins)
         self.x = self.rx * np.outer(np.cos(u), np.sin(v))
         self.y = self.ry * np.outer(np.sin(u), np.sin(v))
@@ -98,7 +104,7 @@ class Ellipsoid:
         yy = grid[:, :, :, 1]
         zz = grid[:, :, :, 2]
         NZ, NY, NX, _ = grid.shape
-        CZ, CY, CX = NZ//2, NY//2, NX//2
+        CZ, CY, CX = NZ // 2, NY // 2, NX // 2
 
         self.mask = (xx - self.cx - CX) ** 2 / self.rx**2 + (yy - self.cy - CY) ** 2 \
             / self.ry**2 + (zz - self.cz - CZ) ** 2 / self.rz**2 <= 1.0
@@ -107,18 +113,18 @@ class Ellipsoid:
         Rx = rotx(self.angx)
         Ry = roty(self.angy)
         Rz = rotz(self.angz)
-        Rot = Rz@Ry@Rx
+        Rot = Rz @ Ry @ Rx
         Rot = np.linalg.inv(Rot)
         tx = CX - Rot[0, 0] * CX - Rot[0, 1] * CY - Rot[0, 2] * CZ
         ty = CY - Rot[1, 0] * CX - Rot[1, 1] * CY - Rot[1, 2] * CZ
         tz = CZ - Rot[2, 0] * CX - Rot[2, 1] * CY - Rot[2, 2] * CZ
-        t = np.array([tx, ty, tz])
+        t = np.array([tx, ty, tz], dtype=np.float)
 
-        grid_t = np.zeros((NZ, NY, NX, 3), dtype=np.float64)
+        grid_t = np.zeros((NZ, NY, NX, 3), dtype=np.float)
         for z in range(NZ):
             for y in range(NY):
                 for x in range(NX):
-                    grid_t[z, y, x, :] = Rot@grid[z, y, x, :] + t
+                    grid_t[z, y, x, :] = Rot @ grid[z, y, x, :] + t
 
         self.voxels = np.zeros((NZ, NY, NX))
 
@@ -130,9 +136,10 @@ class Ellipsoid:
         else:
             self.voxels = np.where(self.mask, value1, 0.0)
 
-        self.voxels = utils.warp_grid(self.voxels, grid_t, mode="nearest")
-        # self.mask = utils.warp_grid(self.mask.astype(
-        #     np.float64), grid_t, mode="nearest")
+        self.voxels = torch_warping.warp(
+            torch.from_numpy(self.voxels).unsqueeze(dim=0).unsqueeze(dim=0),
+            torch.from_numpy(grid_t).unsqueeze(dim=0),
+            mode="bilinear").squeeze().detach().cpu().numpy()
         self.mask = np.where(self.voxels > 0, True, False)
 
         if not constant:
@@ -147,12 +154,12 @@ class Ellipsoid:
         Rx = rotx(self.angx)
         Ry = roty(self.angy)
         Rz = rotz(self.angz)
-        Rot = Rz@Ry@Rx
+        Rot = Rz @ Ry @ Rx
         self.xyz = np.array([self.x, self.y, self.z])
 
         for i in range(self.bins):
             for j in range(self.bins):
-                self.xyz[:, i, j] = Rot@self.xyz[:, i, j]
+                self.xyz[:, i, j] = Rot @ self.xyz[:, i, j]
 
         self.x = self.xyz[0, :, :]
         self.y = self.xyz[1, :, :]
