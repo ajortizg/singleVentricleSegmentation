@@ -52,9 +52,8 @@ class UNet3D(nn.Module):
             feats //= 2
 
         layers.append(nn.Conv3d(feats, num_classes, kernel_size=1))
-        self.sigmoid = nn.Sigmoid()
+        # self.sigmoid = nn.Sigmoid()
         self.layers = nn.ModuleList(layers)
-        # self.to(DEVICE)
 
     def forward(self, x):
         xi = [self.layers[0](x)]

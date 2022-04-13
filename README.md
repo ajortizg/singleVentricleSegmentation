@@ -14,6 +14,7 @@
 * pip install tqdm
 * pip install pandas
 * pip install openpyxl
+* pip install torchsummary
 
 to install setup file:
 * pip install . 
