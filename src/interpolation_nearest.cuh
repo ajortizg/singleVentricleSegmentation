@@ -295,7 +295,7 @@ __device__ T cuda_interpolate3d_nearest_backward(
     const float LZ, const float LY, const float LX,
     const float hZ, const float hY, const float hX,
     const int boundary,
-    const T inter_coord_z, const T inter_coord_y, const T inter_coord_x
+    const T inter_coord_z, const T inter_coord_y, const T inter_coord_x,
     const T forward_val,
     torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> grad_u,
     T &grad_phi_idz, T &grad_phi_idy, T &grad_phi_idx
