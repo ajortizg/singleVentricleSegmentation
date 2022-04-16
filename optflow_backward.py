@@ -31,7 +31,7 @@ if __name__ == "__main__":
     config.read('parser/configTVL1OF3D.ini')
     cuda_availabe = config.get('DEVICE', 'cuda_availabe')
     DEVICE = 'cuda' if cuda_availabe and torch.cuda.is_available() else 'cpu'
-    PATIENT_NAME = config.get('DATA', 'PATIENT_NAME')
+    # PATIENT_NAME = config.get('DATA', 'PATIENT_NAME')
 
     # create save directory
     saveDir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'TVL1OF3DBackward')
@@ -43,12 +43,12 @@ if __name__ == "__main__":
 
     ds = SingleVentricleDataset(config, load_flow=False)
 
-    idx, found = ds.index_for_patient(PATIENT_NAME)
-    if not found:
-        print(PATIENT_NAME + " not found!")
-        sys.exit()
+    # idx, found = ds.index_for_patient(PATIENT_NAME)
+    # if not found:
+    #     print(PATIENT_NAME + " not found!")
+    #     sys.exit()
 
-    for _ in range(1):
+    for idx in range(len(ds)):
         (pname, data, mask_systole, mask_diastole, systole_time, diastole_time, _, _) = ds[idx]
         data = data.squeeze().to(DEVICE)
         mask_systole = mask_systole.squeeze().to(DEVICE)
@@ -63,7 +63,6 @@ if __name__ == "__main__":
         numTimeSteps = abs(diastole_time - systole_time)
         initTimeStep = min(diastole_time, systole_time)
         finalTimeStep = max(diastole_time, systole_time)
-
         print("=======================================")
         print("\n")
 

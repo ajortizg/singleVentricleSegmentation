@@ -1,11 +1,9 @@
-'''
-Forward mask propagation, from m0 to mk
-'''
 import sys
 import nibabel as nib
 import numpy as np
 import os.path as osp
 import os
+from enum import Enum
 from TVL1OF.TVL1OF3D import *
 from cnn.dataset import SingleVentricleDataset
 
@@ -14,6 +12,12 @@ sys.path.append(utils_lib_path)
 import plots
 
 from opticalFlow_cuda_ext import opticalFlow
+
+
+class OpticalFlowMode(Enum):
+    FORWARD = 1
+    BACKWARD = 2
+    UNKNOWN = 0
 
 
 if __name__ == "__main__":
@@ -31,10 +35,25 @@ if __name__ == "__main__":
     config.read('parser/configTVL1OF3D.ini')
     cuda_availabe = config.get('DEVICE', 'cuda_availabe')
     DEVICE = 'cuda' if cuda_availabe and torch.cuda.is_available() else 'cpu'
-    # PATIENT_NAME = config.get('DATA', 'PATIENT_NAME')
+
+    mode_str = config.get('PARAMETERS', 'mode')
+    mode = OpticalFlowMode.UNKNOWN
+    if mode_str == 'FORWARD':
+        mode = OpticalFlowMode.FORWARD
+    elif mode_str == 'BACKWARD':
+        mode = OpticalFlowMode.BACKWARD
+
+    if mode == OpticalFlowMode.UNKNOWN:
+        print('UNKNOWN optical flow mode!')
+        sys.exit()
+
+    print("=======================================")
+    print('Mode: ' + mode_str + ' Optical Flow')
+    print("=======================================")
+    print("\n")
 
     # create save directory
-    saveDir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'TVL1OF3DForward')
+    saveDir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), f'TVL1OF3D{mode_str}')
 
     # save config file to save directory
     conifgOutput = os.path.sep.join([saveDir, "config.ini"])
@@ -43,6 +62,7 @@ if __name__ == "__main__":
 
     ds = SingleVentricleDataset(config, load_flow=False)
 
+    # PATIENT_NAME = config.get('DATA', 'PATIENT_NAME')
     # idx, found = ds.index_for_patient(PATIENT_NAME)
     # if not found:
     #     print(PATIENT_NAME + " not found!")
@@ -71,17 +91,33 @@ if __name__ == "__main__":
         # initialization of optical flow and mask
         u = torch.zeros([NZ, NY, NX, 3]).float().to(DEVICE)
         p = torch.zeros([NZ, NY, NX, 3, 3]).float().to(DEVICE)
-        mask = None
-        if initTimeStep == systole_time:
-            mask = mask_systole.clone().detach()
-            print('mask = mask_systole')
-        else:
-            mask = mask_diastole.clone().detach()
-            print('mask = mask_diastole')
 
-        for t in range(initTimeStep, finalTimeStep):
+        mask = None
+        from_t, to_t, inc_t = 0, 0, 0
+        if mode == OpticalFlowMode.FORWARD:
+            if initTimeStep == systole_time:
+                mask = mask_systole.clone().detach()
+                print('mask = mask_systole')
+            else:
+                mask = mask_diastole.clone().detach()
+                print('mask = mask_diastole')
+            from_t = initTimeStep
+            to_t = finalTimeStep
+            inc_t = 1
+        elif mode == OpticalFlowMode.BACKWARD:
+            if finalTimeStep == diastole_time:
+                mask = mask_diastole.clone().detach()
+                print('mask = mask_diastole')
+            else:
+                mask = mask_systole.clone().detach()
+                print('mask = mask_systole')
+            from_t = finalTimeStep
+            to_t = initTimeStep
+            inc_t = -1
+
+        for t in range(from_t, to_t, inc_t):
             saveDirTimeStep = plots.createSubDirectory(patientDir, f'time{t}')
-            t0, t1 = t + 1, t
+            t0, t1 = t + inc_t, t
             I0 = data[:, :, :, t0]
             I1 = data[:, :, :, t1]
             print(f'{t1}->{t0}')
