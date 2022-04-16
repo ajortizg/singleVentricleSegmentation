@@ -14,12 +14,12 @@ class UNet3D(nn.Module):
         trilinear = config.getboolean('PARAMETERS', 'TRILINEAR')
         dp = config.getfloat('PARAMETERS', 'DROPOUT_PROB')
         padding = config.getint('PARAMETERS', 'PADDING')
-        self.verbose = config.getboolean('DEBUG', 'VERBOSE')
+        verbose = config.getboolean('DEBUG', 'VERBOSE')
         kstr = config.get('PARAMETERS', 'KERNEL_SIZE')
         kernel_size = tuple(map(int, kstr.split(',')))
 
-        if self.verbose:
-            print("================CNN===============")
+        if verbose:
+            print("\n================CNN===============")
             print(f"Layers: {num_layers}\
                 \nClasses: {num_classes}\
                 \nInput channels: {input_channels}\

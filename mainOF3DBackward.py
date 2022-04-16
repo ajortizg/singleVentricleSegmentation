@@ -28,16 +28,16 @@ if __name__ == "__main__":
     config.read('parser/configTVL1OF3D.ini')
     cuda_availabe = config.get('DEVICE', 'cuda_availabe')
     DEVICE = "cuda" if cuda_availabe and torch.cuda.is_available() else "cpu"
-    #TODO include check from torch
+    # TODO include check from torch
     #DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
     # create save directory
-    saveDir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), "TVL1OF3DBackward" )
+    saveDir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), "TVL1OF3DBackward")
 
-    #save config file to save directory
+    # save config file to save directory
     conifgOutput = os.path.sep.join([saveDir, "config.ini"])
     with open(conifgOutput, 'w') as configfile:
-      config.write(configfile)
+        config.write(configfile)
 
     # Load 4D nifty [x,y,z,t]
     print("=======================================")
@@ -53,8 +53,8 @@ if __name__ == "__main__":
     NZ = nii_data_xyzt.shape[2]
     NT = nii_data_xyzt.shape[3]
 
-    #==================================
-    #scaling of data 
+    # ==================================
+    # scaling of data
     totalMinValue = np.amin(nii_data_xyzt)
     totalMaxValue = np.amax(nii_data_xyzt)
     scaleMinValue = 0.
@@ -63,12 +63,12 @@ if __name__ == "__main__":
     print(f"   * scaling of data in range {totalMinValue,totalMaxValue} to {scaleMinValue,scaleMaxValue}")
     nii_data_xyzt *= scaleMaxValue / totalMaxValue
 
-    ## swap from nibabel (X,Y,Z) to cuda-compatible (Z,Y,X):
+    # swap from nibabel (X,Y,Z) to cuda-compatible (Z,Y,X):
     #print("swap axes (X,Y,Z,T) to (Z,Y,X,T)")
     nii_data = np.swapaxes(nii_data_xyzt, 0, 2)
-    print( f"   * dimensions: (Z,Y,X,T) = {nii_data.shape}")
+    print(f"   * dimensions: (Z,Y,X,T) = {nii_data.shape}")
 
-    #read time steps for diastole and systole
+    # read time steps for diastole and systole
     SEGMENTATIONS_FILE_NAME = config.get('DATA', 'SEGMENTATIONS_FILE_NAME')
     SEGMENTATIONS_FILE = os.path.sep.join([BASE_PATH_3D, SEGMENTATIONS_FILE_NAME])
     df = pandas.read_excel(SEGMENTATIONS_FILE)
@@ -79,12 +79,12 @@ if __name__ == "__main__":
     print("   * systole at time:  ", tSystole)
     print("   * diastole at time: ", tDiastole)
     numTimeSteps = abs(tDiastole - tSystole)
-    initTimeStep = min(tDiastole,tSystole)
-    finalTimeStep = max(tDiastole,tSystole)
+    initTimeStep = min(tDiastole, tSystole)
+    finalTimeStep = max(tDiastole, tSystole)
     print("=======================================")
     print("\n")
 
-    # load input masks 
+    # load input masks
     SEGMENTATIONS_SUBDIR_PATH = config.get('DATA', 'SEGMENTATIONS_SUBDIR_PATH')
     SEGMENTATIONS_PATH = os.path.sep.join([BASE_PATH_3D, SEGMENTATIONS_SUBDIR_PATH])
 
@@ -98,42 +98,41 @@ if __name__ == "__main__":
     nii_mask_diastole = np.swapaxes(nii_mask_xyz_diastole, 0, 2)
     mask_diastole = torch.from_numpy(nii_mask_diastole).float().to(DEVICE)
 
-    saveDirInitTime = plots.createSubDirectory(saveDir,f"time{initTimeStep}")
+    saveDirInitTime = plots.createSubDirectory(saveDir, f"time{initTimeStep}")
     # saveDirInitTime = os.path.sep.join([saveDir, f"time{initTimeStep}"])
     # if not os.path.exists(saveDirInitTime):
     #     os.makedirs(saveDirInitTime)
 
-    #initialization of optical flow and mask
-    u = torch.zeros([NZ,NY,NX,3]).float().to(DEVICE)
-    p = torch.zeros([NZ,NY,NX,3,3]).float().to(DEVICE)
+    # initialization of optical flow and mask
+    u = torch.zeros([NZ, NY, NX, 3]).float().to(DEVICE)
+    p = torch.zeros([NZ, NY, NX, 3, 3]).float().to(DEVICE)
     mask = None
     if initTimeStep == tSystole:
-      mask = mask_systole.clone().detach()
+        mask = mask_systole.clone().detach()
     else:
-      mask = mask_diastole.clone().detach()
-
+        mask = mask_diastole.clone().detach()
 
     for t in range(initTimeStep, finalTimeStep):
-      saveDirTimeStep = plots.createSubDirectory(saveDir,f"time{t}")
-      # saveDirTimeStep = os.path.sep.join([saveDir, f"time{t}"])
-      # if not os.path.exists(saveDirTimeStep):
-      #   os.makedirs(saveDirTimeStep)
-      #convert to torch for given time steps
-      t0, t1 = t+1, t
-      I0 = torch.from_numpy(nii_data[:,:,:,t0]).float().to(DEVICE)
-      I1 = torch.from_numpy(nii_data[:,:,:,t1]).float().to(DEVICE)
+        saveDirTimeStep = plots.createSubDirectory(saveDir, f"time{t}")
+        # saveDirTimeStep = os.path.sep.join([saveDir, f"time{t}"])
+        # if not os.path.exists(saveDirTimeStep):
+        #   os.makedirs(saveDirTimeStep)
+        # convert to torch for given time steps
+        t0, t1 = t + 1, t
+        I0 = torch.from_numpy(nii_data[:, :, :, t0]).float().to(DEVICE)
+        I1 = torch.from_numpy(nii_data[:, :, :, t1]).float().to(DEVICE)
 
-      # Compute the optical flow
-      alg = TVL1OpticalFlow3D(saveDirTimeStep,config)
-      u,p = alg.computeOnPyramid(I0, I1, u, p)
-      # flowName = "flow_it0.pt"
-      # fileNameFlow = os.path.join(saveDirStep, flowName) 
-      # u = torch.load(fileNameFlow, map_location=torch.device(DEVICE))
+        # Compute the optical flow
+        alg = TVL1OpticalFlow3D(saveDirTimeStep, config)
+        u, p = alg.computeOnPyramid(I0, I1, u, p)
+        # flowName = "flow_it0.pt"
+        # fileNameFlow = os.path.join(saveDirStep, flowName)
+        # u = torch.load(fileNameFlow, map_location=torch.device(DEVICE))
 
-      #save the old mask
-      save3D_torch_to_nifty(mask,saveDirTimeStep,f"mask_time{t1}.nii")
-      save_slices(mask, f"mask.png", saveDirTimeStep)
-      save_single_zslices(mask, saveDirTimeStep, "mask_slices", 1., 2)
+        # save the old mask
+        save3D_torch_to_nifty(mask, saveDirTimeStep, f"mask_time{t1}.nii")
+        save_slices(mask, f"mask.png", saveDirTimeStep)
+        save_single_zslices(mask, saveDirTimeStep, "mask_slices", 1., 2)
 
-      #warp mask with the computed optical flow
-      mask = alg.warpMask(mask,u,t0,saveDirTimeStep)
+        # warp mask with the computed optical flow
+        mask = alg.warpMask(mask, u, t0, saveDirTimeStep)

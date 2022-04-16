@@ -83,7 +83,6 @@ if __name__ == "__main__":
     with open(conifgOutput, 'w') as configfile:
         config.write(configfile)
 
-    # possibly iterate over patientis
     PATIENT_NAME = config.get('DATA', 'PATIENT_NAME')
     saveDirPatient = plots.createSubDirectory(SEGMENTATIONS_PATH, PATIENT_NAME)
 

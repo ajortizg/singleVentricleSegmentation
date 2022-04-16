@@ -7,6 +7,7 @@ from tqdm import tqdm
 from unet_3d import UNet3D
 from torch.utils.data import DataLoader
 from torch.nn import MSELoss
+from warp import Warp
 import os
 from torch.utils.tensorboard import SummaryWriter
 import time
@@ -15,7 +16,7 @@ from torchsummary import summary
 import matplotlib.pyplot as plt
 
 sys.path.append(osp.abspath(osp.join(osp.dirname(__file__), '../utils')))
-from torch_warping import create_grid, warp
+# from torch_warping import create_grid, warp
 import plots
 
 print("\n\n")
@@ -85,7 +86,6 @@ for e in tqdm(range(NUM_EPOCHS)):
     # Loop over the training set
     for i, (vol, mask_syst, mask_diast, tsyst, tdias, ff, bf, pname) in enumerate(train_loader):
         _, _, NZ, NY, NX, NT = vol.shape
-        grid = create_grid(NZ, NY, NX).unsqueeze(dim=0).to(DEVICE)
 
         if VERBOSE:
             print("\n")
@@ -110,16 +110,24 @@ for e in tqdm(range(NUM_EPOCHS)):
             m0 = mask_diast.clone().to(DEVICE)
             mk = mask_syst.clone().to(DEVICE)
 
+        patient_dir = plots.createSubDirectory(save_dir, pname[0])
+        plots.save_single_zslices(m0.cpu().detach().squeeze(), patient_dir, 'm0')
+        plots.save_single_zslices(mk.cpu().detach().squeeze(), patient_dir, 'mk')
+
+        warp = Warp(train_ds.of_config, NZ, NY, NX)
+
         mts = [m0]
         k = 0
         for t in range(init_ts, final_ts, 1):
-            img = vol[:, :, :, :, :, t + 1].to(DEVICE)
-            u = bf[k].to(DEVICE)
-            mt = warp(mts[-1], grid - u, mode="bilinear")
-            x = torch.cat((img, mt), dim=1)
-            mt = net(x)
+            # img = vol[:, :, :, :, :, t + 1].to(DEVICE)
+            u = ff[k].to(DEVICE)
+            mt = warp(mts[-1], -u)
+            plots.save_single_zslices(mt.cpu().detach().squeeze(), patient_dir, f'mt{t}')
+            # x = torch.cat((img, mt), dim=1)
+            # mt = net(x)
             mts.append(mt)
             k += 1
+        sys.exit()
 
         mtts = [mk]
         ff.reverse()
