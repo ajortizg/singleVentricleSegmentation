@@ -2,27 +2,21 @@ import torch
 import configparser
 import sys
 from dataset import SingleVentricleDataset
-from torch.optim import Adam
 from tqdm import tqdm
-from unet_3d import UNet3D
-from torch.utils.data import DataLoader
-from torch.nn import MSELoss
 from warp import Warp
-import os
-from torch.utils.tensorboard import SummaryWriter
 import time
 import os.path as osp
-from torchsummary import summary
 import matplotlib.pyplot as plt
 
 sys.path.append(osp.abspath(osp.join(osp.dirname(__file__), '../utils')))
 # from torch_warping import create_grid, warp
 import plots
 
+
 print("\n\n")
 print("===========================================================")
 print("===========================================================")
-print("                      Train CNN:")
+print("                   Identity warping:")
 print("===========================================================")
 print("===========================================================")
 print("\n\n")
@@ -31,68 +25,33 @@ print("\n\n")
 config = configparser.ConfigParser()
 config.read('parser/configCNN.ini')
 cuda_availabe = config.get('DEVICE', 'CUDA_AVAILABLE')
-DEVICE = 'cuda:2' if cuda_availabe and torch.cuda.is_available() else 'cpu'
+DEVICE = 'cuda' if cuda_availabe and torch.cuda.is_available() else 'cpu'
 PIN_MEMORY = False if DEVICE == 'cpu' else True
 BATCH_SIZE = config.getint('PARAMETERS', 'BATCH_SIZE')
-LR = config.getfloat('PARAMETERS', 'LR')
 NUM_EPOCHS = config.getint('PARAMETERS', 'NUM_EPOCHS')
 VERBOSE = config.getboolean('DEBUG', 'VERBOSE')
 
-train_ds = SingleVentricleDataset(config)
-train_loader = DataLoader(train_ds, shuffle=True, batch_size=BATCH_SIZE,
-                          pin_memory=PIN_MEMORY, num_workers=os.cpu_count())
-
-# UNet3D model
-net = UNet3D(config).to(DEVICE)
-net = torch.nn.DataParallel(net, device_ids=[2])
-opt = Adam(net.parameters(), lr=LR)
-loss_func = MSELoss(reduction='sum')
-
-if VERBOSE:
-    summary(net, input_size=(2, 100, 100, 100), batch_size=-1)
-    print("\n")
-    print("===========================================================")
-    print('CNN parameters')
-    print(f"\t* Found {len(train_ds)} examples in the training set")
-    print(f'\t* Device: {DEVICE}')
-    print(f'\t* Learning rate: {LR}')
-    print(f'\t* Num epochs: {NUM_EPOCHS}')
-    print("===========================================================")
-    print("\n")
-
-save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'CNN')
-writer = SummaryWriter(log_dir=save_dir)
+train_ds = SingleVentricleDataset(config, load_flow=True)
+save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'WARPING')
 
 # save config file to save directory
 conifg_output = osp.join(save_dir, 'config.ini')
 with open(conifg_output, 'w') as config_file:
     config.write(config_file)
 
-# Steps per epoch for training set
-train_steps = len(train_ds) // BATCH_SIZE
-H = {"train_loss": [], "test_loss": []}
-
-print("\n")
-print("===========================================================")
-print("training the network")
-print("===========================================================")
-print("\n")
 iter = 0
 tic = time.time()
 for e in tqdm(range(NUM_EPOCHS)):
-    net.train()
-    total_train_loss = 0
-
     # Loop over the training set
-    for i, (vol, mask_syst, mask_diast, tsyst, tdias, ff, bf, pname) in enumerate(train_loader):
-        _, _, NZ, NY, NX, NT = vol.shape
+    for (pname, vol, mask_syst, mask_diast, tsyst, tdias, ff, bf) in train_ds:
+        NZ, NY, NX, NT = vol.shape
 
         if VERBOSE:
             print("\n")
             print("===========================================================")
             print(f'Load data for patient: {pname}')
             print(f'\t* (NZ, NY, NX, NT) = ({NZ}, {NY}, {NX}, {NT})')
-            print(f'\t* {mask_syst.shape}, { mask_diast.shape}')
+            print(f'\t* masks: {mask_syst.shape}, { mask_diast.shape}')
             print(f'\t* Systole at time: {tsyst}')
             print(f'\t* Diastole at time: {tdias}')
             print(f'\t* Optflows: {len(ff)}, with shape: {ff[0].shape}')
@@ -106,73 +65,48 @@ for e in tqdm(range(NUM_EPOCHS)):
         if init_ts == tsyst:
             m0 = mask_syst.clone().to(DEVICE)
             mk = mask_diast.clone().to(DEVICE)
+            print('m0 = mask_systole', '\tmk = mask_diastole')
         else:
             m0 = mask_diast.clone().to(DEVICE)
             mk = mask_syst.clone().to(DEVICE)
+            print('m0 = mask_diastole', '\tmk = mask_systole')
 
-        patient_dir = plots.createSubDirectory(save_dir, pname[0])
-        plots.save_single_zslices(m0.cpu().detach().squeeze(), patient_dir, 'm0')
-        plots.save_single_zslices(mk.cpu().detach().squeeze(), patient_dir, 'mk')
+        patient_dir = plots.createSubDirectory(save_dir, pname)
+        # plots.save_single_zslices(m0.cpu().detach().squeeze(), patient_dir, 'm0')
+        # plots.save_single_zslices(mk.cpu().detach().squeeze(), patient_dir, 'mk')
+        plots.save_slices(m0.cpu().detach(), 'm0.png', patient_dir)
+        plots.save_slices(mk.cpu().detach(), 'mk.png', patient_dir)
 
-        warp = Warp(train_ds.of_config, NZ, NY, NX)
+        warp = Warp(config, NZ, NY, NX)
 
         mts = [m0]
         k = 0
         for t in range(init_ts, final_ts, 1):
-            # img = vol[:, :, :, :, :, t + 1].to(DEVICE)
             u = ff[k].to(DEVICE)
-            mt = warp(mts[-1], -u)
-            plots.save_single_zslices(mt.cpu().detach().squeeze(), patient_dir, f'mt{t}')
-            # x = torch.cat((img, mt), dim=1)
-            # mt = net(x)
+            mt = warp(mts[-1], u)
+            # plots.save_single_zslices(mt.cpu().detach().squeeze(), patient_dir, f'mt{t}')
+            plots.save_slices(mt, f'mt{t+1}.png', patient_dir)
             mts.append(mt)
             k += 1
-        sys.exit()
 
         mtts = [mk]
-        ff.reverse()
+        bf.reverse()
         k = 0
         for t in range(final_ts, init_ts, -1):
-            img = vol[:, :, :, :, :, t - 1].to(DEVICE)
-            u = ff[k].to(DEVICE)
-            mtt = warp(mtts[-1], grid - u, mode="bilinear")
-            x = torch.cat((img, mtt), dim=1)
-            mtt = net(x)
+            u = bf[k].to(DEVICE)
+            mtt = warp(mtts[-1], u)
+            plots.save_slices(mtt, f'mtt{t-1}.png', patient_dir)
             mtts.append(mtt)
             k += 1
 
         mtts.reverse()
-        total_loss = 0.0
+        total_diff = 0.0
         for k in range(len(mtts)):
-            # total_loss += 0.5 * (mts[k] - mtts[k]).pow(2).sum()
-            loss = loss_func(mts[k], mtts[k])
-            total_loss += loss
+            diff = torch.abs(mts[k] - mtts[k])
+            ndiff = diff.norm().item()
+            total_diff += ndiff
+            print(f"|diff| = {ndiff}")
 
-        opt.zero_grad()
-        total_loss.backward()
-        opt.step()
-
-        total_train_loss += total_loss
-        writer.add_scalar('train_loss', total_loss.item(), iter)
-        iter += 1
-
-    # Average training loss
-    avg_train_loss = total_train_loss / train_steps
-    # Update training history
-    H["train_loss"].append(avg_train_loss.cpu().detach().numpy())
-    print("EPOCH: {}/{}".format(e + 1, NUM_EPOCHS))
-    print("Train loss: {:.6f}".format(avg_train_loss))
-
-toc = time.time()
-print("\nTotal time taken to train the model: {:.2f}s".format(toc - tic))
-
-plt.style.use("ggplot")
-plt.figure()
-plt.plot(H["train_loss"], label="train_loss")
-plt.title("Training Loss on Dataset")
-plt.xlabel("Epoch #")
-plt.ylabel("Loss")
-plt.legend(loc="lower left")
-plt.savefig(osp.join(save_dir, 'plot.png'))
-
-torch.save(net, osp.join(save_dir, 'model.pth'))
+            plots.save_slices(diff, f"Diff_mt_mtt_t{k}.png", patient_dir)
+            plots.save_single_zslices(diff, patient_dir, "Diff", 1., 0)
+        print(f'mean diff =  {total_diff / len(mtts)}')

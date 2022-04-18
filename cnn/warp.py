@@ -6,7 +6,7 @@ from opticalFlow_cuda_ext import opticalFlow
 class Warp:
     def __init__(self, config, NZ, NY, NX):
         # Interpolation
-        interp_str = config.get('PARAMETERS', 'InterpolationType')
+        interp_str = config.get('WARPING', 'InterpolationType')
         self.interp = None
         if interp_str == "NEAREST":
             self.interp = opticalFlow.InterpolationType.INTERPOLATE_NEAREST
@@ -18,7 +18,7 @@ class Warp:
             raise Exception("wrong InterpolationType in configParser")
 
         # Boundary
-        boundary_str = config.get('PARAMETERS', 'BoundaryType')
+        boundary_str = config.get('WARPING', 'BoundaryType')
         self.boundary = None
         if boundary_str == "NEAREST":
             self.boundary = opticalFlow.BoundaryType.BOUNDARY_NEAREST
@@ -35,18 +35,18 @@ class Warp:
     def __call__(self, m, u):
         meshInfo = opticalFlow.MeshInfo3D(self.NZ, self.NY, self.NX, self.LZ, self.LY, self.LX)
         warpingOp = opticalFlow.Warping3D(meshInfo, self.interp, self.boundary)
-        mw = warpingOp.forward(m.squeeze(), u.squeeze())
-        return mw.unsqueeze(dim=0).unsqueeze(dim=0)
+        mw = warpingOp.forward(m, u)
+        return mw
 
     def getMeshLength(self, config, NZ, NY, NX):
-        LenghtType = config.get('PARAMETERS', 'LenghtType')
+        LenghtType = config.get('WARPING', 'LenghtType')
         if LenghtType == "numDofs":
             LZ = NZ - 1
             LY = NY - 1
             LX = NX - 1
             return LZ, LY, LX
         elif LenghtType == "fixed":
-            LZ = config.getfloat('PARAMETERS', "LenghtZ")
-            LY = config.getfloat('PARAMETERS', "LenghtY")
-            LX = config.getfloat('PARAMETERS', "LenghtX")
+            LZ = config.getfloat('WARPING', "LenghtZ")
+            LY = config.getfloat('WARPING', "LenghtY")
+            LX = config.getfloat('WARPING', "LenghtX")
             return LZ, LY, LX

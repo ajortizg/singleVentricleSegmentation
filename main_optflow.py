@@ -37,16 +37,7 @@ if __name__ == "__main__":
     DEVICE = 'cuda' if cuda_availabe and torch.cuda.is_available() else 'cpu'
 
     mode_str = config.get('PARAMETERS', 'mode')
-    mode = OpticalFlowMode.UNKNOWN
-    if mode_str == 'FORWARD':
-        mode = OpticalFlowMode.FORWARD
-    elif mode_str == 'BACKWARD':
-        mode = OpticalFlowMode.BACKWARD
-
-    if mode == OpticalFlowMode.UNKNOWN:
-        print('UNKNOWN optical flow mode!')
-        sys.exit()
-
+    mode = OpticalFlowMode.FORWARD if mode_str == 'FORWARD' else OpticalFlowMode.BACKWARD
     print("=======================================")
     print('Mode: ' + mode_str + ' Optical Flow')
     print("=======================================")
@@ -70,9 +61,9 @@ if __name__ == "__main__":
 
     for _ in range(1):
         (pname, data, mask_systole, mask_diastole, systole_time, diastole_time, _, _) = ds[idx]
-        data = data.squeeze().to(DEVICE)
-        mask_systole = mask_systole.squeeze().to(DEVICE)
-        mask_diastole = mask_diastole.squeeze().to(DEVICE)
+        data = data.to(DEVICE)
+        mask_systole = mask_systole.to(DEVICE)
+        mask_diastole = mask_diastole.to(DEVICE)
         NZ, NY, NX, NT = data.shape
 
         print("=======================================")
@@ -80,9 +71,9 @@ if __name__ == "__main__":
         print(f"   * dimensions: (Z,Y,X,T) = {data.shape}")
         print("   * systole at time:  ", systole_time)
         print("   * diastole at time: ", diastole_time)
-        numTimeSteps = abs(diastole_time - systole_time)
-        initTimeStep = min(diastole_time, systole_time)
-        finalTimeStep = max(diastole_time, systole_time)
+        num_ts = abs(diastole_time - systole_time)
+        init_ts = min(diastole_time, systole_time)
+        final_ts = max(diastole_time, systole_time)
         print("=======================================")
         print("\n")
 
@@ -93,27 +84,26 @@ if __name__ == "__main__":
         p = torch.zeros([NZ, NY, NX, 3, 3]).float().to(DEVICE)
 
         mask = None
+        m0 = mk = None
         from_t, to_t, inc_t = 0, 0, 0
+
+        if init_ts == systole_time:
+            m0 = mask_systole.clone().detach()
+            mk = mask_diastole.clone().detach()
+            print('m0 = mask_systole')
+            print('mk = mask_diastole')
+        else:
+            m0 = mask_diastole.clone().detach()
+            mk = mask_systole.clone().detach()
+            print('m0 = mask_diastole')
+            print('mk = mask_systole')
+
         if mode == OpticalFlowMode.FORWARD:
-            if initTimeStep == systole_time:
-                mask = mask_systole.clone().detach()
-                print('mask = mask_systole')
-            else:
-                mask = mask_diastole.clone().detach()
-                print('mask = mask_diastole')
-            from_t = initTimeStep
-            to_t = finalTimeStep
-            inc_t = 1
+            mask = m0.clone().detach()
+            from_t, to_t, inc_t = init_ts, final_ts, 1
         elif mode == OpticalFlowMode.BACKWARD:
-            if finalTimeStep == diastole_time:
-                mask = mask_diastole.clone().detach()
-                print('mask = mask_diastole')
-            else:
-                mask = mask_systole.clone().detach()
-                print('mask = mask_systole')
-            from_t = finalTimeStep
-            to_t = initTimeStep
-            inc_t = -1
+            mask = mk.clone().detach()
+            from_t, to_t, inc_t = final_ts, init_ts, -1
 
         for t in range(from_t, to_t, inc_t):
             saveDirTimeStep = plots.createSubDirectory(patientDir, f'time{t}')

@@ -31,9 +31,6 @@ class SingleVentricleDataset(Dataset):
         if self.load_flow:
             self.fwdof_dir = self.config.get('DATA', 'FWD_OPTFLOW_RESULTS_DIR')
             self.bwdof_dir = self.config.get('DATA', 'BWD_OPTFLOW_RESULTS_DIR')
-            of_config_file = osp.join(self.fwdof_dir, 'config.ini')
-            self.of_config = configparser.ConfigParser()
-            self.of_config.read(of_config_file)
 
     def __len__(self):
         return len(self.volume_files)
@@ -41,7 +38,7 @@ class SingleVentricleDataset(Dataset):
     def __getitem__(self, idx):
         # Load 4D nifty [x,y,z,t]
         vol = nib.load(self.volume_files[idx])
-        vol_zyxt = torch.from_numpy(self.normalize(np.swapaxes(vol.get_fdata(), 0, 2))).unsqueeze(dim=0).float()
+        vol_zyxt = torch.from_numpy(self.normalize(np.swapaxes(vol.get_fdata(), 0, 2))).float()
 
         # Read time steps for systole and diastole
         patient_name = self.get_patient_name(idx)
@@ -52,9 +49,9 @@ class SingleVentricleDataset(Dataset):
 
         # Load segmentations masks and convert them to torch tensors
         mask_syst_zyx = self.load_mask(patient_name, '_Systole_Labelmap.nii')
-        mask_syst_zyx = torch.from_numpy(mask_syst_zyx).unsqueeze(dim=0).float()
+        mask_syst_zyx = torch.from_numpy(mask_syst_zyx).float()
         mask_diast_zyx = self.load_mask(patient_name, '_Diastole_Labelmap.nii')
-        mask_diast_zyx = torch.from_numpy(mask_diast_zyx).unsqueeze(dim=0).float()
+        mask_diast_zyx = torch.from_numpy(mask_diast_zyx).float()
 
         ff, bf = None, None
         if self.load_flow:
