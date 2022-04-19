@@ -24,3 +24,10 @@ def warp(vol, grid, mode="bilinear"):
     grid = scale_grid(grid)
     return F.grid_sample(vol, grid, align_corners=True,
                          mode=mode, padding_mode="zeros")
+
+
+def normalize(x):
+    # Normalize between 0 and 1
+    min = torch.amin(x)
+    max = torch.amax(x)
+    return (x - min) / (max - min)

@@ -1,4 +1,4 @@
-#==================================
+# ==================================
 import sys
 import os
 import configparser
@@ -24,12 +24,11 @@ sys.path.append(pythonOps_lib_path)
 # import differentialOps
 
 
-
 from opticalFlow_cuda_ext import opticalFlow
 
 
-
 import torch.nn.functional as F
+
 
 def generateGaussianKernel3D(sigma):
     kernelSize = int(sigma * 5)
@@ -40,6 +39,7 @@ def generateGaussianKernel3D(sigma):
     kernel = gauss / gauss.sum()
 
     return kernel
+
 
 def applyGaussianBlur3D(vol, sigma):
 
@@ -55,7 +55,7 @@ def applyGaussianBlur3D(vol, sigma):
 
 
 class TVL1OpticalFlow3D:
-    def __init__(self,saveDir,config):
+    def __init__(self, saveDir, config):
         self.config = config
         self.saveDir = saveDir
         self.NUM_SCALES = config.getint('PARAMETERS', 'NUM_SCALES')
@@ -69,13 +69,13 @@ class TVL1OpticalFlow3D:
         self.theta = config.getfloat('PARAMETERS', 'theta')
         self.gamma = config.getfloat('PARAMETERS', 'gamma')
         # anisotropic differential op
-        self.useAnisotropicDifferentialOp = config.getboolean("PARAMETERS","useAnisotropicDifferentialOp")
+        self.useAnisotropicDifferentialOp = config.getboolean("PARAMETERS", "useAnisotropicDifferentialOp")
         self.anisotropicDifferentialOp_alpha, self.anisotropicDifferentialOp_beta = None, None
         if self.useAnisotropicDifferentialOp:
-            self.anisotropicDifferentialOp_alpha = config.getfloat("PARAMETERS","anisotropicDifferentialOp_alpha")
-            self.anisotropicDifferentialOp_beta = config.getfloat("PARAMETERS","anisotropicDifferentialOp_beta")
+            self.anisotropicDifferentialOp_alpha = config.getfloat("PARAMETERS", "anisotropicDifferentialOp_alpha")
+            self.anisotropicDifferentialOp_beta = config.getfloat("PARAMETERS", "anisotropicDifferentialOp_beta")
         # blurring
-        self.useGaussianBlur = config.getboolean("PARAMETERS","useGaussianBlur")
+        self.useGaussianBlur = config.getboolean("PARAMETERS", "useGaussianBlur")
         self.GaussianBlurSigma = config.getfloat('PARAMETERS', 'GaussianBlurSigma')
         # interpolation
         interType = config.get('PARAMETERS', 'InterpolationType')
@@ -88,7 +88,7 @@ class TVL1OpticalFlow3D:
             self.InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_CUBIC_HERMITESPLINE
         else:
             raise Exception("wrong InterpolationType in configParser")
-        #boundary
+        # boundary
         boundaryType = config.get('PARAMETERS', 'BoundaryType')
         self.BoundaryTypeCuda = None
         if boundaryType == "NEAREST":
@@ -99,22 +99,21 @@ class TVL1OpticalFlow3D:
             self.BoundaryTypeCuda = opticalFlow.BoundaryType.BOUNDARY_REFLECT
         else:
             raise Exception("wrong BoundaryType in configParser")
-        #cuda
+        # cuda
         cuda_availabe = config.get('DEVICE', 'cuda_availabe')
         self.DEVICE = "cuda" if cuda_availabe else "cpu"
-        #debug
+        # debug
         self.saveDirDebug = os.path.sep.join([self.saveDir, "debug"])
-        self.useDebugOutput = config.getboolean("DEBUG","useDebugOutput")
+        self.useDebugOutput = config.getboolean("DEBUG", "useDebugOutput")
         if self.useDebugOutput:
             os.makedirs(self.saveDirDebug)
 
-
-    def getMeshLength(self,config,NZ,NY,NX):
+    def getMeshLength(self, config, NZ, NY, NX):
         LenghtType = config.get('PARAMETERS', 'LenghtType')
         if LenghtType == "numDofs":
-            LZ = NZ-1
-            LY = NY-1
-            LX = NX-1
+            LZ = NZ - 1
+            LY = NY - 1
+            LX = NX - 1
             return LZ, LY, LX
         elif LenghtType == "fixed":
             LZ = config.getfloat('PARAMETERS', "LenghtZ")
@@ -126,24 +125,25 @@ class TVL1OpticalFlow3D:
 
         # Smooth inputs with a Gaussian filter
         if self.useGaussianBlur:
-            I0 = applyGaussianBlur3D(I0,self.GaussianBlurSigma)
-            I1 = applyGaussianBlur3D(I1,self.GaussianBlurSigma)
+            I0 = applyGaussianBlur3D(I0, self.GaussianBlurSigma)
+            I1 = applyGaussianBlur3D(I1, self.GaussianBlurSigma)
 
         # List for volumes pyramids
         NZ, NY, NX = I0.shape[0], I0.shape[1], I0.shape[2]
         LZ, LY, LX = self.getMeshLength(self.config, NZ, NY, NX)
         #meshInfo3D_python = MeshInfo3D(NZ,NY,NX,LZ,LY,LX)
-        meshInfo3D_cuda = opticalFlow.MeshInfo3D(NZ,NY,NX,LZ,LY,LX)
+        meshInfo3D_cuda = opticalFlow.MeshInfo3D(NZ, NY, NX, LZ, LY, LX)
 
-        #meshes for pyramid
+        # meshes for pyramid
         meshInfos = [meshInfo3D_cuda]
         NZ_restr, NY_restr, NX_restr = NZ, NY, NX
         for s in range(1, self.NUM_SCALES):
-            NZ_restr, NY_restr, NX_restr = math.ceil(0.5*NZ_restr), math.ceil(0.5*NY_restr), math.ceil(0.5*NX_restr)
+            NZ_restr, NY_restr, NX_restr = math.ceil(
+                0.5 * NZ_restr), math.ceil(0.5 * NY_restr), math.ceil(0.5 * NX_restr)
             LZ_restr, LY_restr, LX_restr = self.getMeshLength(self.config, NZ_restr, NY_restr, NX_restr)
-            meshInfos.append(opticalFlow.MeshInfo3D(NZ_restr,NY_restr,NX_restr,LZ_restr,LY_restr,LX_restr))
+            meshInfos.append(opticalFlow.MeshInfo3D(NZ_restr, NY_restr, NX_restr, LZ_restr, LY_restr, LX_restr))
 
-        #lists for pyramid
+        # lists for pyramid
         I0s = [I0]
         I1s = [I1]
         us = [u]
@@ -151,19 +151,22 @@ class TVL1OpticalFlow3D:
 
         # Create the pyramid
         for s in range(1, self.NUM_SCALES):
-            prolongationOp_cuda = opticalFlow.Prolongation3D(meshInfos[s-1],meshInfos[s],self.InterpolationTypeCuda,self.BoundaryTypeCuda)
-            I0s.append(prolongationOp_cuda.forward(I0s[s-1]))
-            I1s.append(prolongationOp_cuda.forward(I1s[s-1]))
-            us.append(torch.zeros([meshInfos[s].getNZ(),meshInfos[s].getNY(),meshInfos[s].getNX(),3]).float().to(self.DEVICE))
-            ps.append(torch.zeros([meshInfos[s].getNZ(),meshInfos[s].getNY(),meshInfos[s].getNX(),3,3]).float().to(self.DEVICE))
+            prolongationOp_cuda = opticalFlow.Prolongation3D(
+                meshInfos[s - 1],
+                meshInfos[s],
+                self.InterpolationTypeCuda, self.BoundaryTypeCuda)
+            I0s.append(prolongationOp_cuda.forward(I0s[s - 1]))
+            I1s.append(prolongationOp_cuda.forward(I1s[s - 1]))
+            us.append(torch.zeros([meshInfos[s].getNZ(), meshInfos[s].getNY(),
+                      meshInfos[s].getNX(), 3]).float().to(self.DEVICE))
+            ps.append(torch.zeros([meshInfos[s].getNZ(), meshInfos[s].getNY(),
+                      meshInfos[s].getNX(), 3, 3]).float().to(self.DEVICE))
 
         return I0s, I1s, us, ps, meshInfos
 
-
-
     def computeOnPyramid(self, I0, I1, u, p):
 
-        I0s, I1s, us, ps, meshInfos = self.generatePyramid(I0,I1,u,p)
+        I0s, I1s, us, ps, meshInfos = self.generatePyramid(I0, I1, u, p)
 
         print("\n")
         print("============================================")
@@ -171,62 +174,65 @@ class TVL1OpticalFlow3D:
         print("============================================")
         print("\n")
 
-        for s in range(self.NUM_SCALES-1, -1, -1):
+        for s in range(self.NUM_SCALES - 1, -1, -1):
 
             # Compute the optical flow at scale s
             us[s], ps[s] = self.computeOnSingleStep(s, I0s[s], I1s[s], us[s], ps[s], meshInfos[s])
 
-            #save step
-            self.saveSingleStepToFile(s,I0s[s],I1s[s],us[s],ps[s],meshInfos[s])
+            # save step
+            self.saveSingleStepToFile(s, I0s[s], I1s[s], us[s], ps[s], meshInfos[s])
 
             if s == 0:
                 break
 
             # Prolongate the optical flow and dual variables to the next pyramid level
-            prolongationOp_cuda = opticalFlow.Prolongation3D(meshInfos[s],meshInfos[s-1],self.InterpolationTypeCuda,self.BoundaryTypeCuda)
-            us[s-1] = prolongationOp_cuda.forwardVectorField(us[s])
-            #factor LXNew/LXOld, ...
-            us[s-1][:,:,:,0] *= meshInfos[s-1].getLX() / meshInfos[s].getLX()
-            us[s-1][:,:,:,1] *= meshInfos[s-1].getLY() / meshInfos[s].getLY()
-            us[s-1][:,:,:,2] *= meshInfos[s-1].getLZ() / meshInfos[s].getLZ()
+            prolongationOp_cuda = opticalFlow.Prolongation3D(
+                meshInfos[s],
+                meshInfos[s - 1],
+                self.InterpolationTypeCuda, self.BoundaryTypeCuda)
+            us[s - 1] = prolongationOp_cuda.forwardVectorField(us[s])
+            # factor LXNew/LXOld, ...
+            us[s - 1][:, :, :, 0] *= meshInfos[s - 1].getLX() / meshInfos[s].getLX()
+            us[s - 1][:, :, :, 1] *= meshInfos[s - 1].getLY() / meshInfos[s].getLY()
+            us[s - 1][:, :, :, 2] *= meshInfos[s - 1].getLZ() / meshInfos[s].getLZ()
 
-            #TODO Dirichlet boundary condition for p?
+            # TODO Dirichlet boundary condition for p?
             # ps[s] = self.dirichlet(ps[s])
 
-            ps[s-1] = prolongationOp_cuda.forwardMatrixField(ps[s])
+            ps[s - 1] = prolongationOp_cuda.forwardMatrixField(ps[s])
 
-            #TODO prolongation factor for p?
-        
+            # TODO prolongation factor for p?
+
         return us[0], ps[0]
-
 
     def computeOnSingleStep(self, s, I0, I1, u, p, meshInfo):
 
         print("\n")
         print("start to compute optical flow for single step = ", s)
-        progress_bar = tqdm(total = self.MAX_WARPS * self.MAX_OUTER_ITERATIONS)
+        progress_bar = tqdm(total=self.MAX_WARPS * self.MAX_OUTER_ITERATIONS)
 
         # Compute target image gradients
         #nablaOp = Nabla3D_Central(meshInfo)
-        nablaOp = opticalFlow.Nabla3D_CD(meshInfo,self.BoundaryTypeCuda)
-        warpingOp = opticalFlow.Warping3D(meshInfo,self.InterpolationTypeCuda,self.BoundaryTypeCuda)
+        nablaOp = opticalFlow.Nabla3D_CD(meshInfo, self.BoundaryTypeCuda)
+        warpingOp = opticalFlow.Warping3D(meshInfo, self.InterpolationTypeCuda, self.BoundaryTypeCuda)
         I1_grad = nablaOp.forward(I1)
 
-        #optionally apply anisotropic differential op 
-        scalars = torch.zeros([meshInfo.getNZ(),meshInfo.getNY(),meshInfo.getNX()]).float().to(self.DEVICE)
-        normals = torch.zeros([meshInfo.getNZ(),meshInfo.getNY(),meshInfo.getNX(),3]).float().to(self.DEVICE)
-        tangents1 = torch.zeros([meshInfo.getNZ(),meshInfo.getNY(),meshInfo.getNX(),3]).float().to(self.DEVICE)
-        tangents2 = torch.zeros([meshInfo.getNZ(),meshInfo.getNY(),meshInfo.getNX(),3]).float().to(self.DEVICE)
+        # optionally apply anisotropic differential op
+        scalars = torch.zeros([meshInfo.getNZ(), meshInfo.getNY(), meshInfo.getNX()]).float().to(self.DEVICE)
+        normals = torch.zeros([meshInfo.getNZ(), meshInfo.getNY(), meshInfo.getNX(), 3]).float().to(self.DEVICE)
+        tangents1 = torch.zeros([meshInfo.getNZ(), meshInfo.getNY(), meshInfo.getNX(), 3]).float().to(self.DEVICE)
+        tangents2 = torch.zeros([meshInfo.getNZ(), meshInfo.getNY(), meshInfo.getNX(), 3]).float().to(self.DEVICE)
         if self.useAnisotropicDifferentialOp:
-            anistropicNablaOp = opticalFlow.AnisotropicNabla3D(meshInfo,self.anisotropicDifferentialOp_alpha,self.anisotropicDifferentialOp_beta)
-            scalars,normals,tangents1,tangents2 = anistropicNablaOp.computeTangentVecs(I1_grad)
+            anistropicNablaOp = opticalFlow.AnisotropicNabla3D(
+                meshInfo, self.anisotropicDifferentialOp_alpha, self.anisotropicDifferentialOp_beta)
+            scalars, normals, tangents1, tangents2 = anistropicNablaOp.computeTangentVecs(I1_grad)
 
         z = u
 
         for w in range(self.MAX_WARPS):
             # Compute the warping of the target image and its derivatives
-            I1_warped = warpingOp.forward(I1,u)
-            I1_warped_grad = warpingOp.forwardVectorField(I1_grad,u)
+            I1_warped = warpingOp.forward(I1, u)
+            I1_warped_grad = warpingOp.forwardVectorField(I1_grad, u)
             # Constant part of the rho function
             #rho_c = I1_warped - u[:, :, :, 0] * I1_warped_grad[:, :, :, 0] - u[:, :, :, 1] * I1_warped_grad[:, :, :, 1] - u[:, :, :, 2] * I1_warped_grad[:, :, :, 2] - I0
             rho_c = I1_warped - torch.sum(u * I1_warped_grad, dim=3) - I0
@@ -236,9 +242,9 @@ class TVL1OpticalFlow3D:
             breakConditionVecUpdate = torch.zeros([self.MAX_OUTER_ITERATIONS]).float().to(self.DEVICE)
 
             # TODO possible use results for new warp
-            sigma = self.sigma 
+            sigma = self.sigma
             tau = self.tau
-            theta = self.theta 
+            theta = self.theta
             gamma = self.gamma
 
             for n in range(self.MAX_OUTER_ITERATIONS):
@@ -248,12 +254,17 @@ class TVL1OpticalFlow3D:
                 z_grad = nablaOp.forwardVectorField(z)
                 Dz_grad = z_grad
                 if self.useAnisotropicDifferentialOp:
-                    Dz_grad = anistropicNablaOp.forwardVectorField(z_grad,scalars,normals,tangents1,tangents2)
+                    Dz_grad = anistropicNablaOp.forwardVectorField(z_grad, scalars, normals, tangents1, tangents2)
                 dualVariable = p + sigma * Dz_grad
-                p = opticalFlow.TVL1OF3D_proxDual( dualVariable, sigma, self.weight_TV, meshInfo)
-                breakConditionVecDual[n] = torch.norm(p-pold).item()
+                p = opticalFlow.TVL1OF3D_proxDual(dualVariable, sigma, self.weight_TV, meshInfo)
+                breakConditionVecDual[n] = torch.norm(p - pold).item()
                 if self.weight_TV == 0.:
-                   p = torch.zeros([meshInfo.getNZ(),meshInfo.getNY(),meshInfo.getNX(),3,3]).float().to(self.DEVICE)
+                    p = torch.zeros(
+                        [meshInfo.getNZ(),
+                         meshInfo.getNY(),
+                         meshInfo.getNX(),
+                         3, 3]).float().to(
+                        self.DEVICE)
 
                 # update of primal variable
                 uold = u
@@ -261,22 +272,23 @@ class TVL1OpticalFlow3D:
                 #rho = rho_c + u[:, :, :, 0] * I1_warped_grad[:, :, :, 0] + u[:, :, :, 1] * I1_warped_grad[:, :, :, 1] + u[:, :, :, 2] * I1_warped_grad[:, :, :, 2]
                 rho = rho_c + torch.sum(u * I1_warped_grad, dim=3)
                 #print("rho.norm = ", torch.norm(rho).item() )
-                Dp = p 
+                Dp = p
                 if self.useAnisotropicDifferentialOp:
-                    Dp = anistropicNablaOp.backwardVectorField(p,scalars,normals,tangents1,tangents2)
+                    Dp = anistropicNablaOp.backwardVectorField(p, scalars, normals, tangents1, tangents2)
                 Dp_div = nablaOp.backwardVectorField(Dp)
                 primalVariable = u - tau * Dp_div
-                u = opticalFlow.TVL1OF3D_proxPrimal(primalVariable, tau, self.weight_Matching, rho, I1_warped_grad, meshInfo )
-                breakConditionVecPrimal[n] = torch.norm(u-uold).item()
+                u = opticalFlow.TVL1OF3D_proxPrimal(
+                    primalVariable, tau, self.weight_Matching, rho, I1_warped_grad, meshInfo)
+                breakConditionVecPrimal[n] = torch.norm(u - uold).item()
                 # if self.weight_Matching == 0.:
                 #     u = torch.zeros([meshInfo.getNZ(),meshInfo.getNY(),meshInfo.getNX(),3]).float().to(self.DEVICE)
 
-                #update of stepsizes
+                # update of stepsizes
                 if self.PRIMALDUAL_ALGO_TYPE == 1:
-                    # dot nothing 
+                    # dot nothing
                     print("apply CP1")
                 elif self.PRIMALDUAL_ALGO_TYPE == 2:
-                    theta = 1. / math.sqrt( 1. + 2. * gamma * tau )
+                    theta = 1. / math.sqrt(1. + 2. * gamma * tau)
                     tau *= theta
                     sigma /= theta
                 else:
@@ -285,103 +297,99 @@ class TVL1OpticalFlow3D:
                 # overrelaxation
                 zold = z
                 z = u
-                breakConditionVecUpdate[n] = torch.norm(z-zold).item()
+                breakConditionVecUpdate[n] = torch.norm(z - zold).item()
 
                 progress_bar.update(1)
 
             if self.useDebugOutput:
                 #saveCurve1D(primalFctVec, MAX_OUTER_ITERATIONS, self.saveDirDebug, f"PrimalFct_it{s}_warp{w}")
-                saveCurve1D(breakConditionVecPrimal, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"CPErrorPrimal_it{s}_warp{w}", "loglog")
-                saveCurve1D(breakConditionVecDual, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"CPErrorDual_it{s}_warp{w}", "loglog")
-                saveCurve1D(breakConditionVecUpdate, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"CPErrorUpdate_it{s}_warp{w}", "loglog")
+                saveCurve1D(breakConditionVecPrimal, self.MAX_OUTER_ITERATIONS,
+                            self.saveDirDebug, f"CPErrorPrimal_it{s}_warp{w}", "loglog")
+                saveCurve1D(breakConditionVecDual, self.MAX_OUTER_ITERATIONS,
+                            self.saveDirDebug, f"CPErrorDual_it{s}_warp{w}", "loglog")
+                saveCurve1D(breakConditionVecUpdate, self.MAX_OUTER_ITERATIONS,
+                            self.saveDirDebug, f"CPErrorUpdate_it{s}_warp{w}", "loglog")
 
         return u, p
 
+    def saveSingleStepToFile(self, step, I0, I1, u, p, meshInfo):
 
-    def saveSingleStepToFile(self,step,I0,I1,u,p,meshInfo):
-        
         saveDirStep = os.path.sep.join([self.saveDir, f"it{step}"])
         if not os.path.exists(saveDirStep):
             os.makedirs(saveDirStep)
 
         plotOpticalFlow3D(u.cpu().detach().numpy(), "u", saveDirStep, step)
-        save3D_torch_to_nifty(I0,saveDirStep,f"I0.nii")
-        save_slices(I0,f"I0_it{step}.png", saveDirStep)
-        save3D_torch_to_nifty(I1,saveDirStep,f"I1.nii")
-        save_slices(I1,f"I1_it{step}.png", saveDirStep)
-        warpingOp = opticalFlow.Warping3D(meshInfo,self.InterpolationTypeCuda,self.BoundaryTypeCuda)
-        I1_warped = warpingOp.forward(I1,u)
+        save3D_torch_to_nifty(I0, saveDirStep, f"I0.nii")
+        save_slices(I0, f"I0_it{step}.png", saveDirStep)
+        save3D_torch_to_nifty(I1, saveDirStep, f"I1.nii")
+        save_slices(I1, f"I1_it{step}.png", saveDirStep)
+        warpingOp = opticalFlow.Warping3D(meshInfo, self.InterpolationTypeCuda, self.BoundaryTypeCuda)
+        I1_warped = warpingOp.forward(I1, u)
         save_slices(I1_warped, f"I1_warped_it{step}.png", saveDirStep)
 
         save_single_zslices(I0, saveDirStep, "I0Slices", 1., 0)
         save_single_zslices(I1_warped, saveDirStep, "I1WarpedSlices", 1., 0)
 
-
-        diff = torch.abs(I1_warped-I0)
+        diff = torch.abs(I1_warped - I0)
         save_slices(diff, f"Diff_I1warped_to_I0_it{step}.png", saveDirStep)
         save_single_zslices(diff, saveDirStep, "Diff_I1warped_to_I0_Slices", 1., 0)
-        print("norm of diff = ", diff.norm().item() )
+        print("norm of diff = ", diff.norm().item())
         numZSlices = diff.shape[0]
         for z in range(numZSlices):
-            print(" norm of diff(z=", z, ") = ", diff[z,:,:].norm().item() )
-        
+            print(" norm of diff(z=", z, ") = ", diff[z, :, :].norm().item())
+
         flowName = f"flow_it{step}.pt"
-        fileNameFlow = os.path.join(saveDirStep, flowName) 
+        fileNameFlow = os.path.join(saveDirStep, flowName)
         torch.save(u, fileNameFlow)
 
         dualName = f"dual_it{step}.pt"
-        fileNameDual = os.path.join(saveDirStep, dualName) 
+        fileNameDual = os.path.join(saveDirStep, dualName)
         torch.save(p, fileNameDual)
 
-    def warpMask(self,mask,u,t0,saveDir):
+    def warpMask(self, mask, u, t0, saveDir):
 
         print("warp with optical flow for time step: ", t0)
-        print("norm of u = ", u.norm().item() )
+        print("norm of u = ", u.norm().item())
 
         # flowName = "flow_it0.pt"
-        # fileNameFlow = os.path.join(saveDirStep, flowName) 
+        # fileNameFlow = os.path.join(saveDirStep, flowName)
         # u = torch.load(fileNameFlow, map_location=torch.device(DEVICE))
 
         NZ, NY, NX = mask.shape[0], mask.shape[1], mask.shape[2]
         LZ, LY, LX = self.getMeshLength(self.config, NZ, NY, NX)
-        meshInfo = opticalFlow.MeshInfo3D(NZ,NY,NX,LZ,LY,LX)
+        meshInfo = opticalFlow.MeshInfo3D(NZ, NY, NX, LZ, LY, LX)
 
-        warpingOp = opticalFlow.Warping3D(meshInfo,self.InterpolationTypeCuda,self.BoundaryTypeCuda)
-        mask_warped = warpingOp.forward(mask,u)
+        warpingOp = opticalFlow.Warping3D(meshInfo, self.InterpolationTypeCuda, self.BoundaryTypeCuda)
+        mask_warped = warpingOp.forward(mask, u)
 
-        save3D_torch_to_nifty(mask_warped,saveDir,f"mask_warped_time{t0}.nii")
+        save3D_torch_to_nifty(mask_warped, saveDir, f"mask_warped_time{t0}.nii")
         save_slices(mask_warped, f"mask_warped_time{t0}.png", saveDir)
         save_single_zslices(mask_warped, saveDir, "mask_warped_slices", 1., 2)
 
         maskName = f"masked_warped_time{t0}.pt"
-        fileNameMask = os.path.join(saveDir, maskName) 
+        fileNameMask = os.path.join(saveDir, maskName)
         torch.save(mask_warped, fileNameMask)
 
-        #TODO
-        #add mask to mri images 
+        # TODO
+        # add mask to mri images
         saveDirMRISlices = os.path.join(saveDir, "it0/I0Slices")
         saveDirMaskSlices = os.path.join(saveDir, "mask_slices")
         saveDirSumSlices = os.path.join(saveDir, "sum_slices")
         if not os.path.exists(saveDirSumSlices):
-             os.makedirs(saveDirSumSlices)
-        for z in range(0,NZ):
-           fileNameMRISlice = os.path.join(saveDirMRISlices, f"colorimg_z{z}.png") 
-           img_mri = cv2.imread(fileNameMRISlice)
-           fileNameMaskSlice = os.path.join(saveDirMaskSlices, f"colorimg_z{z}.png") 
-           img_mask = cv2.imread(fileNameMaskSlice)
-           fileNameSumSlice = os.path.join(saveDirSumSlices, f"sumimg_z{z}.png")
-           img_sum = img_mri + img_mask 
-           cv2.imwrite(fileNameSumSlice,img_sum)
-           fileNameSumSliceInvert = os.path.join(saveDirSumSlices, f"invertsumimg_z{z}.png")
-           img_sum_invert = 255. - img_sum
-           cv2.imwrite(fileNameSumSliceInvert,img_sum_invert)
+            os.makedirs(saveDirSumSlices)
+        for z in range(0, NZ):
+            fileNameMRISlice = os.path.join(saveDirMRISlices, f"colorimg_z{z}.png")
+            img_mri = cv2.imread(fileNameMRISlice)
+            fileNameMaskSlice = os.path.join(saveDirMaskSlices, f"colorimg_z{z}.png")
+            img_mask = cv2.imread(fileNameMaskSlice)
+            fileNameSumSlice = os.path.join(saveDirSumSlices, f"sumimg_z{z}.png")
+            img_sum = img_mri + img_mask
+            cv2.imwrite(fileNameSumSlice, img_sum)
+            fileNameSumSliceInvert = os.path.join(saveDirSumSlices, f"invertsumimg_z{z}.png")
+            img_sum_invert = 255. - img_sum
+            cv2.imwrite(fileNameSumSliceInvert, img_sum_invert)
 
         return mask_warped
-
-
-
-
-
 
     # def updateDualVariable(self,u,v,p,meshInfo):
     #     nablaOp = opticalFlow.Nabla3D_CD(meshInfo)
@@ -392,9 +400,9 @@ class TVL1OpticalFlow3D:
     #         p_div_z = nablaOp.backward(p[:,:,:,:,2].contiguous())
 
     #         # Compute the 3D optical flow Eq. 14 # TODO! check sign
-    #         u[:,:,:,0] = v[:,:,:,0] - THETA * p_div_x 
+    #         u[:,:,:,0] = v[:,:,:,0] - THETA * p_div_x
     #         u[:,:,:,1] = v[:,:,:,1] - THETA * p_div_y
-    #         u[:,:,:,2] = v[:,:,:,2] - THETA * p_div_z 
+    #         u[:,:,:,2] = v[:,:,:,2] - THETA * p_div_z
 
     #         # Proposition 1
     #         # Compute the gradient of the optical flow using forward differences
@@ -430,7 +438,6 @@ class TVL1OpticalFlow3D:
     #         p[:, :, :, 0,2] = p_tilde_z[:, :, :, 0] / den_z
     #         p[:, :, :, 1,2] = p_tilde_z[:, :, :, 1] / den_z
     #         p[:, :, :, 2,2] = p_tilde_z[:, :, :, 2] / den_z
-
 
     # def dirichlet(self, x):
     #     x1 = x[:, :, :, 0]

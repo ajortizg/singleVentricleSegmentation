@@ -26,7 +26,6 @@ class SingleVentricleDataset(Dataset):
         self.bwdof_dir = None
         self.flow_name = 'flow_it0.pt'
         self.flow_level = 'it0'
-        self.of_config = None
 
         if self.load_flow:
             self.fwdof_dir = self.config.get('DATA', 'FWD_OPTFLOW_RESULTS_DIR')
@@ -38,7 +37,7 @@ class SingleVentricleDataset(Dataset):
     def __getitem__(self, idx):
         # Load 4D nifty [x,y,z,t]
         vol = nib.load(self.volume_files[idx])
-        vol_zyxt = torch.from_numpy(self.normalize(np.swapaxes(vol.get_fdata(), 0, 2))).float()
+        vol_zyxt = torch.from_numpy(np.swapaxes(vol.get_fdata(), 0, 2)).float()
 
         # Read time steps for systole and diastole
         patient_name = self.get_patient_name(idx)
@@ -111,9 +110,3 @@ class SingleVentricleDataset(Dataset):
                 bwd_flows.append(u)
 
         return (fwd_flows, bwd_flows)
-
-    def normalize(self, x):
-        # Normalize between 0 and 1
-        min = np.amin(x)
-        max = np.amax(x)
-        return (x - min) / (max - min)

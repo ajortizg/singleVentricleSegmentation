@@ -10,8 +10,7 @@ from cnn.dataset import SingleVentricleDataset
 utils_lib_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'utils'))
 sys.path.append(utils_lib_path)
 import plots
-
-from opticalFlow_cuda_ext import opticalFlow
+import torch_utils
 
 
 class OpticalFlowMode(Enum):
@@ -34,10 +33,15 @@ if __name__ == "__main__":
     config = configparser.ConfigParser()
     config.read('parser/configTVL1OF3D.ini')
     cuda_availabe = config.get('DEVICE', 'cuda_availabe')
-    DEVICE = 'cuda' if cuda_availabe and torch.cuda.is_available() else 'cpu'
+    if cuda_availabe and torch.cuda.is_available():
+        DEVICE = 'cuda'
+        CUDA_DEVICE = config.getint('DEVICE', 'cuda_device')
+        torch.cuda.set_device(CUDA_DEVICE)
+    else:
+        DEVICE = 'cpu'
 
     mode_str = config.get('PARAMETERS', 'mode')
-    mode = OpticalFlowMode.FORWARD if mode_str == 'FORWARD' else OpticalFlowMode.BACKWARD
+    mode = OpticalFlowMode.FORWARD if mode_str == 'Forward' else OpticalFlowMode.BACKWARD
     print("=======================================")
     print('Mode: ' + mode_str + ' Optical Flow')
     print("=======================================")
@@ -53,17 +57,15 @@ if __name__ == "__main__":
 
     ds = SingleVentricleDataset(config, load_flow=False)
 
-    PATIENT_NAME = config.get('DATA', 'PATIENT_NAME')
-    idx, found = ds.index_for_patient(PATIENT_NAME)
-    if not found:
-        print(PATIENT_NAME + " not found!")
-        sys.exit()
+    # PATIENT_NAME = config.get('DATA', 'PATIENT_NAME')
+    # idx, found = ds.index_for_patient(PATIENT_NAME)
+    # if not found:
+    #     print(PATIENT_NAME + " not found!")
+    #     sys.exit()
 
-    for _ in range(1):
+    for idx in range(len(ds)):
         (pname, data, mask_systole, mask_diastole, systole_time, diastole_time, _, _) = ds[idx]
-        data = data.to(DEVICE)
-        mask_systole = mask_systole.to(DEVICE)
-        mask_diastole = mask_diastole.to(DEVICE)
+        data = torch_utils.normalize(data.to(DEVICE))
         NZ, NY, NX, NT = data.shape
 
         print("=======================================")
@@ -88,21 +90,19 @@ if __name__ == "__main__":
         from_t, to_t, inc_t = 0, 0, 0
 
         if init_ts == systole_time:
-            m0 = mask_systole.clone().detach()
-            mk = mask_diastole.clone().detach()
-            print('m0 = mask_systole')
-            print('mk = mask_diastole')
+            m0 = mask_systole.to(DEVICE)
+            mk = mask_diastole.to(DEVICE)
+            print('m0 = mask_systole', '\tmk = mask_diastole')
         else:
-            m0 = mask_diastole.clone().detach()
-            mk = mask_systole.clone().detach()
-            print('m0 = mask_diastole')
-            print('mk = mask_systole')
+            m0 = mask_diastole.to(DEVICE)
+            mk = mask_systole.to(DEVICE)
+            print('m0 = mask_diastole', '\tmk = mask_systole')
 
         if mode == OpticalFlowMode.FORWARD:
-            mask = m0.clone().detach()
+            mask = m0.clone()
             from_t, to_t, inc_t = init_ts, final_ts, 1
         elif mode == OpticalFlowMode.BACKWARD:
-            mask = mk.clone().detach()
+            mask = mk.clone()
             from_t, to_t, inc_t = final_ts, init_ts, -1
 
         for t in range(from_t, to_t, inc_t):
