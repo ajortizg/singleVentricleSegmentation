@@ -32,8 +32,8 @@ if __name__ == "__main__":
     # load config parser
     config = configparser.ConfigParser()
     config.read('parser/configTVL1OF3D.ini')
-    cuda_availabe = config.get('DEVICE', 'cuda_availabe')
-    if cuda_availabe and torch.cuda.is_available():
+    use_cuda = config.get('DEVICE', 'cuda_availabe')
+    if use_cuda and torch.cuda.is_available():
         DEVICE = 'cuda'
         CUDA_DEVICE = config.getint('DEVICE', 'cuda_device')
         torch.cuda.set_device(CUDA_DEVICE)
@@ -48,14 +48,15 @@ if __name__ == "__main__":
     print("\n")
 
     # create save directory
-    saveDir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), f'TVL1OF3D{mode_str}')
+    save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), f'TVL1OF3D{mode_str}')
 
     # save config file to save directory
-    conifgOutput = os.path.sep.join([saveDir, "config.ini"])
-    with open(conifgOutput, 'w') as configfile:
+    conifg_output = os.path.sep.join([save_dir, "config.ini"])
+    with open(conifg_output, 'w') as configfile:
         config.write(configfile)
 
     ds = SingleVentricleDataset(config, load_flow=False)
+    STEP = config.getint('PARAMETERS', 'step')
 
     # PATIENT_NAME = config.get('DATA', 'PATIENT_NAME')
     # idx, found = ds.index_for_patient(PATIENT_NAME)
@@ -79,7 +80,7 @@ if __name__ == "__main__":
         print("=======================================")
         print("\n")
 
-        patientDir = osp.join(saveDir, pname)
+        patient_dir = osp.join(save_dir, pname)
 
         # initialization of optical flow and mask
         u = torch.zeros([NZ, NY, NX, 3]).float().to(DEVICE)
@@ -88,7 +89,6 @@ if __name__ == "__main__":
         mask = None
         m0 = mk = None
         from_t, to_t, inc_t = 0, 0, 0
-
         if init_ts == systole_time:
             m0 = mask_systole.to(DEVICE)
             mk = mask_diastole.to(DEVICE)
@@ -98,19 +98,26 @@ if __name__ == "__main__":
             mk = mask_systole.to(DEVICE)
             print('m0 = mask_diastole', '\tmk = mask_systole')
 
+        idxs = torch.linspace(init_ts, final_ts, STEP).int()
         if mode == OpticalFlowMode.FORWARD:
             mask = m0.clone()
-            from_t, to_t, inc_t = init_ts, final_ts, 1
+            # from_t, to_t, inc_t = init_ts, final_ts, 1
         elif mode == OpticalFlowMode.BACKWARD:
             mask = mk.clone()
-            from_t, to_t, inc_t = final_ts, init_ts, -1
+            # from_t, to_t, inc_t = final_ts, init_ts, -1
+            idxs = torch.flip(idxs, dims=(0,))
 
-        for t in range(from_t, to_t, inc_t):
-            saveDirTimeStep = plots.createSubDirectory(patientDir, f'time{t}')
-            t0, t1 = t + inc_t, t
+        # for t in range(from_t, to_t, inc_t):
+        print(idxs)
+        for i in range(len(idxs) - 1):
+            # saveDirTimeStep = plots.createSubDirectory(patient_dir, f'time{t}')
+            # t0, t1 = t + inc_t, t
+            t0 = idxs[i + 1]
+            t1 = idxs[i]
             I0 = data[:, :, :, t0]
             I1 = data[:, :, :, t1]
             print(f'{t1}->{t0}')
+            saveDirTimeStep = plots.createSubDirectory(patient_dir, f'time{t1}')
 
             # Compute the optical flow
             alg = TVL1OpticalFlow3D(saveDirTimeStep, config)

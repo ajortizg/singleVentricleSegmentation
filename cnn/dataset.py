@@ -4,7 +4,6 @@ from glob import glob
 import nibabel as nib
 import numpy as np
 import os
-import configparser
 import pandas
 import torch
 
@@ -87,7 +86,6 @@ class SingleVentricleDataset(Dataset):
     def optflow_results_for_patient(self, patient):
         fwd_flows = []
         bwd_flows = []
-        # i = 0
         fwd_patient_dir = osp.join(self.fwdof_dir, patient)
         fwd_time_dirs = sorted(os.listdir(fwd_patient_dir))
         bwd_patient_dir = osp.join(self.bwdof_dir, patient)

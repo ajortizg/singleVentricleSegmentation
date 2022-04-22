@@ -5,19 +5,18 @@ from dataset import SingleVentricleDataset
 from torch.optim import Adam
 from tqdm import tqdm
 from unet_3d import UNet3D
-from torch.utils.data import DataLoader
-from torch.nn import MSELoss
-import os
 from torch.utils.tensorboard import SummaryWriter
 import time
 import os.path as osp
 from torchsummary import summary
+from loss import L2LossReduced
 import matplotlib.pyplot as plt
 from warp import Warp
 
 sys.path.append(osp.abspath(osp.join(osp.dirname(__file__), '../utils')))
 import plots
 import torch_utils
+
 
 print("\n\n")
 print("===========================================================")
@@ -31,7 +30,11 @@ print("\n\n")
 config = configparser.ConfigParser()
 config.read('parser/configCNN.ini')
 cuda_availabe = config.get('DEVICE', 'CUDA_AVAILABLE')
-DEVICE = 'cuda' if cuda_availabe and torch.cuda.is_available() else 'cpu'
+if cuda_availabe and torch.cuda.is_available():
+    DEVICE = 'cuda'
+    torch.cuda.set_device(3)
+else:
+    DEVICE = 'cpu'
 BATCH_SIZE = config.getint('PARAMETERS', 'BATCH_SIZE')
 LR = config.getfloat('PARAMETERS', 'LR')
 NUM_EPOCHS = config.getint('PARAMETERS', 'NUM_EPOCHS')
@@ -42,7 +45,6 @@ train_ds = SingleVentricleDataset(config, load_flow=True)
 
 # UNet3D model
 net = UNet3D(config).to(DEVICE)
-# net = torch.nn.DataParallel(net, device_ids=[2])
 opt = Adam(net.parameters(), lr=LR)
 
 if VERBOSE:
@@ -75,29 +77,31 @@ print("training the network")
 print("===========================================================")
 print("\n")
 
-iter = 0
-for e in tqdm(range(NUM_EPOCHS)):
+avg_train_loss = 0
+pbar = tqdm(total=NUM_EPOCHS * train_steps)
+tic = time.time()
+for e in range(NUM_EPOCHS):
     net.train()
     total_train_loss = 0
 
-    tic = time.time()
     # Loop over the training set
     idxs = torch.randperm(len(train_ds)) if SHUFFLE else torch.arange(len(train_ds))
     for idx in idxs:
         (pname, vol, mask_syst, mask_diast, tsyst, tdias, ff, bf) = train_ds[idx]
+        pbar.set_postfix_str(f'P: {pname}, E: {e}, L: {avg_train_loss:.2f}')
         vol = torch_utils.normalize(vol)
         NZ, NY, NX, NT = vol.shape
 
-        if VERBOSE:
-            print("\n")
-            print("===========================================================")
-            print(f'Load data for patient: {pname}')
-            print(f'\t* (NZ, NY, NX, NT) = ({NZ}, {NY}, {NX}, {NT})')
-            print(f'\t* masks: {mask_syst.shape}, { mask_diast.shape}')
-            print(f'\t* Systole at time: {tsyst}')
-            print(f'\t* Diastole at time: {tdias}')
-            # print(f'\t* Optflows: {len(ff)}, with shape: {ff[0].shape}')
-            print("===========================================================")
+        # if VERBOSE:
+        #     print("\n")
+        #     print("===========================================================")
+        #     print(f'{e} Load data for patient: {pname}')
+        #     print(f'\t* (NZ, NY, NX, NT) = ({NZ}, {NY}, {NX}, {NT})')
+        #     print(f'\t* masks: {mask_syst.shape}, { mask_diast.shape}')
+        #     print(f'\t* Systole at time: {tsyst}')
+        #     print(f'\t* Diastole at time: {tdias}')
+        #     print(f'\t* Optflows: {len(ff)}, with shape: {ff[0].shape}')
+        #     print("===========================================================")
 
         init_ts = min(tdias, tsyst)
         final_ts = max(tdias, tsyst)
@@ -108,83 +112,88 @@ for e in tqdm(range(NUM_EPOCHS)):
         if init_ts == tsyst:
             m0 = mask_syst.unsqueeze(dim=0).unsqueeze(dim=0).to(DEVICE)
             mk = mask_diast.unsqueeze(dim=0).unsqueeze(dim=0).to(DEVICE)
-            print('m0 = mask_systole', '\tmk = mask_diastole')
+            # print('m0 = mask_systole', '\tmk = mask_diastole')
         else:
             m0 = mask_diast.unsqueeze(dim=0).unsqueeze(dim=0).to(DEVICE)
             mk = mask_syst.unsqueeze(dim=0).unsqueeze(dim=0).to(DEVICE)
-            print('m0 = mask_diastole', '\tmk = mask_systole')
+            # print('m0 = mask_diastole', '\tmk = mask_systole')
 
         patient_dir = plots.createSubDirectory(save_dir, pname)
-        save_epoch_dir = plots.createSubDirectory(patient_dir, 'm0tt')
+        save_m0tt = plots.createSubDirectory(patient_dir, 'm0tt')
+        save_mkt = plots.createSubDirectory(patient_dir, 'mkt')
         plots.save_slices(m0.squeeze(), 'm0.png', patient_dir)
         plots.save_slices(mk.squeeze(), 'mk.png', patient_dir)
 
         warp = Warp(config, NZ, NY, NX)
-        mts = [m0]
-        mtts = [mk]
+        # mts = [m0]
+        # mtts = [mk]
+        mt = m0.clone()
+        mtt = mk.clone()
+        # mts_tensor = torch.zeros((steps + 1,) + m0.shape)
+        # mts_tensor[0, :, :, :, :, :] = m0
         bf.reverse()
         for t in range(steps):
             # Forward mask propagation m0 -> mk
-            fwd_time = init_ts + t
+            fwd_time = init_ts + t + 1
             data_t = vol[:, :, :, fwd_time].unsqueeze(dim=0).unsqueeze(dim=0).to(DEVICE)
             u = ff[t].to(DEVICE)
-            mt = warp(mts[-1].squeeze(), u).unsqueeze(dim=0).unsqueeze(dim=0)
-            # x = torch.cat((data_t, mt), dim=1)
-            # mt = net(x)
-            mts.append(mt)
+            mt = warp(mt.squeeze(), u).unsqueeze(dim=0).unsqueeze(dim=0)
+            # mt = warp(mts[-1].squeeze(), u).unsqueeze(dim=0).unsqueeze(dim=0)
+            x = torch.cat((data_t, mt), dim=1)
+            mt = net(x)
+            # mts.append(mt)
 
             # Backward mask propagation mk -> m0
-            bwd_time = final_ts - t
+            bwd_time = final_ts - t - 1
             data_t = vol[:, :, :, bwd_time].unsqueeze(dim=0).unsqueeze(dim=0).to(DEVICE)
             u = bf[t].to(DEVICE)
-            mtt = warp(mtts[-1].squeeze(), u).unsqueeze(dim=0).unsqueeze(dim=0)
+            mtt = warp(mtt.squeeze(), u).unsqueeze(dim=0).unsqueeze(dim=0)
+            # mtt = warp(mtts[-1].squeeze(), u).unsqueeze(dim=0).unsqueeze(dim=0)
             x = torch.cat((data_t, mtt), dim=1)
             mtt = net(x)
-            mtts.append(mtt)
+            # mtts.append(mtt)
 
-        mtts.reverse()
-        plots.save_slices(mtts[5].squeeze(), f"m0tt_{e}", save_epoch_dir)
-        total_loss = 0.0
-        for k in range(len(mtts)):
-            loss = 0.5 * (mts[k] - mtts[k]).pow(2).sum()
-            total_loss += loss
+        # mtts.reverse()
+        # plots.save_slices(mtts[0].squeeze(), f"m0tt_{e}", save_m0tt)
+        # plots.save_slices(mts[-1].squeeze(), f"mtk_{e}", save_mkt)
+        plots.save_slices(mtt.squeeze(), f"m0tt_{e}", save_m0tt)
+        plots.save_slices(mt.squeeze(), f'mkt_{e}', save_mkt)
+
+        total_loss = (0.5 * (mtt - m0).pow(2).sum()) + (0.5 * (mt - mk).pow(2).sum())
+        # total_loss = 0
+        # for k in range(len(mtts)):
+        #     loss = 0.5 * (mts[k] - mtts[k]).pow(2).sum()
+        #     total_loss += loss
+        # Loss = L2LossReduced.apply
+        # total_loss = Loss(mtt, mt, m0, mk)
 
         opt.zero_grad()
         total_loss.backward()
         opt.step()
 
-        with torch.no_grad():
-            total_train_loss += total_loss
-            writer.add_scalar('train_loss', total_loss.item(), iter)
-            iter += 1
+        # with torch.no_grad():
+        total_train_loss += total_loss.item()
+        pbar.update(1)
 
     avg_train_loss = total_train_loss / train_steps
-    H["train_loss"].append(avg_train_loss.cpu().detach().numpy())
-    print("EPOCH: {}/{}".format(e + 1, NUM_EPOCHS))
-    print("Train loss: {:.6f}".format(avg_train_loss))
-
-    # total_diff = 0.0
-    # for k in range(len(mtts)):
-    #     diff = torch.abs(mts[k] - mtts[k]).squeeze()
-    #     ndiff = diff.norm().item()
-    #     total_diff += ndiff
-    #     print(f"|diff| = {ndiff}")
-
-    #     plots.save_slices(diff, f'Diff_mt_mtt_t{k}.png', patient_dir)
-    #     plots.save_single_zslices(diff, patient_dir, f'Diff_{k}', 1., 0)
-    # print(f'mean |diff| =  {total_diff / len(mtts)}')
+    H['train_loss'].append(avg_train_loss)
+    # print('EPOCH: {}/{}'.format(e + 1, NUM_EPOCHS))
+    # print('Train loss: {:.6f}'.format(avg_train_loss))
+    writer.add_scalar('train_loss', avg_train_loss, e)
 
 toc = time.time()
-print("\nTotal time taken to train the model: {:.2f}s".format(toc - tic))
+print('\nTotal time taken to train the model: {:.2f}s'.format(toc - tic))
 
-
-# plt.style.use("ggplot")
-# plt.figure()
-# plt.plot(H["train_loss"], label="train_loss")
-# plt.title("Training Loss on Dataset")
-# plt.xlabel("Epoch #")
-# plt.ylabel("Loss")
-# plt.legend(loc="lower left")
-# plt.savefig(osp.join(save_dir, 'plot.png'))
-
-# torch.save(net, osp.join(save_dir, 'model.pth'))
+plt.style.use('ggplot')
+plt.figure()
+plt.plot(H['train_loss'], label='train_loss')
+plt.title('Training Loss on Dataset')
+plt.xlabel('Epoch #')
+plt.ylabel('Loss')
+plt.legend(loc='lower left')
+plt.savefig(osp.join(save_dir, 'loss.png'))
+torch.save(net, osp.join(save_dir, 'model.pth'))
+#net = torch.load('model.pth')
+# torch.save(net.state_dict(), osp.join(save_dir, 'model_weights.pth'))
+# net.load_state_dict(torch.load('model_weights.pth'))
+pbar.close()
