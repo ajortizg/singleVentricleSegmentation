@@ -361,6 +361,7 @@ class TVL1OpticalFlow3D:
 
         warpingOp = opticalFlow.Warping3D(meshInfo, self.InterpolationTypeCuda, self.BoundaryTypeCuda)
         mask_warped = warpingOp.forward(mask, u)
+        # mask_warped = torch.where(mask_warped>0.5, 1.0, 0.0)
 
         save3D_torch_to_nifty(mask_warped, saveDir, f"mask_warped_time{t0}.nii")
         save_slices(mask_warped, f"mask_warped_time{t0}.png", saveDir)
