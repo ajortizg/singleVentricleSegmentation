@@ -158,7 +158,7 @@ for interpolation in interpolationList:
 ####################################
 NX3D = 7
 NY3D = 7
-NZ3D = 5
+NZ3D = 7
 # LX3D = 2.
 # LY3D = 4.
 # LZ3D = 6.

@@ -629,7 +629,6 @@ __global__ void cuda_warp3d_tricubicHermiteSpline_backward_kernel(
   }  
 }
 
-
 template <typename T>
 __global__ void cuda_warpVectorField3d_tricubicHermiteSpline_kernel(
   const torch::PackedTensorAccessor32<T,4,torch::RestrictPtrTraits> u,
@@ -1253,7 +1252,6 @@ switch(interpolation)
     break;
 
 } //end switch interpolation
-
 
 #ifdef CUDA_TIMING
   cudaDeviceSynchronize();

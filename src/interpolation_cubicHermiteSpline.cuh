@@ -357,7 +357,8 @@ __device__ void cuda_interpolate2d_bicubicHermiteSpline_backward(
     T buff_grad_phi_y[1];
     T buff_grad_phi_x[1];
     cuda_interpolate1d_cubicHermiteSpline_backward_local<T>(buff_y, wy + 1, buff_grad_y, buff_grad_phi_y, forward_val );
-    atomicAdd( &(grad_phi[iy][ix][1]), buff_grad_phi_y[0] / hY );
+    //atomicAdd( &(grad_phi[iy][ix][1]), buff_grad_phi_y[0] / hY );
+    grad_phi[iy][ix][1] += buff_grad_phi_y[0] / hY; 
 
     //Version 5: correct
     // T buff_grad_phi_y[1];
@@ -378,7 +379,8 @@ __device__ void cuda_interpolate2d_bicubicHermiteSpline_backward(
           buff_x[dx + 1] = u[c_id_y_out][c_id_x_out];
       }
       cuda_interpolate1d_cubicHermiteSpline_backward_local<T>(buff_x, wx + 1, buff_grad_x, buff_grad_phi_x, buff_grad_y[dy+1] );
-      atomicAdd( &(grad_phi[iy][ix][0]), buff_grad_phi_x[0] / hX );
+      //atomicAdd( &(grad_phi[iy][ix][0]), buff_grad_phi_x[0] / hX );
+      grad_phi[iy][ix][0] += buff_grad_phi_x[0] / hX;
       //Variante 5: correct
       // cuda_interpolate1d_cubicHermiteSpline_backward_u_local<T>(buff_x, wx + 1, buff_grad_x,  buff_grad_y[dy+1] );
       // cuda_interpolate1d_cubicHermiteSpline_backward_phi_local<T>(buff_x, wx + 1, buff_grad_phi_x,  buff_grad_y[dy+1] );
@@ -533,9 +535,8 @@ __device__ void cuda_interpolate3d_tricubicHermiteSpline_backward(
       const T forward_val,
       const int iz, const int iy, const int ix,
       torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> grad_u,
-      torch::PackedTensorAccessor32<T,4,torch::RestrictPtrTraits> grad_phi
-     ) {
-  
+      torch::PackedTensorAccessor32<T,4,torch::RestrictPtrTraits> grad_phi) 
+{
     const int ix_f = floorf(inter_coord_x / hX);
     const T wx = inter_coord_x / hX - ix_f;
 
@@ -581,7 +582,8 @@ __device__ void cuda_interpolate3d_tricubicHermiteSpline_backward(
 
     //backpolate in z
     cuda_interpolate1d_cubicHermiteSpline_backward_local<T>(buff_z, wz+1, buff_grad_z, buff_grad_phi_z, forward_val );
-    atomicAdd( &(grad_phi[iz][iy][ix][2]), buff_grad_phi_z[0] / hZ );
+    // atomicAdd( &(grad_phi[iz][iy][ix][2]), buff_grad_phi_z[0] / hZ );
+    grad_phi[iz][iy][ix][2] += buff_grad_phi_z[0] / hZ;
 
     for (int dz = -1; dz < 3; ++dz)
     {
@@ -603,7 +605,8 @@ __device__ void cuda_interpolate3d_tricubicHermiteSpline_backward(
         }
         // backpolate in y
         cuda_interpolate1d_cubicHermiteSpline_backward_local<T>(buff_y, wy+1, buff_grad_y, buff_grad_phi_y, buff_grad_z[dz+1] );
-        atomicAdd( &(grad_phi[iz][iy][ix][1]), buff_grad_phi_y[0] / hY );
+        //atomicAdd( &(grad_phi[iz][iy][ix][1]), buff_grad_phi_y[0] / hY );
+        grad_phi[iz][iy][ix][1] += buff_grad_phi_y[0] / hY;
 
         //get input values
         for (int dy = -1; dy < 3; ++dy)
@@ -617,8 +620,9 @@ __device__ void cuda_interpolate3d_tricubicHermiteSpline_backward(
               buff_x[dx + 1] = u[c_id_z_out][c_id_y_out][c_id_x_out];
           }
           // backpolate in x
-          cuda_interpolate1d_cubicHermiteSpline_backward_local<T>(buff_x, wx+1, buff_grad_x, buff_grad_phi_x, buff_grad_y[dy+1] );
-          atomicAdd( &(grad_phi[iz][iy][ix][0]), buff_grad_phi_x[0] / hX );
+          cuda_interpolate1d_cubicHermiteSpline_backward_local<T>(buff_x, wx + 1, buff_grad_x, buff_grad_phi_x, buff_grad_y[dy+1] );
+          //atomicAdd( &(grad_phi[iz][iy][ix][0]), buff_grad_phi_x[0] / hX );
+          grad_phi[iz][iy][ix][0] += buff_grad_phi_x[0] / hX;
 
           for (int dx = -1; dx < 3; ++dx)
           {
