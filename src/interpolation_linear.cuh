@@ -69,7 +69,7 @@ __device__ T cuda_interpolate1d_linear_backward(
   atomicAdd( &(grad_u[ix_c_out]), wx * forward_val );
 
   // Gradients wrt. the coordinates
-  grad_phi_idx += forward_val;
+  grad_phi_idx += (u_c - u_f) / hX * forward_val;
 
   return out;
 }
@@ -158,8 +158,8 @@ __device__ T cuda_interpolate2d_bilinear_backward(
   atomicAdd( &(grad_u[iy_c_out][ix_c_out]), wy * wx * forward_val );
 
   // Gradients wrt. the coordinates
-  grad_phi_idx += ((1 - wy) * (u_cf - u_ff) + wy * (u_cc - u_fc)) * forward_val;
-  grad_phi_idy += ((1 - wx) * (u_fc - u_ff) + wx * (u_cc - u_cf)) * forward_val;
+  grad_phi_idx += ((1 - wy) * (u_cf - u_ff) + wy * (u_cc - u_fc)) / hX * forward_val;
+  grad_phi_idy += ((1 - wx) * (u_fc - u_ff) + wx * (u_cc - u_cf)) / hY * forward_val;
 
   return out;
 }
@@ -354,11 +354,10 @@ __device__ T cuda_interpolate3d_trilinear_backward(
   atomicAdd( &(grad_u[iz_c_out][iy_f_out][ix_c_out]), wz * (1 - wy) * wx * forward_val );
   atomicAdd( &(grad_u[iz_c_out][iy_c_out][ix_c_out]), wz * wy * wx * forward_val );
 
-  //TODO
   // Gradients wrt. the coordinates
-  // grad_phi_idx += ((1 - wx) * (u_fc - u_ff) + wx * (u_cc - u_cf)) * forward_val;
-  // grad_phi_idy += ((1 - wy) * (u_cf - u_ff) + wy * (u_cc - u_fc)) * forward_val;
-  // grad_phi_idz += ((1 - wz) * (u_fc - u_ff) + wz * (u_cc - u_cf)) * forward_val;
+  grad_phi_idx += ((1 - wz) * (1 - wy) * (u_cff - u_fff) + (1 - wz) * wy * (u_ccf - u_fcf) + wz * (1 - wy) * (u_cfc - u_ffc) + wz * wy * (u_ccc - u_fcc) ) / hX * forward_val;
+  grad_phi_idy += ((1 - wz) * (1 - wx) * (u_fcf - u_fff) + (1 - wz) * wx * (u_ccf - u_cff) + wz * (1 - wx) * (u_fcc - u_ffc) + wz * wx * (u_ccc - u_cfc) ) / hY * forward_val;
+  grad_phi_idz += ((1 - wy) * (1 - wx) * (u_ffc - u_fff) + (1 - wy) * wx * (u_cfc - u_cff) + wy * (1 - wx) * (u_fcc - u_fcf) + wy * wx * (u_ccc - u_ccf) ) / hZ * forward_val;
 
   return out;
 }

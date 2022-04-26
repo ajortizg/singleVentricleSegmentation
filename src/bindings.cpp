@@ -8,13 +8,14 @@
 
 namespace py = pybind11;
 
-
 //=======================================
 // python interface
 //=======================================
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
 {
-
+  //=======================================
+  // mesh
+  //======================================= 
   py::class_<MeshInfo1D>(m,"MeshInfo1D")
         .def(py::init<const int, const float>())
         .def("getNX", &MeshInfo1D::getNX)
@@ -42,6 +43,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
         .def("getLZ", &MeshInfo3D::getLZ)
         .def("gethZ", &MeshInfo3D::gethZ);
 
+
   //=======================================
   // boundary
   //======================================= 
@@ -51,25 +53,9 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
     .value("BOUNDARY_REFLECT", BoundaryType::BOUNDARY_REFLECT)
     .export_values();
 
-
   //=======================================
   // differentialOps
   //======================================= 
-//   py::class_<Nabla1D_FD>(m,"Nabla1D_FD")
-//         .def(py::init<const MeshInfo1D&>())
-//         .def("forward", &Nabla1D_FD::forward)
-//         .def("backward", &Nabla1D_FD::backward);
-
-//   py::class_<Nabla2D_FD>(m,"Nabla2D_FD")
-//         .def(py::init<const MeshInfo2D&>())
-//         .def("forward", &Nabla2D_FD::forward)
-//         .def("backward", &Nabla2D_FD::backward);
-
-//   py::class_<Nabla3D_FD>(m,"Nabla3D_FD")
-//         .def(py::init<const MeshInfo3D&>())
-//         .def("forward", &Nabla3D_FD::forward)
-//         .def("backward", &Nabla3D_FD::backward);
-
   py::class_<Nabla1D_CD>(m,"Nabla1D_CD")
         .def(py::init<const MeshInfo1D&, const BoundaryType>())
         .def("forward", &Nabla1D_CD::forward)
@@ -88,7 +74,6 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
         .def("backward", &Nabla3D_CD::backward)
         .def("forwardVectorField", &Nabla3D_CD::forwardVectorField)
         .def("backwardVectorField", &Nabla3D_CD::backwardVectorField);
-
 
   //=======================================
   // anisotropicDifferentialOps
@@ -156,12 +141,9 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
       .def("forwardVectorField", &Prolongation3D::forwardVectorField)
       .def("forwardMatrixField", &Prolongation3D::forwardMatrixField);
 
-
   //=======================================
   // optical flow
   //=======================================
-  //m.def("TVL1OF_threshold", &TVL1OF_threshold, "Update step for v");
-  //m.def("TVL1OF2D_PrimalFct", &TVL1OF2D_PrimalFct, "primal fct in 2D");
   m.def("TVL1OF2D_proxPrimal", &TVL1OF2D_proxPrimal, "primal prox step in 2D");
   m.def("TVL1OF2D_proxDual", &TVL1OF2D_proxDual, "dual prox step in 2D");
   m.def("TVL1OF3D_proxPrimal", &TVL1OF3D_proxPrimal, "primal prox step in 3D");
@@ -179,11 +161,13 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
         .def("proxPrimal", &ROF2D::proxPrimal)
         .def("proxDual", &ROF2D::proxDual);
 
-  //m.def("TVL1OF_threshold", &TVL1OF_threshold, "Update step for v");
-  //m.def("TVL1OF2D_PrimalFct", &TVL1OF2D_PrimalFct, "primal fct in 2D");
-  // m.def("ROF2D_proxPrimal", &ROF2D_proxPrimal, "ROF primal prox step in 2D");
-  // m.def("ROF2D_proxDual", &ROF2D_proxDual, "ROF dual prox step in 2D");
   m.def("ROF3D_proxPrimal", &ROF3D_proxPrimal, "ROF primal prox step in 3D");
   m.def("ROF3D_proxDual", &ROF3D_proxDual, "ROF dual prox step in 3D");
+  //TODO 
+      //   py::class_<ROF3D>(m,"ROF3D")
+      //         .def(py::init<const MeshInfo2D&, const float, const float>())
+      //         .def("proxPrimal", &ROF2D::proxPrimal)
+      //         .def("proxDual", &ROF2D::proxDual);
+
 
 }

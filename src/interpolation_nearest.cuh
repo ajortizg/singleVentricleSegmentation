@@ -65,7 +65,9 @@ __device__ T cuda_interpolate1d_nearest_backward(
   atomicAdd( &grad_u[ix_out], forward_val);
 
   // Gradients wrt. the coordinates
-  grad_phi_idx += forward_val;
+  //grad_phi_idx += forward_val;
+  //grad_phi_idx += u[ix_out] * forward_val;
+  grad_phi_idx = 0;
   //atomicAdd( &grad_phi[ix_out][0], forward_val);
 
   return u[ix_out];
@@ -152,8 +154,10 @@ __device__ T cuda_interpolate2d_nearest_backward(
   atomicAdd( &grad_u[iy_out][ix_out], forward_val);
 
   // Gradients wrt. the coordinates
-  grad_phi_idx += forward_val;
-  grad_phi_idy += forward_val;
+  // grad_phi_idx += forward_val;
+  // grad_phi_idy += forward_val;
+  grad_phi_idx = 0;
+  grad_phi_idy = 0;
 
   return u[iy_out][ix_out];
 }
@@ -339,9 +343,12 @@ __device__ T cuda_interpolate3d_nearest_backward(
   atomicAdd( &grad_u[iz_out][iy_out][ix_out], forward_val);
 
   // Gradients wrt. the coordinates
-  grad_phi_idx += forward_val;
-  grad_phi_idy += forward_val;
-  grad_phi_idz += forward_val;
+  // grad_phi_idx += forward_val;
+  // grad_phi_idy += forward_val;
+  // grad_phi_idz += forward_val;
+  grad_phi_idx = 0;
+  grad_phi_idy = 0;
+  grad_phi_idz = 0;
 
   return u[iz_out][iy_out][ix_out];
 }
