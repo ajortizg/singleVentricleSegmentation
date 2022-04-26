@@ -43,7 +43,6 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
         .def("getLZ", &MeshInfo3D::getLZ)
         .def("gethZ", &MeshInfo3D::gethZ);
 
-
   //=======================================
   // boundary
   //======================================= 
