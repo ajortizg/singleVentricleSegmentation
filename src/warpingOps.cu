@@ -625,7 +625,7 @@ __global__ void cuda_warp3d_tricubicHermiteSpline_backward_kernel(
     // grad_phi[iz][iy][ix][0] = grad_phi_idx;
     // grad_phi[iz][iy][ix][1] = grad_phi_idy;
     // grad_phi[iz][iy][ix][2] = grad_phi_idz;
-    cuda_interpolate3d_tricubicHermiteSpline_backward(u, NZ, NY, NX, LZ, LY, LX, hZ, hY, hX, boundary, coord_z_warped, coord_y_warped, coord_x_warped, forward_val, iz, iy, ix, grad_u, grad_phi );
+    cuda_interpolate3d_tricubicHermiteSpline_backward<T>(u, NZ, NY, NX, LZ, LY, LX, hZ, hY, hX, boundary, coord_z_warped, coord_y_warped, coord_x_warped, forward_val, iz, iy, ix, grad_u, grad_phi );
   }  
 }
 

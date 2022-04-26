@@ -118,99 +118,99 @@ __device__ void cuda_interpolate1d_cubicHermiteSpline_backward_local(
 
 
 
-// template<typename T>
-// __device__ void cuda_interpolate1d_cubicHermiteSpline_backward_u_local(
-//     volatile T* localBuffer, const T local_coord, T* grad_u, const T forward )
-// {
-//   const int kernel_size=4;
+template<typename T>
+__device__ void cuda_interpolate1d_cubicHermiteSpline_backward_u_local(
+    volatile T* localBuffer, const T local_coord, T* grad_u, const T forward )
+{
+  const int kernel_size=4;
 
-//   const int ix_f = floorf(local_coord);
-//   const int ix_c = ix_f + 1;
-//   const int ix_f_1 = ix_f - 1;
-//   const int ix_c_1 = ix_c + 1;
-//   const T wx = local_coord - ix_f;
-//   const T wxSqr = wx*wx;
-//   const T wxCub = wxSqr*wx;
+  const int ix_f = floorf(local_coord);
+  const int ix_c = ix_f + 1;
+  const int ix_f_1 = ix_f - 1;
+  const int ix_c_1 = ix_c + 1;
+  const T wx = local_coord - ix_f;
+  const T wxSqr = wx*wx;
+  const T wxCub = wxSqr*wx;
 
-//   // determine the coefficients
-//   T d_out_d_p_f_1 = -wxCub/2 + wxSqr - wx/2;
-//   T d_out_d_p_f = (3*wxCub)/2 - (5*wxSqr)/2 + 1;
-//   T d_out_d_p_c = -(3*wxCub)/2 + 2*wxSqr + wx/2;
-//   T d_out_d_p_c_1 = wxCub/2 - wxSqr/2;
+  // determine the coefficients
+  T d_out_d_p_f_1 = -wxCub/2 + wxSqr - wx/2;
+  T d_out_d_p_f = (3*wxCub)/2 - (5*wxSqr)/2 + 1;
+  T d_out_d_p_c = -(3*wxCub)/2 + 2*wxSqr + wx/2;
+  T d_out_d_p_c_1 = wxCub/2 - wxSqr/2;
 
-//   // get the input values
-//   T u_f = 0; 
-//   grad_u[ix_f] = 0;
-//   if (ix_f >= 0 && ix_f < kernel_size){
-//     u_f = localBuffer[ix_f];
-//     grad_u[ix_f] = d_out_d_p_f * forward;
-//   }
-//   T u_f_1 = 0; 
-//   grad_u[ix_f_1] = 0;
-//   if (ix_f_1 >= 0 && ix_f_1 < kernel_size){
-//     u_f_1 = localBuffer[ix_f_1];
-//     grad_u[ix_f_1] = d_out_d_p_f_1 * forward;
-//   } 
-//   T u_c = 0;
-//   grad_u[ix_c] = 0;
-//   if (ix_c >= 0 && ix_c < kernel_size){
-//     u_c = localBuffer[ix_c];
-//     grad_u[ix_c] = d_out_d_p_c * forward;
-//   }
-//   T u_c_1 = 0; 
-//   grad_u[ix_c_1] = 0;
-//   if (ix_c_1 >= 0 && ix_c_1 < kernel_size){
-//     u_c_1 = localBuffer[ix_c_1];
-//     grad_u[ix_c_1] = d_out_d_p_c_1 * forward;
-//   } 
-// }
+  // get the input values
+  T u_f = 0; 
+  grad_u[ix_f] = 0;
+  if (ix_f >= 0 && ix_f < kernel_size){
+    u_f = localBuffer[ix_f];
+    grad_u[ix_f] = d_out_d_p_f * forward;
+  }
+  T u_f_1 = 0; 
+  grad_u[ix_f_1] = 0;
+  if (ix_f_1 >= 0 && ix_f_1 < kernel_size){
+    u_f_1 = localBuffer[ix_f_1];
+    grad_u[ix_f_1] = d_out_d_p_f_1 * forward;
+  } 
+  T u_c = 0;
+  grad_u[ix_c] = 0;
+  if (ix_c >= 0 && ix_c < kernel_size){
+    u_c = localBuffer[ix_c];
+    grad_u[ix_c] = d_out_d_p_c * forward;
+  }
+  T u_c_1 = 0; 
+  grad_u[ix_c_1] = 0;
+  if (ix_c_1 >= 0 && ix_c_1 < kernel_size){
+    u_c_1 = localBuffer[ix_c_1];
+    grad_u[ix_c_1] = d_out_d_p_c_1 * forward;
+  } 
+}
 
 
-// template<typename T>
-// __device__ void cuda_interpolate1d_cubicHermiteSpline_backward_phi_local(
-//     volatile T* localBuffer, const T local_coord, T* grad_phi, const T forward )
-// {
-//   const int kernel_size=4;
+template<typename T>
+__device__ void cuda_interpolate1d_cubicHermiteSpline_backward_phi_local(
+    volatile T* localBuffer, const T local_coord, T* grad_phi, const T forward )
+{
+  const int kernel_size=4;
 
-//   const int ix_f = floorf(local_coord);
-//   const int ix_c = ix_f + 1;
-//   const int ix_f_1 = ix_f - 1;
-//   const int ix_c_1 = ix_c + 1;
-//   const T wx = local_coord - ix_f;
-//   const T wxSqr = wx*wx;
-//   const T wxCub = wxSqr*wx;
+  const int ix_f = floorf(local_coord);
+  const int ix_c = ix_f + 1;
+  const int ix_f_1 = ix_f - 1;
+  const int ix_c_1 = ix_c + 1;
+  const T wx = local_coord - ix_f;
+  const T wxSqr = wx*wx;
+  const T wxCub = wxSqr*wx;
 
-//   // get the input values
-//   T u_f = 0; 
-//   if (ix_f >= 0 && ix_f < kernel_size){
-//     u_f = localBuffer[ix_f];
-//   }
-//   T u_f_1 = 0; 
-//   if (ix_f_1 >= 0 && ix_f_1 < kernel_size){
-//     u_f_1 = localBuffer[ix_f_1];
-//   } 
-//   T u_c = 0;
-//   if (ix_c >= 0 && ix_c < kernel_size){
-//     u_c = localBuffer[ix_c];
-//   }
-//   T u_c_1 = 0; 
-//   if (ix_c_1 >= 0 && ix_c_1 < kernel_size){
-//     u_c_1 = localBuffer[ix_c_1];
-//   } 
+  // get the input values
+  T u_f = 0; 
+  if (ix_f >= 0 && ix_f < kernel_size){
+    u_f = localBuffer[ix_f];
+  }
+  T u_f_1 = 0; 
+  if (ix_f_1 >= 0 && ix_f_1 < kernel_size){
+    u_f_1 = localBuffer[ix_f_1];
+  } 
+  T u_c = 0;
+  if (ix_c >= 0 && ix_c < kernel_size){
+    u_c = localBuffer[ix_c];
+  }
+  T u_c_1 = 0; 
+  if (ix_c_1 >= 0 && ix_c_1 < kernel_size){
+    u_c_1 = localBuffer[ix_c_1];
+  } 
 
-//   // determine the coefficients
-//   const T p_f = u_f;
-//   const T p_prime_f = (u_c - u_f_1) / 2;
-//   const T p_c = u_c;
-//   const T p_prime_c = (u_c_1 - u_f) / 2;
+  // determine the coefficients
+  const T p_f = u_f;
+  const T p_prime_f = (u_c - u_f_1) / 2;
+  const T p_c = u_c;
+  const T p_prime_c = (u_c_1 - u_f) / 2;
 
-//   const T a = 2 * p_f - 2 * p_c + p_prime_f + p_prime_c;
-//   const T b = -3 * p_f + 3 * p_c - 2 * p_prime_f - p_prime_c;
-//   const T c = p_prime_f;
+  const T a = 2 * p_f - 2 * p_c + p_prime_f + p_prime_c;
+  const T b = -3 * p_f + 3 * p_c - 2 * p_prime_f - p_prime_c;
+  const T c = p_prime_f;
 
-//   // grad_phi += (3*wxSqr*a + 2*b*wx + c) * forward;
-//   grad_phi[0] = (3*wxSqr*a + 2*b*wx + c) * forward;
-// }
+  // grad_phi += (3*wxSqr*a + 2*b*wx + c) * forward;
+  grad_phi[0] = (3*wxSqr*a + 2*b*wx + c) * forward;
+}
 
 //=========================================================
 // cubic hermite spline interpolation in 1D
@@ -620,17 +620,17 @@ __device__ void cuda_interpolate3d_tricubicHermiteSpline_backward(
               buff_x[dx + 1] = u[c_id_z_out][c_id_y_out][c_id_x_out];
           }
           // backpolate in x
-          cuda_interpolate1d_cubicHermiteSpline_backward_local<T>(buff_x, wx + 1, buff_grad_x, buff_grad_phi_x, buff_grad_y[dy+1] );
-          //atomicAdd( &(grad_phi[iz][iy][ix][0]), buff_grad_phi_x[0] / hX );
-          //grad_phi[iz][iy][ix][0] += buff_grad_phi_x[0] / hX;
-
+          // cuda_interpolate1d_cubicHermiteSpline_backward_local<T>(buff_x, wx + 1, buff_grad_x, buff_grad_phi_x, buff_grad_y[dy+1] );
+          // grad_phi[iz][iy][ix][0] += buff_grad_phi_x[0] / hX;
+          cuda_interpolate1d_cubicHermiteSpline_backward_u_local<T>(buff_x, wx + 1, buff_grad_x, buff_grad_y[dy+1] );
+          cuda_interpolate1d_cubicHermiteSpline_backward_phi_local<T>(buff_x, wx + 1, buff_grad_phi_x, buff_grad_y[dy+1] );
+          grad_phi[iz][iy][ix][0] += buff_grad_phi_x[0] / hX;
           for (int dx = -1; dx < 3; ++dx)
           {
             const int c_id_x = ix_f + dx;
             const int c_id_x_out = getIndexInterpolate(c_id_x,NX,boundary);
             atomicAdd( &(grad_u[c_id_z_out][c_id_y_out][c_id_x_out]), buff_grad_x[dx + 1]);
           }
-          //atomicAdd( &(grad_phi[iz][iy][ix][0]), buff_grad_phi_x[0] / hX );
         }
     }
 }

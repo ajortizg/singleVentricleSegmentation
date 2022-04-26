@@ -148,6 +148,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
   m.def("TVL1OF3D_proxPrimal", &TVL1OF3D_proxPrimal, "primal prox step in 3D");
   m.def("TVL1OF3D_proxDual", &TVL1OF3D_proxDual, "dual prox step in 3D");
 
+
   //=======================================
   // ROF
   //=======================================

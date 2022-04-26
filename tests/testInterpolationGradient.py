@@ -128,7 +128,7 @@ for interpolation in interpolationList:
 ####################################
 # test in 2D
 ####################################
-NX2D = 24
+NX2D = 9
 NY2D = 17
 LX2D = 2.
 LY2D = 8.
@@ -156,15 +156,15 @@ for interpolation in interpolationList:
 ####################################
 # test  in 3D
 ####################################
-NX3D = 7
-NY3D = 7
+NX3D = 9
+NY3D = 9
 NZ3D = 7
-# LX3D = 2.
-# LY3D = 4.
-# LZ3D = 6.
-LX3D = NX3D - 1
-LY3D = NY3D - 1
-LZ3D = NZ3D - 1
+LX3D = 2.
+LY3D = 4.
+LZ3D = 6.
+# LX3D = NX3D - 1
+# LY3D = NY3D - 1
+# LZ3D = NZ3D - 1
 meshInfo3D = opticalFlow.MeshInfo3D(NZ3D,NY3D,NX3D,LZ3D,LY3D,LX3D)
 
 print("\n")
@@ -181,10 +181,6 @@ for interpolation in interpolationList:
 
             print("check with autograd:")
             checkGradientWithAutograd(3,meshInfo3D, warpingOp3D, derivativeDir=derivativeDir)
-
-
-
-
 
 
 
