@@ -622,7 +622,7 @@ __device__ void cuda_interpolate3d_tricubicHermiteSpline_backward(
           // backpolate in x
           cuda_interpolate1d_cubicHermiteSpline_backward_local<T>(buff_x, wx + 1, buff_grad_x, buff_grad_phi_x, buff_grad_y[dy+1] );
           //atomicAdd( &(grad_phi[iz][iy][ix][0]), buff_grad_phi_x[0] / hX );
-          grad_phi[iz][iy][ix][0] += buff_grad_phi_x[0] / hX;
+          //grad_phi[iz][iy][ix][0] += buff_grad_phi_x[0] / hX;
 
           for (int dx = -1; dx < 3; ++dx)
           {
