@@ -5,7 +5,7 @@ import os.path as osp
 import matplotlib.pyplot as plt
 import os
 from enum import Enum
-from TVL1OF.TVL1OF3D import *
+from TVL1OF.TVL1SymOF3D import *
 from cnn.dataset import SingleVentricleDataset
 import csv
 utils_lib_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'utils'))
@@ -33,8 +33,8 @@ if __name__ == "__main__":
     # load config parser
     config = configparser.ConfigParser()
     config.read('parser/configTVL1OF3D.ini')
-    cuda_availabe = config.get('DEVICE', 'cuda_availabe')
-    if cuda_availabe and torch.cuda.is_available():
+    use_cuda = config.get('DEVICE', 'cuda_availabe')
+    if use_cuda and torch.cuda.is_available():
         DEVICE = 'cuda'
         CUDA_DEVICE = config.getint('DEVICE', 'cuda_device')
         torch.cuda.set_device(CUDA_DEVICE)
@@ -49,7 +49,7 @@ if __name__ == "__main__":
     print("\n")
 
     # create save directory
-    save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), f'TVL1OF3D{mode_str}')
+    save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), f'TVL1SymOF3D{mode_str}')
 
     # save config file to save directory
     conifg_output = os.path.sep.join([save_dir, "config.ini"])
@@ -63,7 +63,7 @@ if __name__ == "__main__":
     if not found:
         print(PATIENT_NAME + " not found!")
         sys.exit()
-    STEP = config.getint('PARAMETERS', 'step')
+    # STEP = config.getint('PARAMETERS', 'step')
 
     # for idx in range(len(ds)):
     for _ in range(1):
@@ -105,41 +105,41 @@ if __name__ == "__main__":
         save_slices(m0, 'm0.png', patient_dir)
         save_slices(mk, 'mk.png', patient_dir)
 
-        #idxs = torch.linspace(init_ts, final_ts, STEP).int()
+        # idxs = torch.linspace(init_ts, final_ts, STEP).int()
         idxs = None
         if mode == OpticalFlowMode.FORWARD:
             print("do forward compuation of optical flow")
             mask = m0.clone()
-            idxs = torch.arange(init_ts, final_ts + 1, 1) if STEP == -1 else torch.linspace(init_ts, final_ts, STEP).int()
-            # from_t, to_t, inc_t = init_ts, final_ts, 1
+            #idxs = torch.arange(init_ts, final_ts + 1, 1) if STEP == -1 else torch.linspace(init_ts, final_ts, STEP).int()
+            idxs = torch.arange(init_ts-1, final_ts + 1, 1)
         elif mode == OpticalFlowMode.BACKWARD:
             print("do backward compuation of optical flow")
             mask = mk.clone()
-            idxs = torch.arange(final_ts, init_ts - 1, -1) if STEP == -1 else torch.flip(torch.linspace(init_ts, final_ts, STEP).int(), dims=(0,))
-            # from_t, to_t, inc_t = final_ts, init_ts, -1
+            #idxs = torch.arange(final_ts, init_ts - 1, -1) if STEP == -1 else torch.flip(torch.linspace(init_ts, final_ts, STEP).int(), dims=(0,))
+            idxs = torch.arange(final_ts+1, init_ts - 1, -1)
 
-        # for t in range(from_t, to_t, inc_t):
-        print("time steps:", idxs)
-        for i in range(len(idxs) - 1):
-            # saveDirTimeStep = plots.createSubDirectory(patient_dir, f'time{t}')
-            # t0, t1 = t + inc_t, t
-            t0 = idxs[i + 1].item()
-            t1 = idxs[i].item()
-            I0 = data[:, :, :, t0]
-            I1 = data[:, :, :, t1]
-            print(f'{t1}->{t0}')
-            saveDirTimeStep = plots.createSubDirectory(patient_dir, f'time{t1}')
+        print("time steps = ", idxs)
+        for i in range(1, len(idxs) - 1):
+            tl = idxs[i - 1].item()
+            tc = idxs[i].item()
+            tr = idxs[i + 1].item()
+            Il = data[:, :, :, tl]
+            Ic = data[:, :, :, tc]
+            Ir = data[:, :, :, tr]
+            print("iteration = ", i)
+            print(f'{tl}<-{tc}->{tr}')
+            saveDirTimeStep = plots.createSubDirectory(patient_dir, f'time{tc}')
 
             # Compute the optical flow
-            alg = TVL1OpticalFlow3D(saveDirTimeStep, config)
-            u, p = alg.computeOnPyramid(I0, I1, u, p)
+            alg = TVL1SymOpticalFlow3D(saveDirTimeStep, config)
+            u, p = alg.computeOnPyramid(Il, Ic, Ir, u, p)
 
             np.savetxt(osp.join(patient_dir, f'u_{i}.txt'), u.cpu().detach().numpy().reshape((-1, 3)))
 
             # save the old mask
-            save3D_torch_to_nifty(mask, saveDirTimeStep, f'mask_time{t1}.nii')
+            save3D_torch_to_nifty(mask, saveDirTimeStep, f'mask_time{tc}.nii')
             save_slices(mask, f'mask.png', saveDirTimeStep)
             save_single_zslices(mask, saveDirTimeStep, 'mask_slices', 1., 2)
 
             # warp mask with the computed optical flow
-            mask = alg.warpMask(mask, u, I0, t0, saveDirTimeStep)
+            mask = alg.warpMask(mask, u, Ic, tc, saveDirTimeStep)
