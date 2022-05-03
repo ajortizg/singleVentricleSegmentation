@@ -22,8 +22,6 @@ std::vector<torch::Tensor> cuda_warp3d_backward( const torch::Tensor u, const to
 torch::Tensor cuda_warpVectorField3d( const torch::Tensor &u, const torch::Tensor &phi, const MeshInfo3D& meshInfo, const InterpolationType interpolation, const BoundaryType boundary );
 
 
-
-
 //=======================================
 // C++ interface
 //=======================================

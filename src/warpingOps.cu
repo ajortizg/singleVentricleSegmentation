@@ -480,9 +480,10 @@ __global__ void cuda_warp1d_cubicHermiteSpline_backward_kernel(
     const T dx = phi[ix][0];
     const T coord_x_warped = ix * hX + dx;
     const T forward_val = forward_out[ix];
-    T grad_phi_idx = 0;
-    cuda_interpolate1d_cubicHermiteSpline_backward(u, NX, LX, hX, boundary, coord_x_warped, forward_val, grad_u, grad_phi_idx );
-    grad_phi[ix][0] = grad_phi_idx;
+    // T grad_phi_idx = 0;
+    // cuda_interpolate1d_cubicHermiteSpline_backward(u, NX, LX, hX, boundary, coord_x_warped, forward_val, grad_u, grad_phi_idx );
+    // grad_phi[ix][0] = grad_phi_idx;
+    cuda_interpolate1d_cubicHermiteSpline_backward(u, NX, LX, hX, boundary, coord_x_warped, forward_val, ix, grad_u, grad_phi );
   }  
 }
 
@@ -531,12 +532,15 @@ __global__ void cuda_warp2d_bicubicHermiteSpline_backward_kernel(
     const T coord_x_warped = ix * hX + dx;
     const T coord_y_warped = iy * hY + dy;
     const T forward_val = forward_out[iy][ix];
-    T grad_phi_idy = 0; T grad_phi_idx = 0;
-    cuda_interpolate2d_bicubicHermiteSpline_backward(u, NY, NX, LY, LX, hY, hX, boundary, coord_y_warped, coord_x_warped, forward_val, grad_u, grad_phi_idy, grad_phi_idx );
-    grad_phi[iy][ix][0] = grad_phi_idx;
-    grad_phi[iy][ix][1] = grad_phi_idy;
+    // T grad_phi_idy = 0; T grad_phi_idx = 0;
+    // cuda_interpolate2d_bicubicHermiteSpline_backward(u, NY, NX, LY, LX, hY, hX, boundary, coord_y_warped, coord_x_warped, forward_val, grad_u, grad_phi_idy, grad_phi_idx );
+    // grad_phi[iy][ix][0] = grad_phi_idx;
+    // grad_phi[iy][ix][1] = grad_phi_idy;
+    //Variante 2:
+    cuda_interpolate2d_bicubicHermiteSpline_backward(u, NY, NX, LY, LX, hY, hX, boundary, coord_y_warped, coord_x_warped, forward_val, iy, ix, grad_u, grad_phi );
   }  
 }
+
 
 template <typename T>
 __global__ void cuda_warpVectorField2d_bicubicHermiteSpline_kernel(
@@ -616,11 +620,12 @@ __global__ void cuda_warp3d_tricubicHermiteSpline_backward_kernel(
     const T coord_y_warped = iy * hY + dy;
     const T coord_z_warped = iz * hZ + dz;
     const T forward_val = forward_out[iz][iy][ix];
-    T grad_phi_idz = 0; T grad_phi_idy = 0; T grad_phi_idx = 0;
-    cuda_interpolate3d_tricubicHermiteSpline_backward(u, NZ, NY, NX, LZ, LY, LX, hZ, hY, hX, boundary, coord_z_warped, coord_y_warped, coord_x_warped, forward_val, grad_u, grad_phi_idz, grad_phi_idy, grad_phi_idx );
-    grad_phi[iz][iy][ix][0] = grad_phi_idx;
-    grad_phi[iz][iy][ix][1] = grad_phi_idy;
-    grad_phi[iz][iy][ix][2] = grad_phi_idz;
+    // T grad_phi_idz = 0; T grad_phi_idy = 0; T grad_phi_idx = 0;
+    // cuda_interpolate3d_tricubicHermiteSpline_backward(u, NZ, NY, NX, LZ, LY, LX, hZ, hY, hX, boundary, coord_z_warped, coord_y_warped, coord_x_warped, forward_val, grad_u, grad_phi_idz, grad_phi_idy, grad_phi_idx );
+    // grad_phi[iz][iy][ix][0] = grad_phi_idx;
+    // grad_phi[iz][iy][ix][1] = grad_phi_idy;
+    // grad_phi[iz][iy][ix][2] = grad_phi_idz;
+    cuda_interpolate3d_tricubicHermiteSpline_backward<T>(u, NZ, NY, NX, LZ, LY, LX, hZ, hY, hX, boundary, coord_z_warped, coord_y_warped, coord_x_warped, forward_val, iz, iy, ix, grad_u, grad_phi );
   }  
 }
 
@@ -720,8 +725,6 @@ switch(interpolation)
     break;
 
 } //end switch interpolation
-
-
 
 #ifdef CUDA_TIMING
   cudaDeviceSynchronize();
@@ -1249,7 +1252,6 @@ switch(interpolation)
     break;
 
 } //end switch interpolation
-
 
 #ifdef CUDA_TIMING
   cudaDeviceSynchronize();

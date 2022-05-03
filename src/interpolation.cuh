@@ -12,7 +12,6 @@
 #include "interpolation_linear.cuh"
 #include "interpolation_nearest.cuh"
 
-
 // typedef float (*get_interpolate_func) (const torch::PackedTensorAccessor32<float,1,torch::RestrictPtrTraits>, int, float, float, int, float);
 
 // __device__ get_interpolate_func interpolationFunc[3] = { cuda_interpolate1d_nearest, cuda_interpolate1d_linear, cuda_interpolate1d_cubicHermiteSpline };
