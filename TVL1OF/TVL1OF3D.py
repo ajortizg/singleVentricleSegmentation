@@ -20,6 +20,7 @@ from utils.flow_viz import *
 # from pythonOps.differentialOps import *
 pythonOps_lib_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../pythonOps'))
 sys.path.append(pythonOps_lib_path)
+import utils.torch_utils as tu
 # import mesh
 # import differentialOps
 
@@ -346,7 +347,7 @@ class TVL1OpticalFlow3D:
         fileNameDual = os.path.join(saveDirStep, dualName)
         torch.save(p, fileNameDual)
 
-    def warpMask(self, mask, u, t0, saveDir):
+    def warpMask(self, mask, u, I0, t0, saveDir):
 
         print("warp with optical flow for time step: ", t0)
         print("norm of u = ", u.norm().item())
@@ -361,11 +362,14 @@ class TVL1OpticalFlow3D:
 
         warpingOp = opticalFlow.Warping3D(meshInfo, self.InterpolationTypeCuda, self.BoundaryTypeCuda)
         mask_warped = warpingOp.forward(mask, u)
-        # mask_warped = torch.where(mask_warped>0.5, 1.0, 0.0)
+        # mask_warped = tu.normalize(mask_warped)
+        # mask_warped = torch.where(mask_warped > 0.1, 1.0, 0.0)
 
         save3D_torch_to_nifty(mask_warped, saveDir, f"mask_warped_time{t0}.nii")
         save_slices(mask_warped, f"mask_warped_time{t0}.png", saveDir)
         save_single_zslices(mask_warped, saveDir, "mask_warped_slices", 1., 2)
+
+        save_color_slices(I0, mask, saveDir, 'color_mask')
 
         maskName = f"masked_warped_time{t0}.pt"
         fileNameMask = os.path.join(saveDir, maskName)

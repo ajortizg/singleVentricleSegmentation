@@ -12,7 +12,7 @@ import os.path as osp
 utils_lib_path = osp.abspath(osp.join(osp.dirname(__file__), '../utils'))
 sys.path.append(utils_lib_path)
 import plots
-import torch_warping
+import torch_utils
 
 
 def combine_voxels(ellipsoids):
@@ -23,6 +23,8 @@ def combine_voxels(ellipsoids):
     e2 = ellipsoids[1]
     e3 = ellipsoids[2]
 
+    prob = 0.1
+
     for z in range(NZ):
         for y in range(NY):
             for x in range(NX):
@@ -32,6 +34,10 @@ def combine_voxels(ellipsoids):
                     img[z, y, x] = e2.voxels[z, y, x]
                 elif e1.mask[z, y, x]:
                     img[z, y, x] = e1.voxels[z, y, x]
+
+                # Salt and paper noise
+                if np.random.rand() < prob:
+                    img[z, y, x] = np.random.randint(0, 2)
     return img
 
 
@@ -91,7 +97,7 @@ if __name__ == "__main__":
     NY = config.getint('PARAMETERS', 'NY')
     NX = config.getint('PARAMETERS', 'NX')
 
-    grid = torch_warping.create_grid(NZ, NY, NX).numpy()
+    grid = torch_utils.create_grid(NZ, NY, NX).numpy()
 
     eA1 = create_ellipsoid(config, 'eA1', grid)
     eA2 = create_ellipsoid(config, 'eA2', grid)

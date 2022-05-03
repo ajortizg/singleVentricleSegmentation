@@ -6,7 +6,7 @@ import torch
 
 utils_lib_path = osp.abspath(osp.join(osp.dirname(__file__), '../utils'))
 sys.path.append(utils_lib_path)
-import torch_warping
+import torch_utils
 
 
 class Ellipse:
@@ -136,7 +136,7 @@ class Ellipsoid:
         else:
             self.voxels = np.where(self.mask, value1, 0.0)
 
-        self.voxels = torch_warping.warp(
+        self.voxels = torch_utils.warp(
             torch.from_numpy(self.voxels).unsqueeze(dim=0).unsqueeze(dim=0),
             torch.from_numpy(grid_t).unsqueeze(dim=0),
             mode="bilinear").squeeze().detach().cpu().numpy()
