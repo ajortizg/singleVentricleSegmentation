@@ -64,6 +64,7 @@ pbar = tqdm(total=len(train_ds))
 # for (pname, vol, mask_syst, mask_diast, tsyst, tdias, ff, bf) in train_ds:
 (pname, vol, mask_syst, mask_diast, tsyst, tdias, ff, bf) = train_ds[idx]
 NZ, NY, NX, NT = vol.shape
+vol = torch_utils.normalize(vol)
 # grid = torch_utils.create_grid(NZ, NY, NX).to(DEVICE)
 
 # print("\n")
@@ -102,40 +103,27 @@ bf.reverse()
 # for t in range(steps):
 for t in range(len(ff)):
     pbar.set_postfix_str(f'P: {pname}, D: {mean_diff:.2f}, S: {t+1}/{len(ff)}')
-    # Forward mask propagation m0 -> mk
-    u = ff[t].to(DEVICE)
 
-    # NZ, NY, NX, _ = u.shape
-    # for z in range(NZ):
-    #     for y in range(NY):
-    #         for x in range(NX):
-    #             uvw = u[z, y, x, :]
-    #             n_uvw = la.norm(uvw)
-    #             # print(n_uvw)
-    #             if n_uvw > 5.0:
-    #                 u[z, y, x, :] = torch.zeros_like(uvw)
-    th = 0.6
-    # nm = la.norm(u, dim=-1)
-    # u[nm > th, :] = torch.zeros(3, device=DEVICE)
+    # Forward mask propagation m0 -> mk
+    data_t = vol[:, :, :, init_ts + t].to(DEVICE)
+    plots.save_img_mask_slices(data_t, mts[-1], f'img_mask_t{init_ts + t}', patient_dir)
+    u = ff[t].to(DEVICE)
     mt = warp(mts[-1], u)
     # mt = torch_utils.warp(mts[-1].unsqueeze(dim=0).unsqueeze(dim=0), (grid + u).unsqueeze(dim=0), mode='bilinear').squeeze()
     # mt = normalize(mt)
-    mt = torch.where(mt > 0.5, 1.0, 0.0)
-    plots.save_slices(mt, f'mt{init_ts+t+1}.png', patient_dir)
-    # plots.save_slices(mt, f'mt{t+1}.png', patient_dir)
+    # mt = torch.where(mt > 0.5, 1.0, 0.0)
+    plots.save_slices(mt, f'mt{init_ts + t + 1}.png', patient_dir)
     mts.append(mt)
 
     # Backward mask propagation mk -> m0
+    data_t = vol[:, :, :, final_ts - t].to(DEVICE)
+    plots.save_img_mask_slices(data_t, mtts[-1], f'img_mask_tt{final_ts - t}', patient_dir)
     u = bf[t].to(DEVICE)
-    # nm = la.norm(u, dim=-1)
-    # u[nm > th, :] = torch.zeros(3, device=DEVICE)
-
     mtt = warp(mtts[-1], u)
-    # mtt = torch_utils.warp(mtts[-1].unsqueeze(dim=0).unsqueeze(dim=0), (grid + u).unsqueeze(dim=0), mode='bilinear').squeeze()
+    # mtt = torch_utils.warp(mtts[-1].reshape(1,1,*mtts[-1].shape), (grid + u).unsqueeze(dim=0), mode='bilinear').squeeze()
     # mtt = normalize(mtt)
-    mtt = torch.where(mtt > 0.5, 1.0, 0.0)
-    plots.save_slices(mtt, f'mtt{final_ts-t-1}.png', patient_dir)
-    # plots.save_slices(mtt, f'mtt{t-1}.png', patient_dir)
+    # mtt = torch.where(mtt > 0.5, 1.0, 0.0)
+    plots.save_slices(mtt, f'mtt{final_ts - t - 1}.png', patient_dir)
     mtts.append(mtt)
 
 mtts.reverse()
@@ -144,11 +132,13 @@ total_diff = 0.0
 for k in range(len(mtts)):
     diff = torch.abs(mts[k] - mtts[k])
     ndiff = diff.norm().item()
+    # ndiff = diff.mean().item()
     total_diff += ndiff
     # print(f"|diff| = {ndiff}")
     row.append('{:.2f}'.format(ndiff))
-    plots.save_slices(diff, f'Diff_mt_mtt_t{k}.png', patient_dir)
-    plots.save_single_zslices(diff, patient_dir, f'Diff_{k}', 1., 0)
+    # plots.save_slices(diff, f'Diff_mt_mtt_t{k}.png', patient_dir)
+    # plots.save_single_zslices(diff, patient_dir, f'Diff_{k}', 1., 0)
+    plots.save_colorbar_slices(diff, f'Diff_mt_mtt_t{k}.png', patient_dir)
 
 pbar.update(1)
 writer.writerow(row)

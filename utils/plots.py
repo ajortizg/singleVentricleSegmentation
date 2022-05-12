@@ -115,7 +115,6 @@ def save4D_torch_to_nifty(data, saveDir, fileName, affine=None):
 
 
 def save_single_zslices(image3D, saveDir, subdir, max_gray_value=1., color_channel=-1):
-
     saveDirSlices = os.path.sep.join([saveDir, subdir])
     if not os.path.exists(saveDirSlices):
         os.makedirs(saveDirSlices)
@@ -163,29 +162,78 @@ def save_slices(image3D, fileName, saveDir, max_gray_value=1):
     plt.close('all')
 
 
-def save_color_slices(image3D, mask3D, saveDir, subdir, alpha=0.3, max_gray_value=1):
+def save_colorbar_slices(img3d, filename, save_dir, max_gray_value=1):
+    numZSlices = img3d.shape[0]
+    aspect_ratio = 16. / 9.
+    numCols = int(numZSlices / aspect_ratio)
+    if(numZSlices % numCols > 0):
+        numCols += 1
+    numRows = math.ceil(numZSlices / numCols)
+
+    fig, axs = plt.subplots(numRows, numCols, constrained_layout=True, figsize=(18, 10), dpi=4)
+    for z, ax in enumerate(axs.flat):
+        if z < numZSlices:
+            im = ax.imshow(img3d[z, :, :].cpu().detach().numpy(), cmap='hot', vmin=0, vmax=max_gray_value, interpolation=None)
+            ax.set_title("layer {}".format(z))
+            ax.axis('off')
+            plt.colorbar(im, ax=ax, orientation='horizontal')
+        else:
+            ax.axis('off')
+    pathName = os.path.join(save_dir, filename)
+    plt.savefig(pathName, dpi=100)
+    plt.close('all')
+
+
+def save_img_mask_slices(img3d, mask3d, filename, save_dir, alpha=0.35, max_gray_value=1):
+    numZSlices = img3d.shape[0]
+    aspect_ratio = 16. / 9.
+    numCols = int(numZSlices / aspect_ratio)
+    if(numZSlices % numCols > 0):
+        numCols += 1
+    numRows = math.ceil(numZSlices / numCols)
+
+    fig, axs = plt.subplots(numRows, numCols, constrained_layout=True, figsize=(18, 10), dpi=4)
+    #fig.canvas.manager.set_window_title('4D Nifti Image')
+    #fig.suptitle('4D_Nifti file: {} \n with {} slices in z-direction'.format(os.path.basename(fileName),numZSlices), fontsize=16)
+    fig.suptitle('file: {}'.format(os.path.basename(filename)), fontsize=16)
+    for z, ax in enumerate(axs.flat):
+        if z < numZSlices:
+            img = cv2.cvtColor(img3d[z, :, :].cpu().detach().numpy(), cv2.COLOR_GRAY2BGR)
+            mask = mask3d[z, :, :].cpu().detach().numpy()
+            img = merge_img_mask(img, mask, alpha)
+            ax.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+            ax.set_title("layer {}".format(z))
+            ax.axis('off')
+        else:
+            ax.axis('off')
+    pathName = os.path.join(save_dir, filename)
+    plt.savefig(pathName, dpi=100)
+    plt.close('all')
+
+
+def save_img_mask_single_zslices(image3D, mask3D, saveDir, subdir, alpha=0.35, max_gray_value=1):
     """Apply the given mask to the image.
     """
-    color = [1, 1, 0]
     saveDirSlices = os.path.sep.join([saveDir, subdir])
     if not os.path.exists(saveDirSlices):
         os.makedirs(saveDirSlices)
-
     factor_gray_value = 255. / max_gray_value
     numZSlices = image3D.shape[0]
 
     for z in range(numZSlices):
         img = image3D[z, :, :].cpu().detach().numpy()
         mask = mask3D[z, :, :].cpu().detach().numpy()
-
         img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-
-        for c in range(3):
-            img[:, :, c] = np.where(mask == 1,
-                                    img[:, :, c] *
-                                    (1 - alpha) + alpha * color[c],
-                                    img[:, :, c])
-
+        img = merge_img_mask(img, mask, alpha)
         imgNameColor = f"colorimg_z{z}.png"
         pathNameColor = os.path.join(saveDirSlices, imgNameColor)
         cv2.imwrite(pathNameColor, factor_gray_value * img)
+
+
+def merge_img_mask(img, mask, alpha=0.35, color=[1, 1, 0]):
+    for c in range(3):
+        img[:, :, c] = np.where(mask > 0.1,
+                                img[:, :, c] *
+                                (1 - alpha) + alpha * color[c],
+                                img[:, :, c])
+    return img
