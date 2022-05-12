@@ -111,12 +111,12 @@ if __name__ == "__main__":
             print("do forward compuation of optical flow")
             mask = m0.clone()
             #idxs = torch.arange(init_ts, final_ts + 1, 1) if STEP == -1 else torch.linspace(init_ts, final_ts, STEP).int()
-            idxs = torch.arange(init_ts-1, final_ts + 1, 1)
+            idxs = torch.arange(init_ts - 1, final_ts + 1, 1)
         elif mode == OpticalFlowMode.BACKWARD:
             print("do backward compuation of optical flow")
             mask = mk.clone()
             #idxs = torch.arange(final_ts, init_ts - 1, -1) if STEP == -1 else torch.flip(torch.linspace(init_ts, final_ts, STEP).int(), dims=(0,))
-            idxs = torch.arange(final_ts+1, init_ts - 1, -1)
+            idxs = torch.arange(final_ts + 1, init_ts - 1, -1)
 
         print("time steps = ", idxs)
         for i in range(1, len(idxs) - 1):
@@ -134,7 +134,7 @@ if __name__ == "__main__":
             alg = TVL1SymOpticalFlow3D(saveDirTimeStep, config)
             u, p = alg.computeOnPyramid(Il, Ic, Ir, u, p)
 
-            np.savetxt(osp.join(patient_dir, f'u_{i}.txt'), u.cpu().detach().numpy().reshape((-1, 3)))
+            # np.savetxt(osp.join(patient_dir, f'u_{i}.txt'), u.cpu().detach().numpy().reshape((-1, 3)))
 
             # save the old mask
             save3D_torch_to_nifty(mask, saveDirTimeStep, f'mask_time{tc}.nii')

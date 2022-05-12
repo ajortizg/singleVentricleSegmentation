@@ -15,15 +15,13 @@ import plots
 import torch_utils
 
 
-def combine_voxels(ellipsoids):
+def combine_voxels(ellipsoids, noise, prob):
     NZ, NY, NX = ellipsoids[0].mask.shape
     img = np.zeros((NZ, NY, NX))
 
     e1 = ellipsoids[0]
     e2 = ellipsoids[1]
     e3 = ellipsoids[2]
-
-    prob = 0.1
 
     for z in range(NZ):
         for y in range(NY):
@@ -35,9 +33,10 @@ def combine_voxels(ellipsoids):
                 elif e1.mask[z, y, x]:
                     img[z, y, x] = e1.voxels[z, y, x]
 
-                # Salt and paper noise
-                if np.random.rand() < prob:
-                    img[z, y, x] = np.random.randint(0, 2)
+                # Add noise
+                if noise:
+                    if np.random.rand() < prob:
+                        img[z, y, x] = np.random.randint(0, 2)
     return img
 
 
@@ -109,8 +108,10 @@ if __name__ == "__main__":
     eB3 = create_ellipsoid(config, 'eB3', grid)
     eBs = [eB1, eB2, eB3]
 
-    imgA = combine_voxels(eAs)
-    imgB = combine_voxels(eBs)
+    ADD_NOISE = config.getboolean('PARAMETERS', 'ADD_NOISE')
+    NOISE_PROB = config.getfloat('PARAMETERS', 'NOISE_PROB')
+    imgA = combine_voxels(eAs, ADD_NOISE, NOISE_PROB)
+    imgB = combine_voxels(eBs, ADD_NOISE, NOISE_PROB)
 
     plots.save_slices(torch.from_numpy(imgA), 'A.png', saveDir)
     plots.save_slices(torch.from_numpy(imgB), 'B.png', saveDir)
@@ -133,7 +134,7 @@ if __name__ == "__main__":
             # ei = eA*(alpha[t]) + eB*(1.0-alpha[t])  # bwd (B -> A)
             es.append(ei)
 
-        img_t = combine_voxels(es)
+        img_t = combine_voxels(es, ADD_NOISE, NOISE_PROB)
         plots.save_slices(torch.from_numpy(img_t), f'step_{t}.png', save_steps_dir)
 
         mask = torch.from_numpy(es[-1].mask).float()

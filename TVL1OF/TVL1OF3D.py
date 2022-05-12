@@ -406,22 +406,22 @@ class TVL1OpticalFlow3D:
 
         # TODO
         # add mask to mri images
-        saveDirMRISlices = os.path.join(saveDir, "it0/I0Slices")
-        saveDirMaskSlices = os.path.join(saveDir, "mask_slices")
-        saveDirSumSlices = os.path.join(saveDir, "sum_slices")
-        if not os.path.exists(saveDirSumSlices):
-            os.makedirs(saveDirSumSlices)
-        for z in range(0, NZ):
-            fileNameMRISlice = os.path.join(saveDirMRISlices, f"colorimg_z{z}.png")
-            img_mri = cv2.imread(fileNameMRISlice)
-            fileNameMaskSlice = os.path.join(saveDirMaskSlices, f"colorimg_z{z}.png")
-            img_mask = cv2.imread(fileNameMaskSlice)
-            fileNameSumSlice = os.path.join(saveDirSumSlices, f"sumimg_z{z}.png")
-            img_sum = img_mri + img_mask
-            cv2.imwrite(fileNameSumSlice, img_sum)
-            fileNameSumSliceInvert = os.path.join(saveDirSumSlices, f"invertsumimg_z{z}.png")
-            img_sum_invert = 255. - img_sum
-            cv2.imwrite(fileNameSumSliceInvert, img_sum_invert)
+        # saveDirMRISlices = os.path.join(saveDir, "it0/I0Slices")
+        # saveDirMaskSlices = os.path.join(saveDir, "mask_slices")
+        # saveDirSumSlices = os.path.join(saveDir, "sum_slices")
+        # if not os.path.exists(saveDirSumSlices):
+        #     os.makedirs(saveDirSumSlices)
+        # for z in range(0, NZ):
+        #     fileNameMRISlice = os.path.join(saveDirMRISlices, f"colorimg_z{z}.png")
+        #     img_mri = cv2.imread(fileNameMRISlice)
+        #     fileNameMaskSlice = os.path.join(saveDirMaskSlices, f"colorimg_z{z}.png")
+        #     img_mask = cv2.imread(fileNameMaskSlice)
+        #     fileNameSumSlice = os.path.join(saveDirSumSlices, f"sumimg_z{z}.png")
+        #     img_sum = img_mri + img_mask
+        #     cv2.imwrite(fileNameSumSlice, img_sum)
+        #     fileNameSumSliceInvert = os.path.join(saveDirSumSlices, f"invertsumimg_z{z}.png")
+        #     img_sum_invert = 255. - img_sum
+        #     cv2.imwrite(fileNameSumSliceInvert, img_sum_invert)
 
         return mask_warped
 

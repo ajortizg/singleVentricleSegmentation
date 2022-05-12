@@ -373,7 +373,9 @@ class TVL1SymOpticalFlow3D:
         save_slices(mask_warped, f"mask_warped_time{tc}.png", saveDir)
         save_single_zslices(mask_warped, saveDir, "mask_warped_slices", 1., 2)
 
-        save_color_slices(Ic, mask, saveDir, 'color_mask')
+        # save_color_slices(Ic, mask, saveDir, 'color_mask')
+        save_img_mask_single_zslices(Ic, mask, saveDir, 'color_mask')
+        save_img_mask_slices(Ic, mask, 'img_mask.png', saveDir)
 
         maskName = f"masked_warped_time{tc}.pt"
         fileNameMask = os.path.join(saveDir, maskName)
