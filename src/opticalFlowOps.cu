@@ -208,6 +208,110 @@ __global__ void cuda_TVL1OF3D_proxDual_kernel(
 }
 
 
+
+
+
+
+
+
+
+template <typename T>
+__global__ void cuda_TVL1SymOF3D_proxPrimal_kernel(
+  const torch::PackedTensorAccessor32<T,4,torch::RestrictPtrTraits> primalVariable,
+  const torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> rho_const_l,
+  const torch::PackedTensorAccessor32<T,4,torch::RestrictPtrTraits> rho_vec_l,
+  const torch::PackedTensorAccessor32<T,3,torch::RestrictPtrTraits> rho_const_r,
+  const torch::PackedTensorAccessor32<T,4,torch::RestrictPtrTraits> rho_vec_r,
+  const int NZ, const int NY, const int NX,
+  const float hZ, const float hY, const float hX,
+  const float factor,
+  torch::PackedTensorAccessor32<T,4,torch::RestrictPtrTraits> output)
+{
+  int ix = blockDim.x * blockIdx.x + threadIdx.x;
+  int iy = blockDim.y * blockIdx.y + threadIdx.y;
+  int iz = blockDim.z * blockIdx.z + threadIdx.z;
+
+  if (ix < NX && iy < NY && iz < NZ)
+  {
+    const T a0 = factor * rho_const_l[iz][iy][ix];
+    const T b0 = factor * rho_const_r[iz][iy][ix];
+    T a[3];
+    T b[3];
+    T u[3];
+    T aSqr = 0.;
+    T bSqr = 0.;
+    T ab = 0.;
+    T au = 0.;
+    T bu = 0.;
+    for(int comp=0; comp<3;++comp){
+      a[comp] = factor * rho_vec_l[iz][iy][ix][comp];
+      b[comp] = factor * rho_vec_l[iz][iy][ix][comp];
+      u[comp] = primalVariable[iz][iy][ix][comp];
+      aSqr += a[comp] * a[comp];
+      bSqr += b[comp] * b[comp];
+      ab += a[comp] * b[comp];
+      au += a[comp] * u[comp];
+      bu += b[comp] * u[comp];
+    }
+    T rho_a = a0 + au;
+    T rho_b = b0 + bu;
+
+    T delta[3];
+    if ( (rho_a - aSqr - ab >= 0) && (rho_b - bSqr - ab >= 0) ){
+      for(int comp=0; comp<3;++comp){
+       delta[comp] = -a[comp] - b[comp];
+      }
+    }else if ( (rho_a - aSqr + ab >= 0) && (rho_b + bSqr - ab <= 0) ){
+      for(int comp=0; comp<3;++comp){
+       delta[comp] = -a[comp] + b[comp];
+      }
+    }else if ( (rho_a + aSqr - ab <= 0) && (rho_b - bSqr + ab >= 0) ){
+      for(int comp=0; comp<3;++comp){
+       delta[comp] = a[comp] - b[comp];
+      }
+    }else if ( (rho_a + aSqr + ab <= 0) && (rho_b + bSqr + ab <= 0) ){
+      for(int comp=0; comp<3;++comp){
+       delta[comp] = a[comp] + b[comp];
+      }
+    }else if ( (rho_a - aSqr -ab*(rho_b-ab)/bSqr >= 0) && (fabs(rho_b-ab)/bSqr <= 1) ){
+      T fac = (rho_b-ab)/bSqr;
+      for(int comp=0; comp<3;++comp){
+       delta[comp] = -a[comp] - fac * b[comp];
+      }
+    }else if ( (rho_a + aSqr -ab*(rho_b+ab)/bSqr <= 0) && (fabs(rho_b+ab)/bSqr <= 1) ){
+      T fac = (rho_b+ab)/bSqr;
+      for(int comp=0; comp<3;++comp){
+       delta[comp] = a[comp] - fac * b[comp];
+      }
+    }else if ( (rho_b - bSqr -ab*(rho_a-ab)/aSqr >= 0) && (fabs(rho_a-ab)/aSqr <= 1) ){
+      T fac = (rho_a-ab)/aSqr;
+      for(int comp=0; comp<3;++comp){
+       delta[comp] = -b[comp] - fac * a[comp];
+      }
+    }else if ( (rho_b + bSqr -ab*(rho_a+ab)/aSqr <= 0) && (fabs(rho_a+ab)/aSqr <= 1) ){
+      T fac = (rho_a+ab)/aSqr;
+      for(int comp=0; comp<3;++comp){
+       delta[comp] = b[comp] - fac * a[comp];
+      }
+    }else{
+      //TODO throw exception!
+      for(int comp=0; comp<3;++comp)
+      {
+       delta[comp] = 0.;
+      }
+    }
+
+    for(int comp=0; comp<3;++comp)
+    {
+      output[iz][iy][ix][comp] = primalVariable[iz][iy][ix][comp] + delta[comp];
+    }
+  }
+}
+
+
+
+
+
 //=========================================================
 // C++ kernel calls
 //=========================================================
@@ -415,3 +519,62 @@ torch::Tensor cuda_TVL1OF3D_proxDual( const torch::Tensor &dualVariable,
 
   return output;                             
 };
+
+
+
+
+
+torch::Tensor cuda_TVL1SymOF3D_proxPrimal( const torch::Tensor &primalVariable,
+                                      const float primalStepSize_tau, 
+                                      const float primalFctWeight_Matching,
+                                      const torch::Tensor &rho_const_l, const torch::Tensor &rho_vec_l,
+                                      const torch::Tensor &rho_const_r, const torch::Tensor &rho_vec_r,
+                                      const MeshInfo3D &meshInfo)
+{
+  TORCH_CHECK(primalVariable.dim() == 4, "Expected 4 tensor");
+
+  const int NX = meshInfo.getNX();
+  const int LX = meshInfo.getLX();
+  const float hX = meshInfo.gethX();
+
+  const int NY = meshInfo.getNY();
+  const int LY = meshInfo.getLY();
+  const float hY = meshInfo.gethY();
+
+  const int NZ = meshInfo.getNZ();
+  const int LZ = meshInfo.getLZ();
+  const float hZ = meshInfo.gethZ();
+
+  const float factor = primalStepSize_tau * primalFctWeight_Matching;
+
+  auto output = torch::zeros({NZ,NY,NX,3}, primalVariable.options());
+
+  const dim3 blockSize(16, 16, 3); 
+  const dim3 numBlocks((NX + blockSize.x - 1) / blockSize.x, (NY + blockSize.y - 1) / blockSize.y, (NZ + blockSize.z - 1) / blockSize.z );
+
+#ifdef CUDA_TIMING
+  CudaTimer cut;
+  cut.start();
+#endif
+
+  AT_DISPATCH_FLOATING_TYPES(primalVariable.type(), "TVL1SymOF3D_proxPrimal", ([&]{
+    cuda_TVL1SymOF3D_proxPrimal_kernel<scalar_t><<<numBlocks, blockSize>>>(
+      primalVariable.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>(),
+      rho_const_l.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>(),
+      rho_vec_l.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>(),
+      rho_const_r.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>(),
+      rho_vec_r.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>(),
+      NZ, NY, NX, 
+      hZ, hY, hX,
+      factor,
+      output.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>());
+  }));
+  cudaSafeCall(cudaGetLastError());
+
+#ifdef CUDA_TIMING
+  cudaDeviceSynchronize();
+  std::cout << "forward time " << cut.elapsed() << std::endl;
+#endif
+
+  return output;
+}

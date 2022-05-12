@@ -43,6 +43,14 @@ torch::Tensor cuda_TVL1OF3D_proxDual( const torch::Tensor &dualVariable,
                                     const MeshInfo3D &meshInfo);
 
 
+torch::Tensor cuda_TVL1SymOF3D_proxPrimal( const torch::Tensor &primalVariable,
+                                      const float primalStepSize_tau, 
+                                      const float primalFctWeight_Matching,
+                                      const torch::Tensor &rho_const_l, const torch::Tensor &rho_vec_l,
+                                      const torch::Tensor &rho_const_r, const torch::Tensor &rho_vec_r,
+                                      const MeshInfo3D &meshInfo);
+
+
 
 //=======================================
 // C++ interface
@@ -104,6 +112,18 @@ torch::Tensor TVL1OF3D_proxDual( const torch::Tensor &dualVariable,
 
  CHECK_INPUT(dualVariable);    
  return cuda_TVL1OF3D_proxDual(dualVariable,dualStepSize_sigma,dualFctWeight_TV,meshInfo);                                
+};
+
+
+torch::Tensor TVL1SymOF3D_proxPrimal( const torch::Tensor &primalVariable,
+                                      const float primalStepSize_tau, 
+                                      const float primalFctWeight_Matching,
+                                      const torch::Tensor &rho_const_l, const torch::Tensor &rho_vec_l,
+                                      const torch::Tensor &rho_const_r, const torch::Tensor &rho_vec_r,
+                                      const MeshInfo3D &meshInfo){
+
+  CHECK_INPUT(primalVariable);     
+  return cuda_TVL1SymOF3D_proxPrimal( primalVariable, primalStepSize_tau, primalFctWeight_Matching, rho_const_l, rho_vec_l, rho_const_r, rho_vec_r, meshInfo);                          
 };
 
 
