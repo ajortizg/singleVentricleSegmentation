@@ -59,15 +59,15 @@ if __name__ == "__main__":
 
     ds = SingleVentricleDataset(config, load_flow=False)
 
-    PATIENT_NAME = config.get('DATA', 'PATIENT_NAME')
-    idx, found = ds.index_for_patient(PATIENT_NAME)
-    if not found:
-        print(PATIENT_NAME + " not found!")
-        sys.exit()
+    # PATIENT_NAME = config.get('DATA', 'PATIENT_NAME')
+    # idx, found = ds.index_for_patient(PATIENT_NAME)
+    # if not found:
+    #     print(PATIENT_NAME + " not found!")
+    #     sys.exit()
     STEP = config.getint('PARAMETERS', 'step')
 
-    # for idx in range(len(ds)):
-    for _ in range(1):
+    for idx in range(len(ds)):
+        # for _ in range(1):
         (pname, data, mask_systole, mask_diastole, systole_time, diastole_time, _, _) = ds[idx]
         data = torch_utils.normalize(data.to(DEVICE))
         NZ, NY, NX, NT = data.shape

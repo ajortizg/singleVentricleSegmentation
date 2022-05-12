@@ -4,6 +4,7 @@ import sys
 import os
 from tqdm import trange
 import configparser
+from enum import Enum
 # import nibabel as nib
 import torch
 import pandas
@@ -15,9 +16,17 @@ import plots
 import torch_utils
 
 
-def combine_voxels(ellipsoids, noise, prob):
+class NoiseType(Enum):
+    SALT_AND_PEPPER = 1
+    GAUSSIAN = 2
+    UNKNOWN = 0
+
+
+def combine_voxels(ellipsoids, add_noise, sigma):
     NZ, NY, NX = ellipsoids[0].mask.shape
     img = np.zeros((NZ, NY, NX))
+    mu = 0
+    noise = np.random.normal(mu, sigma, size=img.shape) if add_noise else None
 
     e1 = ellipsoids[0]
     e2 = ellipsoids[1]
@@ -34,9 +43,12 @@ def combine_voxels(ellipsoids, noise, prob):
                     img[z, y, x] = e1.voxels[z, y, x]
 
                 # Add noise
-                if noise:
-                    if np.random.rand() < prob:
-                        img[z, y, x] = np.random.randint(0, 2)
+                if add_noise:
+                    img[z, y, x] = img[z, y, x] + noise[z, y, x] 
+                    if img[z, y, x] > 1:
+                        img[z, y, x] = 1
+                    if img[z, y, x] < 0:
+                        img[z, y, x] = 0
     return img
 
 
@@ -109,9 +121,10 @@ if __name__ == "__main__":
     eBs = [eB1, eB2, eB3]
 
     ADD_NOISE = config.getboolean('PARAMETERS', 'ADD_NOISE')
-    NOISE_PROB = config.getfloat('PARAMETERS', 'NOISE_PROB')
-    imgA = combine_voxels(eAs, ADD_NOISE, NOISE_PROB)
-    imgB = combine_voxels(eBs, ADD_NOISE, NOISE_PROB)
+    SIGMA = config.getfloat('PARAMETERS', 'SIGMA')
+
+    imgA = combine_voxels(eAs, ADD_NOISE, SIGMA)
+    imgB = combine_voxels(eBs, ADD_NOISE, SIGMA)
 
     plots.save_slices(torch.from_numpy(imgA), 'A.png', saveDir)
     plots.save_slices(torch.from_numpy(imgB), 'B.png', saveDir)
@@ -134,7 +147,7 @@ if __name__ == "__main__":
             # ei = eA*(alpha[t]) + eB*(1.0-alpha[t])  # bwd (B -> A)
             es.append(ei)
 
-        img_t = combine_voxels(es, ADD_NOISE, NOISE_PROB)
+        img_t = combine_voxels(es, ADD_NOISE, SIGMA)
         plots.save_slices(torch.from_numpy(img_t), f'step_{t}.png', save_steps_dir)
 
         mask = torch.from_numpy(es[-1].mask).float()
