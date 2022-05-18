@@ -56,8 +56,6 @@ writer = csv.writer(csv_file)
 mean_diff = 0
 pbar = tqdm(total=len(train_ds))
 for (pname, vol, mask_syst, mask_diast, tsyst, tdias, ff, bf) in train_ds:
-    # if pname != PATIENT_NAME:
-    #     continue
     # (pname, vol, mask_syst, mask_diast, tsyst, tdias, ff, bf) = train_ds[idx]
     NZ, NY, NX, NT = vol.shape
     vol = torch_utils.normalize(vol)
