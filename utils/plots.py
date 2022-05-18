@@ -14,6 +14,7 @@ import numpy as np
 import math
 import time
 from termcolor import colored
+from PIL import Image
 
 # scipy
 # from mpl_toolkits.mplot3d.art3d import Poly3DCollection

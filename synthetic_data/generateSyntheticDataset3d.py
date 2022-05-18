@@ -42,7 +42,6 @@ def combine_voxels(ellipsoids, add_noise, sigma):
                 elif e1.mask[z, y, x]:
                     img[z, y, x] = e1.voxels[z, y, x]
 
-                # Add noise
                 if add_noise:
                     img[z, y, x] = img[z, y, x] + noise[z, y, x] 
                     if img[z, y, x] > 1:

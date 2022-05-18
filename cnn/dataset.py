@@ -4,6 +4,7 @@ from glob import glob
 import nibabel as nib
 import numpy as np
 import os
+import cv2
 import pandas
 import torch
 
@@ -61,7 +62,12 @@ class SingleVentricleDataset(Dataset):
 
     def load_mask(self, patient_name, ending):
         mask = nib.load(osp.sep.join([self.masks_root, patient_name, patient_name + ending]))
-        return np.swapaxes(mask.get_fdata(), 0, 2)
+        mask = np.swapaxes(mask.get_fdata(), 0, 2)
+        # TODO! Improve this to avoid flip by slices
+        NZ, _, _ = mask.shape
+        for z in range(NZ):
+            mask[z, :, :] = np.flip(mask[z, :, :], 0)
+        return mask
 
     def index_for_patient(self, patient_name):
         found = False
