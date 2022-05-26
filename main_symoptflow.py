@@ -38,6 +38,13 @@ if __name__ == "__main__":
         DEVICE = 'cuda'
         CUDA_DEVICE = config.getint('DEVICE', 'cuda_device')
         torch.cuda.set_device(CUDA_DEVICE)
+
+        # test
+        device_id = torch.cuda.device_count()
+        device_name = torch.cuda.get_device_name(range(device_id))
+        print("CUDA_DEVICE = ", CUDA_DEVICE)
+        print("device_id = ", device_id)
+        print("device_name = ", device_name)
     else:
         DEVICE = 'cpu'
 
@@ -123,9 +130,15 @@ if __name__ == "__main__":
             tl = idxs[i - 1].item()
             tc = idxs[i].item()
             tr = idxs[i + 1].item()
-            Il = data[:, :, :, tl]
-            Ic = data[:, :, :, tc]
-            Ir = data[:, :, :, tr]
+            Il = Ic = Ir = None
+            try:
+                Il = data[:, :, :, tl]
+                Ic = data[:, :, :, tc]
+                Ir = data[:, :, :, tr]
+            except IndexError as e:
+                print(e)
+                continue
+
             print("iteration = ", i)
             print(f'{tl}<-{tc}->{tr}')
             saveDirTimeStep = plots.createSubDirectory(patient_dir, f'time{tc}')

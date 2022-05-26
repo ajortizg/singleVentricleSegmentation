@@ -147,7 +147,7 @@ def save_slices(image3D, fileName, saveDir, max_gray_value=1):
         numCols += 1
     numRows = math.ceil(numZSlices / numCols)
 
-    fig, axs = plt.subplots(numRows, numCols, constrained_layout=True, figsize=(16., 9.), dpi=4)
+    fig, axs = plt.subplots(numRows, numCols, constrained_layout=True, figsize=(18, 10), dpi=4)
     #fig.canvas.manager.set_window_title('4D Nifti Image')
     #fig.suptitle('4D_Nifti file: {} \n with {} slices in z-direction'.format(os.path.basename(fileName),numZSlices), fontsize=16)
     fig.suptitle('file: {}'.format(os.path.basename(fileName)), fontsize=16)

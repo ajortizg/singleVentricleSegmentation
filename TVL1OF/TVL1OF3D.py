@@ -16,6 +16,7 @@ sys.path.append("../utils")
 from utils.plots import *
 # from utils.config import *
 from utils.flow_viz import *
+from utils.median_pool import *
 
 # sys.path.append("../pythonOps/")
 # from pythonOps.mesh import *
@@ -70,6 +71,10 @@ class TVL1OpticalFlow3D:
         self.tau = config.getfloat('PARAMETERS', 'tau')
         self.theta = config.getfloat('PARAMETERS', 'theta')
         self.gamma = config.getfloat('PARAMETERS', 'gamma')
+
+        self.USE_MEDIAN_FILTER = config.getboolean('PARAMETERS', 'USE_MEDIAN_FILTER')
+        self.KERNEL_MF = config.getint('PARAMETERS', 'KERNEL_MF')
+
         # anisotropic differential op
         self.useAnisotropicDifferentialOp = config.getboolean("PARAMETERS", "useAnisotropicDifferentialOp")
         self.anisotropicDifferentialOp_alpha, self.anisotropicDifferentialOp_beta = None, None
@@ -205,11 +210,6 @@ class TVL1OpticalFlow3D:
 
             # TODO prolongation factor for p?
 
-        # TODO! median filter pag 12. paper
-        # u_np = us[0].cpu().detach().numpy()
-        # umf = ndimage.median_filter(u_np, size=(3, 3, 3, 1))
-        # us[0] = torch.from_numpy(umf).to(self.DEVICE)
-
         return us[0], ps[0]
 
     def computeOnSingleStep(self, s, I0, I1, u, p, meshInfo):
@@ -328,7 +328,14 @@ class TVL1OpticalFlow3D:
 
         plotOpticalFlow3D(u.cpu().detach().numpy(), "u", saveDirStep, step)
 
-        # u_np = u.cpu().detach().numpy()
+        # Median filter pag 12. paper
+        if self.USE_MEDIAN_FILTER:
+            ks = self.KERNEL_MF
+            uf = ndimage.median_filter(u.cpu().detach().numpy(), size=(ks, ks, ks, 1))
+            plotOpticalFlow3D(uf, "uf", saveDirStep, step)
+            flowName = f"flow_m_it{step}.pt"
+            fileNameFlow = os.path.join(saveDirStep, flowName)
+            torch.save(torch.from_numpy(uf).to(self.DEVICE), fileNameFlow)
 
         # umf_x = ndimage.median_filter(u_np[:, :, :, 0], size=3)
         # umf_y = ndimage.median_filter(u_np[:, :, :, 1], size=3)

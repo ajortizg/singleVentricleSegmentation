@@ -4,6 +4,7 @@ import os
 import configparser
 import math
 import numpy as np
+from scipy import ndimage
 import nibabel as nib
 import torch
 import time
@@ -60,6 +61,10 @@ class TVL1SymOpticalFlow3D:
         self.tau = config.getfloat('PARAMETERS', 'tau')
         self.theta = config.getfloat('PARAMETERS', 'theta')
         self.gamma = config.getfloat('PARAMETERS', 'gamma')
+
+        self.USE_MEDIAN_FILTER = config.getboolean('PARAMETERS', 'USE_MEDIAN_FILTER')
+        self.KERNEL_MF = config.getint('PARAMETERS', 'KERNEL_MF')
+
         # anisotropic differential op
         self.useAnisotropicDifferentialOp = config.getboolean("PARAMETERS", "useAnisotropicDifferentialOp")
         self.anisotropicDifferentialOp_alpha, self.anisotropicDifferentialOp_beta = None, None
@@ -308,7 +313,6 @@ class TVL1SymOpticalFlow3D:
         return u, p
 
     def saveSingleStepToFile(self, step, Il, Ic, Ir, u, p, meshInfo):
-
         saveDirStep = os.path.sep.join([self.saveDir, f"it{step}"])
         if not os.path.exists(saveDirStep):
             os.makedirs(saveDirStep)
@@ -345,6 +349,15 @@ class TVL1SymOpticalFlow3D:
         flowName = f"flow_it{step}.pt"
         fileNameFlow = os.path.join(saveDirStep, flowName)
         torch.save(u, fileNameFlow)
+
+        # Median filter pag 12. paper
+        if self.USE_MEDIAN_FILTER:
+            ks = self.KERNEL_MF
+            uf = ndimage.median_filter(u.cpu().detach().numpy(), size=(ks, ks, ks, 1))
+            plotOpticalFlow3D(uf, "uf", saveDirStep, step)
+            flowName = f"flow_m_it{step}.pt"
+            fileNameFlow = os.path.join(saveDirStep, flowName)
+            torch.save(torch.from_numpy(uf).to(self.DEVICE), fileNameFlow)
 
         #save dual variable
         dualName = f"dual_it{step}.pt"

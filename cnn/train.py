@@ -13,9 +13,10 @@ from loss import L2LossReduced
 import matplotlib.pyplot as plt
 from warp import Warp
 
-sys.path.append(osp.abspath(osp.join(osp.dirname(__file__), '../utils')))
-import plots
-import torch_utils
+ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
+sys.path.append(ROOT_DIR)
+from utils import plots
+from utils import torch_utils
 
 
 print("\n\n")
@@ -30,11 +31,15 @@ print("\n\n")
 config = configparser.ConfigParser()
 config.read('parser/configCNN.ini')
 cuda_availabe = config.get('DEVICE', 'CUDA_AVAILABLE')
+cuda_availabe = config.get('DEVICE', 'CUDA_AVAILABLE')
 if cuda_availabe and torch.cuda.is_available():
     DEVICE = 'cuda'
-    torch.cuda.set_device(3)
+    CUDA_DEVICE = config.getint('DEVICE', 'CUDA_DEVICE')
+    torch.cuda.set_device(CUDA_DEVICE)
 else:
     DEVICE = 'cpu'
+
+
 BATCH_SIZE = config.getint('PARAMETERS', 'BATCH_SIZE')
 LR = config.getfloat('PARAMETERS', 'LR')
 NUM_EPOCHS = config.getint('PARAMETERS', 'NUM_EPOCHS')
@@ -112,11 +117,9 @@ for e in range(NUM_EPOCHS):
         if init_ts == tsyst:
             m0 = mask_syst.unsqueeze(dim=0).unsqueeze(dim=0).to(DEVICE)
             mk = mask_diast.unsqueeze(dim=0).unsqueeze(dim=0).to(DEVICE)
-            # print('m0 = mask_systole', '\tmk = mask_diastole')
         else:
             m0 = mask_diast.unsqueeze(dim=0).unsqueeze(dim=0).to(DEVICE)
             mk = mask_syst.unsqueeze(dim=0).unsqueeze(dim=0).to(DEVICE)
-            # print('m0 = mask_diastole', '\tmk = mask_systole')
 
         patient_dir = plots.createSubDirectory(save_dir, pname)
         save_m0tt = plots.createSubDirectory(patient_dir, 'm0tt')
@@ -129,8 +132,6 @@ for e in range(NUM_EPOCHS):
         # mtts = [mk]
         mt = m0.clone()
         mtt = mk.clone()
-        # mts_tensor = torch.zeros((steps + 1,) + m0.shape)
-        # mts_tensor[0, :, :, :, :, :] = m0
         bf.reverse()
         for t in range(steps):
             # Forward mask propagation m0 -> mk

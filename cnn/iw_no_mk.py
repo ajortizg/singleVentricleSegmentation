@@ -4,17 +4,15 @@ import sys
 from dataset import SingleVentricleDataset
 from tqdm import tqdm
 from warp import Warp
-import time
 import numpy as np
 import os.path as osp
-import matplotlib.pyplot as plt
-import torch.functional as F
-from torch import linalg as la
+import torch.nn.functional as F
 import csv
 
-sys.path.append(osp.abspath(osp.join(osp.dirname(__file__), '../utils')))
-import plots
-import torch_utils
+ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
+sys.path.append(ROOT_DIR)
+from utils import plots
+from utils import torch_utils
 
 
 print("\n\n")
@@ -45,11 +43,11 @@ conifg_output = osp.join(save_dir, 'config.ini')
 with open(conifg_output, 'w') as config_file:
     config.write(config_file)
 
-# PATIENT_NAME = config.get('DATA', 'PATIENT_NAME')
-# idx, found = train_ds.index_for_patient(PATIENT_NAME)
-# if not found:
-#     print(PATIENT_NAME + " not found!")
-#     sys.exit()
+PATIENT_NAME = config.get('DATA', 'PATIENT_NAME')
+idx, found = train_ds.index_for_patient(PATIENT_NAME)
+if not found:
+    print(PATIENT_NAME + " not found!")
+    sys.exit()
 
 csv_file = open(osp.join(save_dir, 'diff.csv'), 'w')
 writer = csv.writer(csv_file)
@@ -57,6 +55,9 @@ mean_diff = 0
 pbar = tqdm(total=len(train_ds))
 for (pname, vol, mask_syst, mask_diast, tsyst, tdias, ff, bf) in train_ds:
     # (pname, vol, mask_syst, mask_diast, tsyst, tdias, ff, bf) = train_ds[idx]
+    if pname != PATIENT_NAME:
+        continue
+
     NZ, NY, NX, NT = vol.shape
     vol = torch_utils.normalize(vol)
     # grid = torch_utils.create_grid(NZ, NY, NX).to(DEVICE)
@@ -114,10 +115,12 @@ for (pname, vol, mask_syst, mask_diast, tsyst, tdias, ff, bf) in train_ds:
         plots.save_img_mask_slices(data_t, mi, f'img_mask_0_{i}', patient_dir)
 
         diff = torch.abs(mts[0] - mi)
-        ndiff = diff.norm().item()
-        row.append('{:.2f}'.format(ndiff))
+        mse = F.mse_loss(mi, mts[0])
+        rmse = torch.sqrt(mse)
+        # ndiff = diff.norm().item()
+        row.append('{:.4f}'.format(rmse))
         plots.save_colorbar_slices(diff, f'Diff_m0_mt0_{i}.png', patient_dir)
-    
+
     writer.writerow(row)
     pbar.update(1)
 

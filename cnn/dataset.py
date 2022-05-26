@@ -4,7 +4,6 @@ from glob import glob
 import nibabel as nib
 import numpy as np
 import os
-import cv2
 import pandas
 import torch
 
@@ -24,10 +23,13 @@ class SingleVentricleDataset(Dataset):
         # Optical flow parameters
         self.fwdof_dir = None
         self.bwdof_dir = None
-        self.flow_name = 'flow_it0.pt'
-        self.flow_level = 'it0'
+        self.flow_name = None
+        self.flow_level = None
 
         if self.load_flow:
+            use_filtered_flow = config.getboolean('PARAMETERS', 'USE_MEDIAN_FILTERED_FLOW')
+            self.flow_name = 'flow_m_it0.pt' if use_filtered_flow else 'flow_it0.pt'
+            self.flow_level = 'it0'
             self.fwdof_dir = self.config.get('DATA', 'FWD_OPTFLOW_RESULTS_DIR')
             self.bwdof_dir = self.config.get('DATA', 'BWD_OPTFLOW_RESULTS_DIR')
 
@@ -54,7 +56,7 @@ class SingleVentricleDataset(Dataset):
 
         ff, bf = None, None
         if self.load_flow:
-            ff, bf = self.optflow_results_for_patient(patient_name)
+            ff, bf = self.optflow_for_patient(patient_name)
         return (patient_name, vol_zyxt, mask_syst_zyx, mask_diast_zyx, tsyst, tdias, ff, bf)
 
     def get_patient_name(self, idx):
@@ -63,7 +65,7 @@ class SingleVentricleDataset(Dataset):
     def load_mask(self, patient_name, ending):
         mask = nib.load(osp.sep.join([self.masks_root, patient_name, patient_name + ending]))
         mask = np.swapaxes(mask.get_fdata(), 0, 2)
-        # TODO! Improve this to avoid flip by slices
+        # TODO! Improve this to avoid for loop
         NZ, _, _ = mask.shape
         for z in range(NZ):
             mask[z, :, :] = np.flip(mask[z, :, :], 0)
@@ -85,11 +87,11 @@ class SingleVentricleDataset(Dataset):
         else:
             return (None, None, None, None, None, None, None, None)
 
-    def optflow_results(self, idx):
+    def optflow(self, idx):
         patient_name = self.get_patient_name(idx)
-        return self.optflow_results_for_patient(patient_name)
+        return self.optflow_for_patient(patient_name)
 
-    def optflow_results_for_patient(self, patient):
+    def optflow_for_patient(self, patient):
         fwd_flows = []
         bwd_flows = []
         fwd_patient_dir = osp.join(self.fwdof_dir, patient)
