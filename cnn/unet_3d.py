@@ -71,11 +71,13 @@ class DoubleConv3D(nn.Module):
         super().__init__()
         layers = [
             nn.Conv3d(in_ch, out_ch, kernel_size=kernel_size, padding=padding),
-            nn.BatchNorm3d(out_ch),
+            # nn.BatchNorm3d(out_ch),
+            nn.InstanceNorm3d(out_ch),
             nn.ReLU(inplace=True),
             nn.Conv3d(out_ch, out_ch, kernel_size=kernel_size,
                       padding=padding),
-            nn.BatchNorm3d(out_ch),
+            # nn.BatchNorm3d(out_ch),
+            nn.InstanceNorm3d(out_ch),
             nn.ReLU(inplace=True),
         ]
         if dropout:
@@ -130,8 +132,7 @@ class Up3D(nn.Module):
                    [diff_w // 2, diff_w - diff_w // 2,
                     diff_h // 2, diff_h - diff_h // 2,
                     diff_d // 2, diff_d - diff_d // 2]
-                   )  # TODO what about z size
-
+                   )
         # Concatenate along the channels axis
         x = torch.cat([x2, x1], dim=1)
         return self.conv(x)

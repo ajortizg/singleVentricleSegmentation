@@ -1,18 +1,11 @@
-import sys
-import nibabel as nib
-import numpy as np
 import os.path as osp
-import matplotlib.pyplot as plt
 import os
 from enum import Enum
-from scipy import ndimage
 from TVL1OF.TVL1OF3D import *
-from cnn.dataset import SingleVentricleDataset
-import csv
-utils_lib_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'utils'))
-sys.path.append(utils_lib_path)
-import plots
-import torch_utils
+from cnn.dataset import SingleVentricleDataset, DatasetMode
+from utils import plots
+from utils import torch_utils
+import cnn.transforms as T
 
 
 class OpticalFlowMode(Enum):
@@ -57,7 +50,7 @@ if __name__ == "__main__":
     with open(conifg_output, 'w') as configfile:
         config.write(configfile)
 
-    ds = SingleVentricleDataset(config, load_flow=False)
+    ds = SingleVentricleDataset(config, DatasetMode.FULL, [T.Normalize()], load_flow=False)
 
     # PATIENT_NAME = config.get('DATA', 'PATIENT_NAME')
     # idx, found = ds.index_for_patient(PATIENT_NAME)
@@ -65,24 +58,19 @@ if __name__ == "__main__":
     #     print(PATIENT_NAME + " not found!")
     #     sys.exit()
     STEP = config.getint('PARAMETERS', 'step')
-
-    for idx in range(len(ds)):
+    N = len(ds)
+    pbar = tqdm(total=N)
+    for idx in range(N):
         # for _ in range(1):
-        (pname, data, mask_systole, mask_diastole, systole_time, diastole_time, _, _) = ds[idx]
+        (pname, data, _, _, init_ts, final_ts, _, _) = ds[idx]
         data = torch_utils.normalize(data.to(DEVICE))
         NZ, NY, NX, NT = data.shape
-        # grid = torch_utils.create_grid(NZ, NY, NX).numpy()
 
-        print("=======================================")
-        print("load data for patient: ", pname)
-        print(f"   * dimensions: (Z,Y,X,T) = {data.shape}")
-        print("   * systole at time:  ", systole_time)
-        print("   * diastole at time: ", diastole_time)
-        num_ts = abs(diastole_time - systole_time)
-        init_ts = min(diastole_time, systole_time)
-        final_ts = max(diastole_time, systole_time)
-        print("=======================================")
-        print("\n")
+        # print("=======================================")
+        # print("load data for patient: ", pname)
+        # print(f"   * dimensions: (Z,Y,X,T) = {data.shape}")
+        # print("=======================================")
+        # print("\n")
 
         patient_dir = osp.join(save_dir, pname)
         if not os.path.exists(patient_dir):
@@ -92,29 +80,14 @@ if __name__ == "__main__":
         u = torch.zeros([NZ, NY, NX, 3]).float().to(DEVICE)
         p = torch.zeros([NZ, NY, NX, 3, 3]).float().to(DEVICE)
 
-        mask = None
-        m0 = mk = None
-        from_t, to_t, inc_t = 0, 0, 0
-        if init_ts == systole_time:
-            m0 = mask_systole.to(DEVICE)
-            mk = mask_diastole.to(DEVICE)
-            # print('m0 = mask_systole', '\tmk = mask_diastole')
-        else:
-            m0 = mask_diastole.to(DEVICE)
-            mk = mask_systole.to(DEVICE)
-            # print('m0 = mask_diastole', '\tmk = mask_systole')
-
-        save_slices(m0, 'm0.png', patient_dir)
-        save_slices(mk, 'mk.png', patient_dir)
-
         idxs = None
         if mode == OpticalFlowMode.FORWARD:
-            print("do forward compuation of optical flow")
-            mask = m0.clone()
+            # print("do forward compuation of optical flow")
+            # mask = m0.to(DEVICE)
             idxs = torch.arange(init_ts, final_ts + 1, 1) if STEP == -1 else torch.linspace(init_ts, final_ts, STEP).int()
         elif mode == OpticalFlowMode.BACKWARD:
-            print("do backward compuation of optical flow")
-            mask = mk.clone()
+            # print("do backward compuation of optical flow")
+            # mask = mk.to(DEVICE)
             idxs = torch.arange(final_ts, init_ts - 1, -1) if STEP == -1 else torch.flip(torch.linspace(init_ts, final_ts, STEP).int(), dims=(0,))
 
         for i in range(len(idxs) - 1):
@@ -123,19 +96,20 @@ if __name__ == "__main__":
             t1 = idxs[i].item()
             I0 = data[:, :, :, t0]
             I1 = data[:, :, :, t1]
-            print(f'{t1}->{t0}')
+            # print(f'{t1}->{t0}')
+            pbar.set_postfix_str(f'P: {pname}, M: {mode_str}, ({t1}->{t0})')
             saveDirTimeStep = plots.createSubDirectory(patient_dir, f'time{t1}')
 
             # Compute the optical flow
             alg = TVL1OpticalFlow3D(saveDirTimeStep, config)
             u, p = alg.computeOnPyramid(I0, I1, u, p)
 
-            # np.savetxt(osp.join(patient_dir, f'u_{i}.txt'), u.cpu().detach().numpy().reshape((-1, 3)))
-
             # save the old mask
-            save3D_torch_to_nifty(mask, saveDirTimeStep, f'mask_time{t1}.nii')
-            save_slices(mask, f'mask.png', saveDirTimeStep)
-            save_single_zslices(mask, saveDirTimeStep, 'mask_slices', 1., 2)
+            # save3D_torch_to_nifty(mask, saveDirTimeStep, f'mask_time{t1}.nii')
+            # save_slices(mask, f'mask.png', saveDirTimeStep)
+            # save_single_zslices(mask, saveDirTimeStep, 'mask_slices', 1., 2)
 
             # warp mask with the computed optical flow
-            mask = alg.warpMask(mask, u, I1, t0, saveDirTimeStep)
+            # mask = alg.warpMask(mask, u, I1, t0, saveDirTimeStep)
+
+        pbar.update(1)

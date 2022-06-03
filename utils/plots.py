@@ -185,7 +185,7 @@ def save_colorbar_slices(img3d, filename, save_dir, max_gray_value=1):
     plt.close('all')
 
 
-def save_img_mask_slices(img3d, mask3d, filename, save_dir, alpha=0.35, max_gray_value=1):
+def save_img_mask_slices(img3d, mask3d, filename, save_dir, th=0.5, alpha=0.35, color=[1, 1, 0], max_gray_value=1):
     numZSlices = img3d.shape[0]
     aspect_ratio = 16. / 9.
     numCols = int(numZSlices / aspect_ratio)
@@ -201,7 +201,7 @@ def save_img_mask_slices(img3d, mask3d, filename, save_dir, alpha=0.35, max_gray
         if z < numZSlices:
             img = cv2.cvtColor(img3d[z, :, :].cpu().detach().numpy(), cv2.COLOR_GRAY2BGR)
             mask = mask3d[z, :, :].cpu().detach().numpy()
-            img = merge_img_mask(img, mask, alpha)
+            img = merge_img_mask(img, mask, th, alpha, color)
             ax.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
             ax.set_title("layer {}".format(z))
             ax.axis('off')
@@ -212,7 +212,7 @@ def save_img_mask_slices(img3d, mask3d, filename, save_dir, alpha=0.35, max_gray
     plt.close('all')
 
 
-def save_img_mask_single_zslices(image3D, mask3D, saveDir, subdir, alpha=0.35, max_gray_value=1):
+def save_img_mask_single_zslices(image3D, mask3D, saveDir, subdir, th=0.5, alpha=0.35, color=[1, 1, 0], max_gray_value=1):
     """Apply the given mask to the image.
     """
     saveDirSlices = os.path.sep.join([saveDir, subdir])
@@ -225,16 +225,53 @@ def save_img_mask_single_zslices(image3D, mask3D, saveDir, subdir, alpha=0.35, m
         img = image3D[z, :, :].cpu().detach().numpy()
         mask = mask3D[z, :, :].cpu().detach().numpy()
         img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-        img = merge_img_mask(img, mask, alpha)
+        img = merge_img_mask(img, mask, th, alpha, color)
         imgNameColor = f"colorimg_z{z}.png"
         pathNameColor = os.path.join(saveDirSlices, imgNameColor)
         cv2.imwrite(pathNameColor, factor_gray_value * img)
 
 
-def merge_img_mask(img, mask, alpha=0.35, color=[1, 1, 0]):
+def merge_img_mask(img, mask, th=0.5, alpha=0.35, color=[1, 1, 0]):
     for c in range(3):
-        img[:, :, c] = np.where(mask > 0.1,
+        img[:, :, c] = np.where(mask > th,
                                 img[:, :, c] *
                                 (1 - alpha) + alpha * color[c],
                                 img[:, :, c])
     return img
+
+
+def erode_mask(mask3d: torch.Tensor, th=0.5):
+    mask3d = torch.where(mask3d > th, 1.0, 0.0)
+    NZ = mask3d.shape[0]
+    borders = np.zeros(mask3d.shape)
+    for z in range(NZ):
+        mask = mask3d[z, :, :].cpu().detach().numpy()
+        borders[z, :, :] = (mask - cv2.erode(mask, kernel=None, borderValue=0))
+    return torch.from_numpy(borders)
+
+
+def save_compare_masks(img3d, mask3d1, mask3d2, filename, save_dir, th=0.5, alpha=0.35, color1=[1, 1, 0], color2=[0, 1, 1], max_gray_value=1):
+    numZSlices = img3d.shape[0]
+    aspect_ratio = 16. / 9.
+    numCols = int(numZSlices / aspect_ratio)
+    if(numZSlices % numCols > 0):
+        numCols += 1
+    numRows = math.ceil(numZSlices / numCols)
+
+    fig, axs = plt.subplots(numRows, numCols, constrained_layout=True, figsize=(18, 10), dpi=4)
+    fig.suptitle('file: {}'.format(os.path.basename(filename)), fontsize=16)
+    for z, ax in enumerate(axs.flat):
+        if z < numZSlices:
+            img = cv2.cvtColor(img3d[z, :, :].cpu().detach().numpy(), cv2.COLOR_GRAY2BGR)
+            mask1 = mask3d1[z, :, :].cpu().detach().numpy()
+            mask2 = mask3d2[z, :, :].cpu().detach().numpy()
+            img = merge_img_mask(img, mask1, th, alpha, color1)
+            img = merge_img_mask(img, mask2, th, alpha, color2)
+            ax.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+            ax.set_title("layer {}".format(z))
+            ax.axis('off')
+        else:
+            ax.axis('off')
+    pathName = os.path.join(save_dir, filename)
+    plt.savefig(pathName, dpi=100)
+    plt.close('all')

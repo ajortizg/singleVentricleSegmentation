@@ -1,4 +1,30 @@
 import torch
+import torch.nn as nn
+
+
+def loss_func_complete(mts, mtts):
+    mse_loss = nn.MSELoss(reduction='sum')
+    # m0 = mts[0]
+    # m0tt = mtts[0]
+    # mk = mtts[-1]
+    # mkt = mts[-1]
+
+    # l1 = mse_loss(m0tt, m0)
+    # l2 = mse_loss(mkt, mk)
+    # l3 = 0
+    # N = len(mtts)
+    # for i in range(1, N - 1):
+    #     l3 += mse_loss(mts[i], mtts[i])
+    # l3 = l3 / (N - 2)
+    # total_loss = l1 + l2 + l3
+    # return (total_loss, l1, l2, l3)
+    l1 = torch.tensor([1.0])
+    N = len(mtts)
+    loss = 0
+    for i in range(N):
+        loss += mse_loss(mts[i], mtts[i])
+    loss = loss / N
+    return (loss, l1, l1, l1)
 
 
 class L2LossReduced(torch.autograd.Function):
