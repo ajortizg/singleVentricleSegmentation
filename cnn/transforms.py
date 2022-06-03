@@ -3,6 +3,7 @@ import torch
 import os.path as osp
 import sys
 from scipy.ndimage import affine_transform
+import elasticdeform as ed
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
@@ -104,9 +105,9 @@ class RandomRotate:
 
     def __call__(self, vol: torch.Tensor, ms: torch.Tensor, md: torch.Tensor):
         if np.random.rand() < self.p:
-            angx = np.random.uniform(self.range_x[0], self.range_x[1])
-            angy = np.random.uniform(self.range_y[0], self.range_y[1])
-            angz = np.random.uniform(self.range_z[0], self.range_z[1])
+            angx = np.random.uniform(self.range_x[0], self.range_x[1] + 1)
+            angy = np.random.uniform(self.range_y[0], self.range_y[1] + 1)
+            angz = np.random.uniform(self.range_z[0], self.range_z[1] + 1)
             NZ, NY, NX, NT = vol.shape
             CZ, CY, CX = NZ // 2, NY // 2, NX // 2
 
@@ -132,6 +133,23 @@ class RandomRotate:
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}()"
+
+
+class ElasticDeformation:
+    def __init__(self, p=0.5, sigma_range: tuple = (1, 4), points_range: tuple = (3, 9)):
+        self.p = p
+        self.sigma_range = sigma_range
+        self.points_range = points_range
+
+    def __call__(self, vol: torch.Tensor, ms: torch.Tensor, md: torch.Tensor):
+        if np.random.rand() < self.p:
+            sigma = np.random.uniform(self.sigma_range[0], self.sigma_range[1])
+            points = np.random.uniform(self.points_range[0], self.points_range[1])
+            [vol_d, ms_d, md_d] = (ed.deform_random_grid([vol.numpy(), ms.numpy(), md.numpy()], sigma=round(sigma),
+                                   points=round(points), mode='reflect', axis=[(1, 2), (1, 2), (1, 2)]))
+            return (torch.from_numpy(vol_d), torch.from_numpy(ms_d), torch.from_numpy(md_d))
+        else:
+            return (vol, ms, md)
 
 
 class Round:

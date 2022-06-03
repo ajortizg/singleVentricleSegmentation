@@ -3,12 +3,13 @@ from dataset import SingleVentricleDataset, DatasetMode
 import configparser
 from tqdm import tqdm
 import sys
+import transforms as T
 
 
 config = configparser.ConfigParser()
 config.read('parser/configCNN.ini')
 
-ds = SingleVentricleDataset(config, DatasetMode.FULL, load_flow=False)
+ds = SingleVentricleDataset(config, DatasetMode.FULL, [T.Normalize()], load_flow=False)
 pbar = tqdm(total=len(ds))
 sum = 0
 squared_sum = 0
