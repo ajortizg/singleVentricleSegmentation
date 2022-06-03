@@ -12,7 +12,7 @@ from utils import plots
 
 
 def save_patient_data(vol, ms, md, ts, td,
-                       save_dir_vol, save_dir_masks, patient_name):
+                      save_dir_vol, save_dir_masks, patient_name):
     patient_mask_dir = plots.createSubDirectory(save_dir_masks, patient_name)
     plots.save4D_torch_to_nifty(vol, save_dir_vol, patient_name + '.nii.gz')
     plots.save3D_torch_to_nifty(ms, patient_mask_dir, patient_name + '_Systole_Labelmap')
@@ -30,7 +30,8 @@ if __name__ == "__main__":
         T.RandomFlipZ(p=0.6),
         T.RandomFlipY(p=0.6),
         T.RandomFlipX(p=0.6),
-        T.RandomRotate(p=1.0, range_x=(-10, 10))])
+        T.RandomRotate(p=1.0, range_x=(-10, 10)),
+        T.ElasticDeformation(0.7)])
 
     ds = SingleVentricleDataset(config, DatasetMode.FULL, None, load_flow=True)
     save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'DA')
@@ -42,7 +43,7 @@ if __name__ == "__main__":
     with open(conifg_output, 'w') as configfile:
         config.write(configfile)
 
-    N = 10
+    N = 5
     df = pd.DataFrame(columns=['Name', 'Systole', 'Diastole'])
     pbar = tqdm(total=len(ds))
     for (patient_name, vol, *_) in ds:
@@ -60,7 +61,7 @@ if __name__ == "__main__":
             patiente_name_t = patient_name + f'_A_{i}'
             vol_t, ms_t, md_t = transf(vol, ms, md)
             df_patient = save_patient_data(vol_t, T.Round(th=0.5)(ms_t), T.Round(th=0.5)(md_t),
-                                            ts, td, save_dir_vol, save_dir_masks, patiente_name_t)
+                                           ts, td, save_dir_vol, save_dir_masks, patiente_name_t)
             df = pd.concat([df, df_patient], ignore_index=True)
 
         pbar.update(1)

@@ -151,6 +151,9 @@ class ElasticDeformation:
         else:
             return (vol, ms, md)
 
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}()"
+
 
 class Round:
     def __init__(self, th=0.5):

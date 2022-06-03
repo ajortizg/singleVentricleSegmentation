@@ -28,10 +28,6 @@ sum = 0
 squared_sum = 0
 for (pname, data, m0, mk, init_ts, final_ts, _, _) in ds:
     pbar.set_postfix_str(f'P: {pname}')
-
-    data, m0, mk = T.ElasticDeformation(1.0)(data, m0, mk)
-    data = T.Normalize()(data)
-
     u0 = data[:, :, :, init_ts]
     uk = data[:, :, :, final_ts]
 
