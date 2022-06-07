@@ -3,7 +3,9 @@ import torch
 import os.path as osp
 import sys
 from scipy.ndimage import affine_transform
+import torch.nn.functional as F
 import elasticdeform as ed
+import cv2
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
@@ -11,7 +13,7 @@ from utils import torch_utils
 from utils.transforms import rotx, roty, rotz
 
 
-class Compose:
+class ComposeTernary:
     def __init__(self, transforms):
         self.transforms = transforms
 
@@ -31,20 +33,161 @@ class Compose:
         return format_string
 
 
+class ComposeUnary:
+    def __init__(self, transforms):
+        self.transforms = transforms
+
+    def __call__(self, vol: torch.Tensor):
+        for t in self.transforms:
+            vol = t(vol)
+        return vol
+
+    def __repr__(self) -> str:
+        format_string = self.__class__.__name__ + "("
+        for t in self.transforms:
+            format_string += "\n"
+            format_string += f"    {t}"
+        format_string += "\n)"
+        return format_string
+
+
 class Normalize:
     def __init__(self, mean=None, std=None):
         self.mean = mean
         self.std = std
 
-    def __call__(self, vol: torch.Tensor) -> torch.Tensor:
-        vol = torch_utils.normalize(vol)  # normalize between 0 and 1
+    def __call__(self, x: torch.Tensor):
+        x = torch_utils.normalize(x)  # normalize between 0 and 1
         if self.mean is not None and self.std is not None:
-            return (vol - self.mean) / self.std
+            return (x - self.mean) / self.std
         else:
-            return vol
+            return x
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}()"
+
+
+class PadTime:
+    def __init__(self, maxt=40):
+        self.maxt = maxt
+
+    def __call__(self, vol: torch.Tensor):
+        *_, NT = vol.shape
+        diff_t = self.maxt - NT
+        return F.pad(vol, [0, diff_t,
+                           0, 0,
+                           0, 0,
+                           0, 0])
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}()"
+
+
+class Pad:
+    def __init__(self, max_z, max_y, max_x, max_t):
+        self.max_z = max_z
+        self.max_y = max_y
+        self.max_x = max_x
+        self.max_t = max_t
+
+    def __call__(self, x: list) -> list:
+        BS = len(x)
+        x_t = []
+        for b in range(BS):
+            # Masks
+            if len(x[b].shape) == 3:
+                NZ, NY, NX = x[b].shape
+                diff_z = self.max_z - NZ
+                diff_y = self.max_y - NY
+                diff_x = self.max_x - NX
+                y = F.pad(x[b],
+                          [diff_x // 2, diff_x - diff_x // 2,
+                          diff_y // 2, diff_y - diff_y // 2,
+                          diff_z // 2, diff_z - diff_z // 2])
+                x_t.append(y)
+            # volumes
+            elif len(x[b].shape) == 4:
+                NZ, NY, NX, NT = x[b].shape
+                diff_z = self.max_z - NZ
+                diff_y = self.max_y - NY
+                diff_x = self.max_x - NX
+                diff_t = self.max_t - NT
+                y = F.pad(x[b],
+                          [0, diff_t,
+                           diff_x // 2, diff_x - diff_x // 2,
+                           diff_y // 2, diff_y - diff_y // 2,
+                           diff_z // 2, diff_z - diff_z // 2])
+                x_t.append(y)
+            # Optical flow
+            elif len(x[b].shape) == 5:
+                NT, NZ, NY, NX, C3 = x[b].shape
+                diff_z = self.max_z - NZ
+                diff_y = self.max_y - NY
+                diff_x = self.max_x - NX
+                y = F.pad(x[b],
+                          [0, 0,
+                          diff_x // 2, diff_x - diff_x // 2,
+                          diff_y // 2, diff_y - diff_y // 2,
+                          diff_z // 2, diff_z - diff_z // 2,
+                          0, 0])
+                x_t.append(y)
+            else:
+                x_t.append(x[b])
+
+        return x_t
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}()"
+
+
+class ListToTensor:
+    def __init__(self):
+        pass
+
+    def __call__(self, x: list) -> torch.tensor:
+        xt = torch.stack([t.float() for t in x], dim=0)
+        return xt
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}()"
+
+
+#     def pad(self, x):
+#         nz, ny, nx, nt = 30, 124, 113, 40
+#         if len(x.shape) == 5:
+#             NZ, NY, NX, _, NT = x.shape
+#             diff_z = nz - NZ
+#             diff_y = ny - NY
+#             diff_x = nx - NX
+#             diff_t = nt - NT
+#             return F.pad(x,
+#                          [0, diff_t,
+#                           0, 0,
+#                           diff_x // 2, diff_x - diff_x // 2,
+#                           diff_y // 2, diff_y - diff_y // 2,
+#                           diff_z // 2, diff_z - diff_z // 2])
+#         if len(x.shape) == 4:
+#             NZ, NY, NX, NT = x.shape
+#             diff_z = nz - NZ
+#             diff_y = ny - NY
+#             diff_x = nx - NX
+#             diff_t = nt - NT
+#             return F.pad(x,
+#                          [0, diff_t,
+#                           diff_x // 2, diff_x - diff_x // 2,
+#                           diff_y // 2, diff_y - diff_y // 2,
+#                           diff_z // 2, diff_z - diff_z // 2])
+#         elif len(x.shape) == 3:
+#             NZ, NY, NX = x.shape
+#             diff_z = nz - NZ
+#             diff_y = ny - NY
+#             diff_x = nx - NX
+#             return F.pad(x,
+#                          [diff_x // 2, diff_x - diff_x // 2,
+#                           diff_y // 2, diff_y - diff_y // 2,
+#                           diff_z // 2, diff_z - diff_z // 2])
+#         else:
+#             return x
 
 
 class FlipBase:
@@ -162,6 +305,57 @@ class Round:
     def __call__(self, x: torch.Tensor):
         y = torch.where(x > self.th, 1.0, 0.0)
         return y
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}()"
+
+
+class Erode:
+    def __init__(self, th=0.5):
+        self.th = th
+
+    def __call__(self, x: torch.Tensor) -> torch.Tensor:
+        x = torch.where(x > self.th, 1.0, 0.0)
+        NZ = x.shape[0]
+        borders = np.zeros(x.shape)
+        for z in range(NZ):
+            mask = x[z, :, :].numpy()
+            borders[z, :, :] = (mask - cv2.erode(mask, kernel=None, borderValue=0))
+        return torch.from_numpy(borders)
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}()"
+
+
+class Resize:
+    def __init__(self, size: tuple[int, int, int]):
+        self.size = size
+
+    def __call__(self, vol: torch.Tensor, ms: torch.Tensor, md: torch.Tensor):
+        NZ, NY, NX, NT = vol.shape
+        nsize = (1, 1, NZ, NY, NX)
+        ms_i = F.interpolate(ms.reshape(nsize), size=self.size, align_corners=True, mode='trilinear').squeeze()
+        md_i = F.interpolate(md.reshape(nsize), size=self.size, align_corners=True, mode='trilinear').squeeze()
+        vol_i = torch.zeros(size=(*self.size, NT), dtype=vol.dtype, device=vol.device)
+        for t in range(NT):
+            vol_i[:, :, :, t] = F.interpolate(vol[:, :, :, t].reshape(nsize), size=self.size, align_corners=True, mode='trilinear').squeeze()
+        return (vol_i, ms_i, md_i)
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}()"
+
+
+class ResizeFlow3d:
+    def __init__(self, size: tuple[int, int, int]):
+        self.size = size
+
+    def __call__(self, uvw: torch.Tensor):
+        NZ, NY, NX, C = uvw.shape
+        nsize = (1, 1, NZ, NY, NX)
+        uvw_i = torch.zeros(size=(*self.size, C), dtype=uvw.dtype, device=uvw.device)
+        for c in range(C):
+            uvw_i[:, :, :, c] = F.interpolate(uvw[:, :, :, c].reshape(nsize), size=self.size, align_corners=True, mode='trilinear').squeeze()
+        return uvw_i
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}()"

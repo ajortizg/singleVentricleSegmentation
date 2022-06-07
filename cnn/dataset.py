@@ -7,6 +7,71 @@ import os
 import pandas
 import torch
 from enum import Enum
+import transforms as T
+
+
+# def max_dim(x):
+#     BS = len(x)
+#     max_z = max_x = max_y = max_t = 0
+#     for b in range(BS):
+#         NZ, NY, NX, NT = x[b].shape
+#         if NZ > max_z:
+#             max_z = NZ
+#         if NY > max_y:
+#             max_y = NY
+#         if NX > max_x:
+#             max_x = NX
+#         if NT > max_t:
+#             max_t = NT
+#     return(max_z, max_y, max_x, max_t)
+
+def max_ts(ff):
+    BS = len(ff)
+    maxts = 0
+    for b in range(BS):
+        t = ff[b].shape[0]
+        if t > maxts:
+            maxts = t
+    return maxts
+
+
+def collate_fn(data):
+    pnames, vols, m0s, mks, init_ts, final_ts, ff, bf = zip(*data)
+    # max_z, max_y, max_x, max_t = max_dim(vols)
+    # pader = T.Pad(max_z, max_y, max_x, max_t)
+    to_tensor = T.ListToTensor()
+
+    # vols = pader(vols)
+    # m0s = pader(m0s)
+    # mks = pader(mks)
+    # ff = pader(ff)
+    # bf = pader(bf)
+
+    vols = to_tensor(vols)
+    m0s = to_tensor(m0s)
+    mks = to_tensor(mks)
+    init_ts = torch.tensor(init_ts)
+    final_ts = torch.tensor(final_ts)
+
+    maxts = max_ts(ff)
+    BS, NZ, NY, NX = m0s.shape
+    fwd_t = torch.zeros(size=(BS, maxts, NZ, NY, NX, 3))
+    bwd_t = torch.zeros(size=(BS, maxts, NZ, NY, NX, 3))
+    for b in range(BS):
+        diff_t = maxts - ff[b].shape[0]
+        if diff_t != 0:
+            zeros = torch.zeros(size=(diff_t, NZ, NY, NX, 3))
+            fwd_t[b, :, :, :, :, :] = torch.cat((ff[b], zeros), dim=0)
+            bwd_t[b, :, :, :, :, :] = torch.cat((bf[b], zeros), dim=0)
+        else:
+            fwd_t[b, :, :, :, :, :] = ff[b]
+            bwd_t[b, :, :, :, :, :] = bf[b]
+
+    # ff = to_tensor(ff)
+    # bf = to_tensor(bf)
+    # print(ff.shape, bf.shape)
+
+    return (pnames, vols, m0s, mks, init_ts, final_ts, fwd_t, bwd_t)
 
 
 def split_train_val_dataset(total_patients: int, val_percent: float = 0.2):
@@ -27,11 +92,19 @@ class DatasetMode(Enum):
 
 
 class SingleVentricleDataset(Dataset):
-    def __init__(self, config, mode, transforms, load_flow):
+    def __init__(self, config, mode, load_flow,
+                 data_transforms=None,
+                 mask_transforms=None,
+                 data_mask_transforms=None,
+                 flow_transforms=None):
         self.config = config
         self.load_flow = load_flow
         self.mode = mode
-        self.transforms = transforms
+        self.data_transforms = data_transforms              # transformations applied only on data
+        self.mask_tranforms = mask_transforms               # transformations applied only on masks
+        self.data_mask_transforms = data_mask_transforms    # transformations applied on data and masks
+        self.flow_transforms = flow_transforms              # transformations applied on optical flow
+
         self.base_path = config.get('DATA', 'BASE_PATH_3D')
 
         self.segmentations_subdir_path = config.get('DATA', 'SEGMENTATIONS_SUBDIR_PATH')
@@ -84,11 +157,6 @@ class SingleVentricleDataset(Dataset):
         # Load 4D nifty [x,y,z,t]
         vol = nib.load(self.volume_files[idx])
         vol_zyxt = torch.from_numpy(np.swapaxes(vol.get_fdata(), 0, 2)).float()
-        if self.transforms is not None:
-            for t in self.transforms:
-                vol_zyxt = t(vol_zyxt)
-        # vol_zyxt = torch_utils.normalize(vol_zyxt)
-        # vol_zyxt = (vol_zyxt - MEAN) / STD
 
         # Read time steps for systole and diastole
         patient_name = self.get_patient_name(idx)
@@ -97,11 +165,23 @@ class SingleVentricleDataset(Dataset):
         # Load segmentations masks and convert them to torch tensors
         mask_syst_zyx, mask_diast_zyx = self.systole_diastole_mask(patient_name)
 
+        if self.data_mask_transforms is not None:
+            vol_zyxt, mask_syst_zyx, mask_diast_zyx = self.data_mask_transforms(vol_zyxt, mask_syst_zyx, mask_diast_zyx)
+
+        if self.mask_tranforms is not None:
+            mask_syst_zyx = self.mask_tranforms(mask_syst_zyx)
+            mask_diast_zyx = self.mask_tranforms(mask_diast_zyx)
+
+        if self.data_transforms is not None:
+            vol_zyxt = self.data_transforms(vol_zyxt)
+
+        m0, mk, init_ts, final_ts = self.prepare_masks(tsyst, tdias, mask_syst_zyx, mask_diast_zyx)
+
+        # Load optical flow if needed
         ff, bf = None, None
         if self.load_flow:
             ff, bf = self.optflow_for_patient(patient_name)
 
-        m0, mk, init_ts, final_ts = self.prepare_masks(tsyst, tdias, mask_syst_zyx, mask_diast_zyx)
         return (patient_name, vol_zyxt, m0, mk, init_ts, final_ts, ff, bf)
 
     def systole_diastole_time(self, patient_name):
@@ -166,6 +246,8 @@ class SingleVentricleDataset(Dataset):
             if osp.isdir(fwd_path):
                 flow_path = osp.sep.join([fwd_path, self.flow_level, self.flow_name])
                 u = torch.load(flow_path, map_location='cpu')
+                if self.flow_transforms is not None:
+                    u = self.flow_transforms(u)
                 fwd_flows.append(u)
 
             # Read backward optical flow
@@ -173,9 +255,15 @@ class SingleVentricleDataset(Dataset):
             if osp.isdir(bwd_path):
                 flow_path = osp.sep.join([bwd_path, self.flow_level, self.flow_name])
                 u = torch.load(flow_path, map_location='cpu')
+                if self.flow_transforms is not None:
+                    u = self.flow_transforms(u)
                 bwd_flows.append(u)
 
-        return (fwd_flows, bwd_flows)
+        fwd_t = torch.stack([x.float() for x in fwd_flows], dim=0)
+        bwd_t = torch.stack([x.float() for x in bwd_flows], dim=0)
+
+        # return (fwd_flows, bwd_flows)
+        return (fwd_t, bwd_t)
 
     def prepare_masks(self, tsyst, tdias, msyst, mdias):
         init_ts = min(tdias, tsyst)
@@ -190,6 +278,12 @@ class SingleVentricleDataset(Dataset):
             mk = msyst
         return (m0, mk, init_ts, final_ts)
 
+    def save_patients(self, save_dir: str, filename: str):
+        filepath = osp.join(save_dir, filename)
+        with open(filepath, 'w') as pfile:
+            for i in range(len(self.volume_files)):
+                pfile.write(self.get_patient_name(i) + '\n')
+        pfile.close()
 
 # class SingleVentricleDatasetBatch(Dataset):
 #     def __init__(self, config, mode, load_flow):

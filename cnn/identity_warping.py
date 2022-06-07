@@ -8,6 +8,8 @@ import os.path as osp
 import torch.nn.functional as F
 import csv
 import torch.nn as nn
+import transforms as T
+from cnn_utils import BatchInfo
 from loss import loss_func_complete
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
@@ -36,7 +38,18 @@ else:
     DEVICE = 'cpu'
 
 
-ds = SingleVentricleDataset(config, DatasetMode.FULL, load_flow=True)
+data_transforms = T.ComposeUnary([T.Normalize()])
+# data_transforms = T.ComposeUnary([T.Normalize(), T.PadTime(maxt=40)])
+# data_mask_transforms = T.ComposeTernary([T.Resize(size=(14, 90, 90))])
+# mask_transforms = T.ComposeUnary([T.Round(th=0.5)])
+# flow_transforms = T.ComposeUnary([T.ResizeFlow3d(size=(14, 90, 90))])
+
+ds = SingleVentricleDataset(config, DatasetMode.FULL, load_flow=True,
+                            data_transforms=data_transforms,
+                            mask_transforms=None,
+                            data_mask_transforms=None,
+                            flow_transforms=None)
+
 save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'Warping')
 
 # save config file to save directory
@@ -53,40 +66,60 @@ with open(conifg_output, 'w') as config_file:
 csv_file = open(osp.join(save_dir, 'diff.csv'), 'w')
 writer = csv.writer(csv_file)
 pbar = tqdm(total=len(ds))
+posp_masks = T.ComposeUnary([T.Normalize(), T.Erode()])
 for (pname, vol, m0, mk, init_ts, final_ts, ff, bf) in ds:
-    # (pname, vol, mask_syst, mask_diast, tsyst, tdias, ff, bf) = train_ds[idx]
-    # vol = torch_utils.normalize(vol)
     NZ, NY, NX, NT = vol.shape
+    info = BatchInfo(1, NZ, NY, NX, vol.dtype, DEVICE)
+    grid = torch_utils.create_grid(NZ, NY, NX).unsqueeze(0).to(DEVICE)
+    print(grid.shape)
+    xt = torch.cat([grid for _ in range(4)], dim=0)
 
-    patient_dir = plots.createSubDirectory(save_dir, pname)
+    print(xt.shape)
+    print(torch.equal(grid.squeeze(), xt[0, :, :, :]))
+    print(torch.equal(grid.squeeze(), xt[1, :, :, :]))
+    print(torch.equal(grid.squeeze(), xt[2, :, :, :]))
+    print(torch.equal(grid.squeeze(), xt[3, :, :, :]))
+    # grid.unsqueeze_(0)
+    # patient_dir = plots.createSubDirectory(save_dir, pname)
     # plots.save_slices(m0, 'm0.png', patient_dir)
     # plots.save_slices(mk, 'mk.png', patient_dir)
 
-    warp = Warp(config, NZ, NY, NX)
+    # warp = Warp(config, info)
     mts = [m0.to(DEVICE)]
     mtts = [mk.to(DEVICE)]
-    for t in range(len(ff)):
+    ts = ff.shape[0]
+    for t in range(ts):
         pbar.set_postfix_str(f'P: {pname}, S: {t}')
 
         # Forward mask propagation m0 -> mk
-        data_t = vol[:, :, :, init_ts + t].to(DEVICE)
-        # plots.save_img_mask_slices(data_t, mts[-1], f'img_mask_t{init_ts + t}', patient_dir)
-        plots.save_img_mask_slices(data_t, plots.erode_mask(mts[-1]), f'img_mask_t{init_ts + t}', patient_dir, color=[0, 0, 1], alpha=0.5)
-        plots.save_compare_masks(data_t, plots.erode_mask(mts[-1]), plots.erode_mask(mtts[-1]), f'img_mask2_t_tt{init_ts + t}', patient_dir,color1=[0,1,0],color2=[0,0,1])
-        u = ff[t].to(DEVICE)
-        mt = warp(mts[-1], u)
-        mt = torch_utils.normalize(mt)
-        # plots.save_slices(mt, f'mt{init_ts + t + 1}.png', patient_dir)
+        # data_t = vol[:, :, :, init_ts + t].to(DEVICE)
+        # plots.save_img_mask_slices(data_t,
+        #                            posp_masks(mts[-1].cpu().detach()),
+        #                            f'img_mask_t{init_ts + t}',
+        #                            patient_dir,
+        #                            color=[0, 0, 1],
+        #                            alpha=0.5)
+        # plots.save_compare_masks(
+        #     data_t, plots.erode_mask(mts[-1]),
+        #     plots.erode_mask(mtts[-1]),
+        #     f'img_mask2_t_tt{init_ts + t}', patient_dir, color1=[0, 1, 0],
+        #     color2=[0, 0, 1])
+        u = ff[t, :, :, :, :].unsqueeze(0).to(DEVICE)
+        # mt = warp(mts[-1], u)
+        mt = torch_utils.warp(mts[-1].reshape(info.net_shape()), grid + u).squeeze()
         mts.append(mt)
 
         # Backward mask propagation mk -> m0
-        data_t = vol[:, :, :, final_ts - t].to(DEVICE)
-        plots.save_img_mask_slices(data_t, plots.erode_mask(mtts[-1]), f'img_mask_tt{init_ts + t}', patient_dir, color=[0, 1, 0], alpha=0.5)
-        # plots.save_img_mask_slices(data_t, mtts[-1], f'img_mask_tt{final_ts - t}', patient_dir)
-        u = bf[t].to(DEVICE)
-        mtt = warp(mtts[-1], u)
-        mtt = torch_utils.normalize(mtt)
-        # plots.save_slices(mtt, f'mtt{final_ts - t - 1}.png', patient_dir)
+        # data_t = vol[:, :, :, final_ts - t].to(DEVICE)
+        # plots.save_img_mask_slices(data_t,
+        #                            posp_masks(mtts[-1].cpu().detach()),
+        #                            f'img_mask_tt{init_ts + t}',
+        #                            patient_dir,
+        #                            color=[0, 1, 0],
+        #                            alpha=0.5)
+        u = bf[t, :, :, :, :].unsqueeze(0).to(DEVICE)
+        # mtt = warp(mtts[-1], u)
+        mtt = torch_utils.warp(mtts[-1].reshape(info.net_shape()), grid + u).squeeze()
         mtts.append(mtt)
 
     mtts.reverse()

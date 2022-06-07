@@ -1,14 +1,14 @@
-from dataset import SingleVentricleDataset, DatasetMode
 import configparser
 import os.path as osp
 import sys
 from tqdm import tqdm
 import pandas as pd
-import transforms as T
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 from utils import plots
+from cnn.dataset import SingleVentricleDataset, DatasetMode
+import cnn.transforms as T
 
 
 def save_patient_data(vol, ms, md, ts, td, save_dir_vol, save_dir_masks, patient_name):
@@ -25,15 +25,10 @@ if __name__ == "__main__":
     config = configparser.ConfigParser()
     config.read('parser/configCNN.ini')
 
-    transf = T.Compose([
-        T.RandomFlipZ(p=0.6),
-        T.RandomFlipY(p=0.6),
-        T.RandomFlipX(p=0.6),
-        T.RandomRotate(p=1.0, range_x=(-10, 10)),
-        T.ElasticDeformation(0.7)])
+    transf = T.ComposeTernary([T.Resize(size=(14, 90, 90))])
 
-    ds = SingleVentricleDataset(config, DatasetMode.FULL, None, load_flow=False)
-    save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'DA')
+    ds = SingleVentricleDataset(config, DatasetMode.FULL, load_flow=False)
+    save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'singleVentricleData_cut_r')
     save_dir_vol = plots.createSubDirectory(save_dir, ds.volumes_subdir_path)
     save_dir_masks = plots.createSubDirectory(save_dir, ds.segmentations_subdir_path)
 
@@ -42,7 +37,6 @@ if __name__ == "__main__":
     with open(conifg_output, 'w') as configfile:
         config.write(configfile)
 
-    N = 10
     df = pd.DataFrame(columns=['Name', 'Systole', 'Diastole'])
     pbar = tqdm(total=len(ds))
     for (patient_name, vol, *_) in ds:
@@ -51,17 +45,9 @@ if __name__ == "__main__":
         ms, md = ds.systole_diastole_mask(patient_name)
         ts, td = ds.systole_diastole_time(patient_name)
 
-        # Save original data
-        df_patient = save_patient_data(vol, ms, md, ts, td, save_dir_vol, save_dir_masks, patient_name)
+        vol_t, ms_t, md_t = transf(vol, ms, md)
+        df_patient = save_patient_data(vol_t, T.Round(th=0.5)(ms_t), T.Round(th=0.5)(md_t), ts, td, save_dir_vol, save_dir_masks, patient_name)
         df = pd.concat([df, df_patient], ignore_index=True)
-
-        # Generate new data
-        for i in range(N):
-            patiente_name_t = patient_name + f'_A_{i}'
-            vol_t, ms_t, md_t = transf(vol, ms, md)
-            df_patient = save_patient_data(vol_t, T.Round(th=0.5)(ms_t), T.Round(th=0.5)(md_t),
-                                           ts, td, save_dir_vol, save_dir_masks, patiente_name_t)
-            df = pd.concat([df, df_patient], ignore_index=True)
 
         pbar.update(1)
 

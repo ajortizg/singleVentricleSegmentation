@@ -4,7 +4,7 @@ from opticalFlow_cuda_ext import opticalFlow
 
 
 class Warp:
-    def __init__(self, config, NZ, NY, NX):
+    def __init__(self, config, info):
         # Interpolation
         interp_str = config.get('WARPING', 'InterpolationType')
         self.interp = None
@@ -29,8 +29,8 @@ class Warp:
         else:
             raise Exception("wrong BoundaryType in configParser")
 
-        self.LZ, self.LY, self.LX = self.getMeshLength(config, NZ, NY, NX)
-        self.NZ, self.NY, self.NX = NZ, NY, NX
+        self.LZ, self.LY, self.LX = self.getMeshLength(config, info.NZ, info.NY, info.NX)
+        self.NZ, self.NY, self.NX = info.NZ, info.NY, info.NX
 
     def __call__(self, m, u):
         meshInfo = opticalFlow.MeshInfo3D(self.NZ, self.NY, self.NX, self.LZ, self.LY, self.LX)

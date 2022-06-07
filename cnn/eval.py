@@ -4,7 +4,7 @@ from tqdm import tqdm
 from dataset import SingleVentricleDataset, DatasetMode
 from warp import Warp
 import torch.nn.functional as F
-from cnn_utils import propagate
+from cnn_utils import warp_forward
 import sys
 import os.path as osp
 from torch.utils.tensorboard import SummaryWriter
@@ -68,7 +68,7 @@ with torch.no_grad():
             fwd_time = init_ts + t + 1
             data_t = vol[:, :, :, fwd_time].to(DEVICE)
             u = ff[t].to(DEVICE)
-            mt_cnn = propagate(net, warp, data_t, nsize, u, mts_cnn[-1])
+            mt_cnn = warp_forward(net, warp, data_t, nsize, u, mts_cnn[-1])
             mts_cnn.append(mt_cnn)
             mts_iw.append(warp(mts_iw[-1], u))
 
@@ -76,7 +76,7 @@ with torch.no_grad():
             bwd_time = final_ts - t - 1
             data_t = vol[:, :, :, bwd_time].to(DEVICE)
             u = bf[t].to(DEVICE)
-            mtt_cnn = propagate(net, warp, data_t, nsize, u, mtts_cnn[-1])
+            mtt_cnn = warp_forward(net, warp, data_t, nsize, u, mtts_cnn[-1])
             mtts_cnn.append(mtt_cnn)
             mtts_iw.append(warp(mtts_iw[-1], u))
 

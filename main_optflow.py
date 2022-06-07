@@ -4,7 +4,6 @@ from enum import Enum
 from TVL1OF.TVL1OF3D import *
 from cnn.dataset import SingleVentricleDataset, DatasetMode
 from utils import plots
-from utils import torch_utils
 import cnn.transforms as T
 
 
@@ -50,7 +49,7 @@ if __name__ == "__main__":
     with open(conifg_output, 'w') as configfile:
         config.write(configfile)
 
-    ds = SingleVentricleDataset(config, DatasetMode.FULL, [T.Normalize()], load_flow=False)
+    ds = SingleVentricleDataset(config, DatasetMode.FULL, load_flow=False, data_transforms=[T.Normalize()])
 
     # PATIENT_NAME = config.get('DATA', 'PATIENT_NAME')
     # idx, found = ds.index_for_patient(PATIENT_NAME)
@@ -63,7 +62,7 @@ if __name__ == "__main__":
     for idx in range(N):
         # for _ in range(1):
         (pname, data, _, _, init_ts, final_ts, _, _) = ds[idx]
-        data = torch_utils.normalize(data.to(DEVICE))
+        data = T.Normalize()(data.to(DEVICE))
         NZ, NY, NX, NT = data.shape
 
         # print("=======================================")
