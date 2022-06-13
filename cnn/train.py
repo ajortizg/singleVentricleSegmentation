@@ -6,7 +6,6 @@ from torch.optim import Adam
 from tqdm import tqdm
 from torch.optim.lr_scheduler import StepLR
 from unet_3d import UNet3D
-import csv
 from torch.utils.tensorboard import SummaryWriter
 import time
 import os.path as osp
@@ -53,6 +52,23 @@ NUM_EPOCHS = config.getint('PARAMETERS', 'NUM_EPOCHS')
 VERBOSE = config.getboolean('DEBUG', 'VERBOSE')
 SHUFFLE = config.getboolean('PARAMETERS', 'SHUFFLE')
 
+# # Create train and validation datasets
+# data_transforms = T.ComposeUnary([T.Normalize(), T.PadTime(maxt=40)])
+# data_mask_transforms = T.ComposeTernary([T.Resize(size=(14, 90, 90))])
+# mask_transforms = T.ComposeUnary([T.Round(th=0.5)])
+# flow_transforms = T.ComposeUnary([T.ResizeFlow3d(size=(14, 90, 90))])
+
+# train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, load_flow=True,
+#                                   data_transforms=data_transforms,
+#                                   mask_transforms=mask_transforms,
+#                                   data_mask_transforms=data_mask_transforms,
+#                                   flow_transforms=flow_transforms)
+# val_ds = SingleVentricleDataset(config, DatasetMode.VAL, load_flow=True,
+#                                 data_transforms=data_transforms,
+#                                 mask_transforms=mask_transforms,
+#                                 data_mask_transforms=data_mask_transforms,
+#                                 flow_transforms=flow_transforms)
+
 transf = T.ComposeUnary([T.Normalize()])
 train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, load_flow=True, data_transforms=transf)
 val_ds = SingleVentricleDataset(config, DatasetMode.VAL, load_flow=True, data_transforms=transf)
@@ -60,7 +76,7 @@ val_ds = SingleVentricleDataset(config, DatasetMode.VAL, load_flow=True, data_tr
 # UNet3D model
 net = UNet3D(config).to(DEVICE)
 opt = Adam(net.parameters(), lr=LR, weight_decay=WEIGHT_DECAY, betas=(BETA1, BETA2))
-# wd = StepLR(opt, step_size=STEP_SIZE, gamma=GAMMA)
+schedule_lr = StepLR(opt, step_size=STEP_SIZE, gamma=GAMMA)
 
 save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'CNN')
 writer = SummaryWriter(log_dir=save_dir)
@@ -76,8 +92,7 @@ with open(conifg_output, 'w') as config_file:
 cnn_utils.save_model(net, save_dir, 'net.txt')
 
 if VERBOSE:
-    summary_str = summary(net, input_size=(2, 16, 100, 100), batch_size=-1)
-    print(summary_str)
+    summary(net, input_size=(2, 16, 100, 100), batch_size=-1)
     print("\n")
     print("===========================================================")
     print('CNN parameters')
@@ -115,14 +130,13 @@ for e in range(NUM_EPOCHS):
     total_val_loss = cnn_utils.validate(net, val_ds, e, pbar, config, writer, DEVICE)
     pbar.update(1)
 
-    # wd.step()
+    schedule_lr.step()
     avg_train_loss = total_train_loss / train_steps
     avg_val_loss = total_val_loss / val_steps
     H['train_loss'].append(avg_train_loss)
     H['val_loss'].append(avg_val_loss)
     writer.add_scalars('loss', {'e_train_loss': avg_train_loss, 'e_val_loss': avg_val_loss}, e)
     cnn_utils.save_weights(net, e, 10, save_dir, 'model.pth')
-    # csv_file.close()
 
 
 toc = time.time()

@@ -17,7 +17,8 @@ config = configparser.ConfigParser()
 config.read('parser/configCNN.ini')
 
 normalize = T.Normalize()
-ds = SingleVentricleDataset(config, DatasetMode.FULL, [normalize], load_flow=False)
+transf = T.ComposeUnary([T.Normalize()])
+ds = SingleVentricleDataset(config, DatasetMode.TRAIN, load_flow=False, data_transforms=transf)
 save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'ImageMasks')
 
 conifg_output = os.path.sep.join([save_dir, "config.ini"])

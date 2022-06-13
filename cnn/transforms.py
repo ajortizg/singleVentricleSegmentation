@@ -71,7 +71,7 @@ class PadTime:
     def __init__(self, maxt=40):
         self.maxt = maxt
 
-    def __call__(self, vol: torch.Tensor):
+    def __call__(self, vol: torch.Tensor) -> torch.Tensor:
         *_, NT = vol.shape
         diff_t = self.maxt - NT
         return F.pad(vol, [0, diff_t,
@@ -150,44 +150,6 @@ class ListToTensor:
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}()"
-
-
-#     def pad(self, x):
-#         nz, ny, nx, nt = 30, 124, 113, 40
-#         if len(x.shape) == 5:
-#             NZ, NY, NX, _, NT = x.shape
-#             diff_z = nz - NZ
-#             diff_y = ny - NY
-#             diff_x = nx - NX
-#             diff_t = nt - NT
-#             return F.pad(x,
-#                          [0, diff_t,
-#                           0, 0,
-#                           diff_x // 2, diff_x - diff_x // 2,
-#                           diff_y // 2, diff_y - diff_y // 2,
-#                           diff_z // 2, diff_z - diff_z // 2])
-#         if len(x.shape) == 4:
-#             NZ, NY, NX, NT = x.shape
-#             diff_z = nz - NZ
-#             diff_y = ny - NY
-#             diff_x = nx - NX
-#             diff_t = nt - NT
-#             return F.pad(x,
-#                          [0, diff_t,
-#                           diff_x // 2, diff_x - diff_x // 2,
-#                           diff_y // 2, diff_y - diff_y // 2,
-#                           diff_z // 2, diff_z - diff_z // 2])
-#         elif len(x.shape) == 3:
-#             NZ, NY, NX = x.shape
-#             diff_z = nz - NZ
-#             diff_y = ny - NY
-#             diff_x = nx - NX
-#             return F.pad(x,
-#                          [diff_x // 2, diff_x - diff_x // 2,
-#                           diff_y // 2, diff_y - diff_y // 2,
-#                           diff_z // 2, diff_z - diff_z // 2])
-#         else:
-#             return x
 
 
 class FlipBase:

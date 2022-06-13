@@ -49,7 +49,8 @@ if __name__ == "__main__":
     with open(conifg_output, 'w') as configfile:
         config.write(configfile)
 
-    ds = SingleVentricleDataset(config, DatasetMode.FULL, load_flow=False, data_transforms=[T.Normalize()])
+    transf = T.ComposeUnary([T.Normalize()])
+    ds = SingleVentricleDataset(config, DatasetMode.FULL, load_flow=False, data_transforms=transf)
 
     # PATIENT_NAME = config.get('DATA', 'PATIENT_NAME')
     # idx, found = ds.index_for_patient(PATIENT_NAME)

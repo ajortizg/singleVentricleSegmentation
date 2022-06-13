@@ -8,9 +8,9 @@ from cnn_utils import warp_forward
 import sys
 import os.path as osp
 from torch.utils.tensorboard import SummaryWriter
-from loss import loss_func_complete
+from loss import loss_func_three
 import csv
-import transforms
+import transforms as T
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
@@ -29,8 +29,8 @@ else:
     DEVICE = 'cpu'
 
 # transf = [transforms.Normalize(mean=0.1478, std=0.1385)]
-transf = [transforms.Normalize()]
-ds = SingleVentricleDataset(config, DatasetMode.TRAIN, transf, load_flow=True)
+transf = T.ComposeUnary([T.Normalize()])
+ds = SingleVentricleDataset(config, DatasetMode.TRAIN, load_flow=True, data_transforms=transf)
 save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'CNN_EVAL')
 # writer = SummaryWriter(log_dir=save_dir)
 
@@ -41,7 +41,7 @@ with open(conifg_output, 'w') as config_file:
 
 csv_file = open(osp.join(save_dir, 'cnn_diff.csv'), 'w')
 csv_writer = csv.writer(csv_file)
-csv_writer.writerow(['Patient', 'L1', 'L2', 'L3', 'LT', 'L1', 'L2', 'L3', 'LT'])
+csv_writer.writerow(['Patient', 'L1-CNN', 'L2-CNN', 'L3-CNN', 'LT-CNN', 'L1-OF', 'L2-OF', 'L3-OF', 'LT-OF'])
 
 TRAINED_MODEL = config.get('DATA', 'TRAINED_MODEL')
 net = torch.load(TRAINED_MODEL).to(DEVICE)
@@ -60,14 +60,14 @@ with torch.no_grad():
         mts_iw = [m0.to(DEVICE)]
         mtts_iw = [mk.to(DEVICE)]
 
-        steps = len(ff)
-        for t in range(steps):
-            pbar.set_postfix_str(f'P: {pname}, S: {t+1}/{steps}')
+        ts = ff.shape[0]
+        for t in range(ts):
+            pbar.set_postfix_str(f'P: {pname}, S: {t+1}/{ts}')
 
             # Forward mask propagation m0 -> mk
             fwd_time = init_ts + t + 1
             data_t = vol[:, :, :, fwd_time].to(DEVICE)
-            u = ff[t].to(DEVICE)
+            u = ff[t, :, :, :, :].to(DEVICE)
             mt_cnn = warp_forward(net, warp, data_t, nsize, u, mts_cnn[-1])
             mts_cnn.append(mt_cnn)
             mts_iw.append(warp(mts_iw[-1], u))
@@ -75,15 +75,15 @@ with torch.no_grad():
             # Backward mask propagation mk -> m0
             bwd_time = final_ts - t - 1
             data_t = vol[:, :, :, bwd_time].to(DEVICE)
-            u = bf[t].to(DEVICE)
+            u = bf[t, :, :, :, :].to(DEVICE)
             mtt_cnn = warp_forward(net, warp, data_t, nsize, u, mtts_cnn[-1])
             mtts_cnn.append(mtt_cnn)
             mtts_iw.append(warp(mtts_iw[-1], u))
 
         mtts_cnn.reverse()
         mtts_iw.reverse()
-        loss_cnn, l1_cnn, l2_cnn, l3_cnn = loss_func_complete(mts_cnn, mtts_cnn)
-        loss_iw, l1_iw, l2_iw, l3_iw = loss_func_complete(mts_iw, mtts_iw)
+        loss_cnn, l1_cnn, l2_cnn, l3_cnn = loss_func_three(mts_cnn, mtts_cnn)
+        loss_iw, l1_iw, l2_iw, l3_iw = loss_func_three(mts_iw, mtts_iw)
         # writer.add_image(f'train_{pname}_mkt', torch.swapaxes(torch_utils.normalize(mt).squeeze(1), 0, 1), dataformats='NCHW')
         # writer.add_image(f'train_{pname}_m0tt', torch.swapaxes(torch_utils.normalize(mtt).squeeze(1), 0, 1), dataformats='NCHW')
         row = [pname]
@@ -97,32 +97,32 @@ with torch.no_grad():
         row.append('{:.2f}'.format(loss_iw.item()))
         csv_writer.writerow(row)
 
-        patient_dir = plots.createSubDirectory(save_dir, pname)
-        fwd_dir = plots.createSubDirectory(patient_dir, 'fwd')
-        bwd_dir = plots.createSubDirectory(patient_dir, 'bwd')
+        # patient_dir = plots.createSubDirectory(save_dir, pname)
+        # fwd_dir = plots.createSubDirectory(patient_dir, 'fwd')
+        # bwd_dir = plots.createSubDirectory(patient_dir, 'bwd')
 
-        for i in range(len(mts_cnn)):
-            mt_cnn = torch_utils.normalize(mts_cnn[i].squeeze())
-            mtt_cnn = torch_utils.normalize(mtts_cnn[i].squeeze())
-            mt_iw = torch_utils.normalize(mts_iw[i])
-            mtt_iw = torch_utils.normalize(mtts_iw[i])
-            data_t = vol[:, :, :, init_ts + i].to(DEVICE)
+        # for i in range(len(mts_cnn)):
+        #     mt_cnn = torch_utils.normalize(mts_cnn[i].squeeze())
+        #     mtt_cnn = torch_utils.normalize(mtts_cnn[i].squeeze())
+        #     mt_iw = torch_utils.normalize(mts_iw[i])
+        #     mtt_iw = torch_utils.normalize(mtts_iw[i])
+        #     data_t = vol[:, :, :, init_ts + i].to(DEVICE)
 
-            plots.save_compare_masks(
-                data_t,
-                plots.erode_mask(mt_cnn),
-                plots.erode_mask(mt_iw),
-                f'im_t_{init_ts + i}', fwd_dir,
-                color1=[0, 1, 0],
-                color2=[0, 0, 1], alpha=0.5)
+        #     plots.save_compare_masks(
+        #         data_t,
+        #         plots.erode_mask(mt_cnn),
+        #         plots.erode_mask(mt_iw),
+        #         f'im_t_{init_ts + i}', fwd_dir,
+        #         color1=[0, 1, 0],
+        #         color2=[0, 0, 1], alpha=0.5)
 
-            plots.save_compare_masks(
-                data_t,
-                plots.erode_mask(mtt_cnn),
-                plots.erode_mask(mtt_iw),
-                f'im_tt_{init_ts + i}', bwd_dir,
-                color1=[0, 1, 0],
-                color2=[0, 0, 1], alpha=0.5)
+        #     plots.save_compare_masks(
+        #         data_t,
+        #         plots.erode_mask(mtt_cnn),
+        #         plots.erode_mask(mtt_iw),
+        #         f'im_tt_{init_ts + i}', bwd_dir,
+        #         color1=[0, 1, 0],
+        #         color2=[0, 0, 1], alpha=0.5)
 
         pbar.update(1)
 

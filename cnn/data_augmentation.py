@@ -25,31 +25,34 @@ if __name__ == "__main__":
     config = configparser.ConfigParser()
     config.read('parser/configCNN.ini')
 
-    transf = T.Compose([
-        T.RandomFlipZ(p=0.6),
-        T.RandomFlipY(p=0.6),
-        T.RandomFlipX(p=0.6),
-        T.RandomRotate(p=1.0, range_x=(-10, 10)),
-        T.ElasticDeformation(0.7)])
+    transf = T.ComposeTernary([
+        T.RandomFlipZ(p=0.5),
+        T.RandomFlipY(p=0.5),
+        T.RandomFlipX(p=0.5),
+        T.RandomRotate(p=1.0, range_x=(-10, 10))])
 
-    ds = SingleVentricleDataset(config, DatasetMode.FULL, None, load_flow=False)
+    train_ds = SingleVentricleDataset(config, DatasetMode.VAL, load_flow=False)
+    # val_ds = SingleVentricleDataset(config, DatasetMode.VAL, load_flow=False)
     save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'DA')
-    save_dir_vol = plots.createSubDirectory(save_dir, ds.volumes_subdir_path)
-    save_dir_masks = plots.createSubDirectory(save_dir, ds.segmentations_subdir_path)
+    save_dir_vol = plots.createSubDirectory(save_dir, train_ds.volumes_subdir_path)
+    save_dir_masks = plots.createSubDirectory(save_dir, train_ds.segmentations_subdir_path)
 
     # save config file to save directory
     conifg_output = osp.sep.join([save_dir, "config.ini"])
     with open(conifg_output, 'w') as configfile:
         config.write(configfile)
 
-    N = 10
+    N = 5
     df = pd.DataFrame(columns=['Name', 'Systole', 'Diastole'])
-    pbar = tqdm(total=len(ds))
-    for (patient_name, vol, *_) in ds:
+    # pbar = tqdm(total=len(train_ds) + len(val_ds))
+    pbar = tqdm(total=len(train_ds))
+    
+    # Generate augmented training dataset
+    for (patient_name, vol, *_) in train_ds:
         pbar.set_postfix_str(f'P: {patient_name}')
         NZ, NY, NX, NT = vol.shape
-        ms, md = ds.systole_diastole_mask(patient_name)
-        ts, td = ds.systole_diastole_time(patient_name)
+        ms, md = train_ds.systole_diastole_mask(patient_name)
+        ts, td = train_ds.systole_diastole_time(patient_name)
 
         # Save original data
         df_patient = save_patient_data(vol, ms, md, ts, td, save_dir_vol, save_dir_masks, patient_name)
@@ -62,7 +65,14 @@ if __name__ == "__main__":
             df_patient = save_patient_data(vol_t, T.Round(th=0.5)(ms_t), T.Round(th=0.5)(md_t),
                                            ts, td, save_dir_vol, save_dir_masks, patiente_name_t)
             df = pd.concat([df, df_patient], ignore_index=True)
-
         pbar.update(1)
 
-    df.to_excel(osp.join(save_dir, ds.segmetations_filename))
+    # # Save valdation data
+    # for (patient_name, vol, *_) in val_ds:
+    #     ms, md = train_ds.systole_diastole_mask(patient_name)
+    #     ts, td = train_ds.systole_diastole_time(patient_name)
+    #     df_patient = save_patient_data(vol, ms, md, ts, td, save_dir_vol, save_dir_masks, patient_name)
+    #     df = pd.concat([df, df_patient], ignore_index=True)
+    #     pbar.update(1)
+
+    df.to_excel(osp.join(save_dir, train_ds.segmetations_filename))

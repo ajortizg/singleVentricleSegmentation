@@ -7,88 +7,37 @@ import os
 import pandas
 import torch
 from enum import Enum
-import transforms as T
 
 
-# def max_dim(x):
-#     BS = len(x)
-#     max_z = max_x = max_y = max_t = 0
-#     for b in range(BS):
-#         NZ, NY, NX, NT = x[b].shape
-#         if NZ > max_z:
-#             max_z = NZ
-#         if NY > max_y:
-#             max_y = NY
-#         if NX > max_x:
-#             max_x = NX
-#         if NT > max_t:
-#             max_t = NT
-#     return(max_z, max_y, max_x, max_t)
+# def split_train_val_dataset(total_patients: int, val_percent: float = 0.2):
+#     val_patients = int(total_patients * val_percent)
+#     train_patients = total_patients - val_patients
+#     assert((val_patients + train_patients) == total_patients)
 
-def max_ts(ff):
-    BS = len(ff)
-    maxts = 0
-    for b in range(BS):
-        t = ff[b].shape[0]
-        if t > maxts:
-            maxts = t
-    return maxts
-
-
-def collate_fn(data):
-    pnames, vols, m0s, mks, init_ts, final_ts, ff, bf = zip(*data)
-    # max_z, max_y, max_x, max_t = max_dim(vols)
-    # pader = T.Pad(max_z, max_y, max_x, max_t)
-    to_tensor = T.ListToTensor()
-
-    # vols = pader(vols)
-    # m0s = pader(m0s)
-    # mks = pader(mks)
-    # ff = pader(ff)
-    # bf = pader(bf)
-
-    vols = to_tensor(vols)
-    m0s = to_tensor(m0s)
-    mks = to_tensor(mks)
-    init_ts = torch.tensor(init_ts)
-    final_ts = torch.tensor(final_ts)
-
-    maxts = max_ts(ff)
-    BS, NZ, NY, NX = m0s.shape
-    fwd_t = torch.zeros(size=(BS, maxts, NZ, NY, NX, 3))
-    bwd_t = torch.zeros(size=(BS, maxts, NZ, NY, NX, 3))
-    for b in range(BS):
-        diff_t = maxts - ff[b].shape[0]
-        if diff_t != 0:
-            zeros = torch.zeros(size=(diff_t, NZ, NY, NX, 3))
-            fwd_t[b, :, :, :, :, :] = torch.cat((ff[b], zeros), dim=0)
-            bwd_t[b, :, :, :, :, :] = torch.cat((bf[b], zeros), dim=0)
-        else:
-            fwd_t[b, :, :, :, :, :] = ff[b]
-            bwd_t[b, :, :, :, :, :] = bf[b]
-
-    # ff = to_tensor(ff)
-    # bf = to_tensor(bf)
-    # print(ff.shape, bf.shape)
-
-    return (pnames, vols, m0s, mks, init_ts, final_ts, fwd_t, bwd_t)
-
-
-def split_train_val_dataset(total_patients: int, val_percent: float = 0.2):
-    val_patients = int(total_patients * val_percent)
-    train_patients = total_patients - val_patients
-    assert((val_patients + train_patients) == total_patients)
-
-    total_idxs = np.arange(total_patients).astype(int)
-    val_idxs = total_idxs[:val_patients]  # First N patients for evaluation
-    train_idxs = total_idxs[val_patients:]  # The rest for training
-    return (train_idxs, val_idxs)
+#     total_idxs = np.arange(total_patients).astype(int)
+#     val_idxs = total_idxs[:val_patients]  # First N patients for evaluation
+#     train_idxs = total_idxs[val_patients:]  # The rest for training
+#     return (train_idxs, val_idxs)
 
 
 class DatasetMode(Enum):
     TRAIN = 1
     VAL = 2
     FULL = 3
+
+
+val_patients = {'Adolescent_1',
+                'Adolescent_20',
+                'Adolescent_53',
+                'Adolescent_62',
+                'Adult_3',
+                'Adult_11',
+                'Adult_24',
+                'Adult_36',
+                'Child_2',
+                'Child_14',
+                'Child_24',
+                'Child_36'}
 
 
 class SingleVentricleDataset(Dataset):
@@ -115,10 +64,12 @@ class SingleVentricleDataset(Dataset):
         self.volume_files = glob(osp.join(self.volumes_path, '*.nii.gz'))
 
         # Split for Train and Test
-        train_idxs, val_idxs = split_train_val_dataset(len(self.volume_files), 0.2)
+        # train_idxs, val_idxs = split_train_val_dataset(len(self.volume_files), 0.2)
         if mode == DatasetMode.TRAIN:
+            train_idxs = self.get_train_idxs()
             self.volume_files = np.asarray(self.volume_files)[train_idxs]
         elif mode == DatasetMode.VAL:
+            val_idxs = self.get_val_idxs()
             self.volume_files = np.asarray(self.volume_files)[val_idxs]
 
         self.segmetations_filename = config.get('DATA', 'SEGMENTATIONS_FILE_NAME')
@@ -149,6 +100,24 @@ class SingleVentricleDataset(Dataset):
             self.flow_level = 'it0'
             self.fwdof_dir = self.config.get('DATA', 'FWD_OPTFLOW_RESULTS_DIR')
             self.bwdof_dir = self.config.get('DATA', 'BWD_OPTFLOW_RESULTS_DIR')
+
+    def get_train_idxs(self):
+        train_idxs = []
+        for i in range(len(self.volume_files)):
+            pname = self.get_patient_name(i)
+            if pname in val_patients:
+                continue
+            else:
+                train_idxs.append(i)
+        return np.asarray(train_idxs)
+
+    def get_val_idxs(self):
+        val_idxs = []
+        for i in range(len(self.volume_files)):
+            pname = self.get_patient_name(i)
+            if pname in val_patients:
+                val_idxs.append(i)
+        return np.asarray(val_idxs)
 
     def __len__(self):
         return len(self.volume_files)
