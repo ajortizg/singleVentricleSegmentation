@@ -3,6 +3,7 @@ import torch
 import os.path as osp
 import sys
 from scipy.ndimage import affine_transform
+import scipy.ndimage
 import torch.nn.functional as F
 import elasticdeform as ed
 import cv2
@@ -202,7 +203,7 @@ class RandomFlipX(FlipBase):
 
 
 class RandomRotate:
-    def __init__(self, p=0.5, range_x: tuple = (-10, 10), range_y: tuple = (0, 0), range_z: tuple = (0, 0)):
+    def __init__(self, p=0.5, range_x: tuple = (0, 0), range_y: tuple = (0, 0), range_z: tuple = (0, 0)):
         self.p = p
         self.range_x = range_x
         self.range_y = range_y
@@ -210,9 +211,9 @@ class RandomRotate:
 
     def __call__(self, vol: torch.Tensor, ms: torch.Tensor, md: torch.Tensor):
         if np.random.rand() < self.p:
-            angx = np.random.uniform(self.range_x[0], self.range_x[1] + 1)
-            angy = np.random.uniform(self.range_y[0], self.range_y[1] + 1)
-            angz = np.random.uniform(self.range_z[0], self.range_z[1] + 1)
+            angx = np.random.uniform(self.range_x[0], self.range_x[1])
+            angy = np.random.uniform(self.range_y[0], self.range_y[1])
+            angz = np.random.uniform(self.range_z[0], self.range_z[1])
             NZ, NY, NX, NT = vol.shape
             CZ, CY, CX = NZ // 2, NY // 2, NX // 2
 
@@ -227,12 +228,12 @@ class RandomRotate:
             tz = CZ - Rot[2, 0] * CX - Rot[2, 1] * CY - Rot[2, 2] * CZ
             offset = np.array([tx, ty, tz])
 
-            vol_n = np.zeros(vol.shape)
+            vol_n = np.zeros(shape=(NX, NY, NZ, NT))
             for t in range(NT):
-                vol_n[:, :, :, t] = affine_transform(vol[:, :, :, t].numpy(), matrix=Rot, offset=offset, order=3, mode='reflect')
-            ms_n = affine_transform(ms.numpy(), matrix=Rot, offset=offset, order=3, mode='reflect')
-            md_n = affine_transform(md.numpy(), matrix=Rot, offset=offset, order=3, mode='reflect')
-            return (torch.from_numpy(vol_n), torch.from_numpy(ms_n), torch.from_numpy(md_n))
+                vol_n[:, :, :, t] = affine_transform(vol[:, :, :, t].swapaxes(0, 2).numpy(), matrix=Rot, offset=offset, order=3, mode='reflect')
+            ms_n = affine_transform(ms.swapaxes(0, 2).numpy(), matrix=Rot, offset=offset, order=3, mode='reflect')
+            md_n = affine_transform(md.swapaxes(0, 2).numpy(), matrix=Rot, offset=offset, order=3, mode='reflect')
+            return (torch.from_numpy(vol_n).swapaxes(0, 2), torch.from_numpy(ms_n).swapaxes(0, 2), torch.from_numpy(md_n).swapaxes(0, 2))
         else:
             return (vol, ms, md)
 

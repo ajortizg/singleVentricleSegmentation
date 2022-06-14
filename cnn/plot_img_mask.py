@@ -18,7 +18,7 @@ config.read('parser/configCNN.ini')
 
 normalize = T.Normalize()
 transf = T.ComposeUnary([T.Normalize()])
-ds = SingleVentricleDataset(config, DatasetMode.TRAIN, load_flow=False, data_transforms=transf)
+ds = SingleVentricleDataset(config, DatasetMode.FULL, load_flow=False, data_transforms=transf)
 save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'ImageMasks')
 
 conifg_output = os.path.sep.join([save_dir, "config.ini"])
@@ -39,8 +39,8 @@ for (pname, data, m0, mk, init_ts, final_ts, _, _) in ds:
     # # plots.save_img_mask_slices(u0, m0, f'{pname}_u0_m0.png', patient_dir)
     # # plots.save_img_mask_slices(uk, mk, f'{pname}_uk_mk.png', patient_dir)
 
-    plots.save_img_mask_slices(u0, plots.erode_mask(m0), f'{pname}_border_u0_m0.png', patient_dir, color=[0, 0, 1], alpha=0.5)
-    plots.save_img_mask_slices(uk, plots.erode_mask(mk), f'{pname}_border_uk_mk.png', patient_dir, color=[0, 0, 1], alpha=0.5)
+    plots.save_img_mask_slices(u0, T.Erode()(m0), f'{pname}_border_u0_m0.png', patient_dir, color=[0, 0, 1], alpha=0.5)
+    plots.save_img_mask_slices(uk, T.Erode()(mk), f'{pname}_border_uk_mk.png', patient_dir, color=[0, 0, 1], alpha=0.5)
     # # plots.save_img_mask_single_zslices(u0, m0, patient_dir, 'u0_m0_slices')
     # # plots.save_img_mask_single_zslices(uk, mk, patient_dir, 'uk_mk_slices')
     pbar.update(1)

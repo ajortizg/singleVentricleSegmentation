@@ -47,9 +47,9 @@ if __name__ == "__main__":
 
     # Create train and validation datasets
     data_transforms = T.ComposeUnary([T.Normalize(), T.PadTime(maxt=40)])
-    data_mask_transforms = T.ComposeTernary([T.Resize(size=(16, 90, 90))])
+    data_mask_transforms = T.ComposeTernary([T.Resize(size=(14, 90, 90))])
     mask_transforms = T.ComposeUnary([T.Round(th=0.5)])
-    flow_transforms = T.ComposeUnary([T.ResizeFlow3d(size=(16, 90, 90))])
+    flow_transforms = T.ComposeUnary([T.ResizeFlow3d(size=(14, 90, 90))])
 
     train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, load_flow=True,
                                       data_transforms=data_transforms,

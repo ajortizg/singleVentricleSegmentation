@@ -26,13 +26,13 @@ if __name__ == "__main__":
     config.read('parser/configCNN.ini')
 
     transf = T.ComposeTernary([
-        T.RandomFlipZ(p=0.5),
-        T.RandomFlipY(p=0.5),
-        T.RandomFlipX(p=0.5),
-        T.RandomRotate(p=1.0, range_x=(-10, 10))])
+        # T.RandomFlipZ(p=0.5),
+        # T.RandomFlipY(p=0.5),
+        # T.RandomFlipX(p=0.5),
+        T.RandomRotate(p=1.0, range_z=(-180, 180))])
 
     train_ds = SingleVentricleDataset(config, DatasetMode.VAL, load_flow=False)
-    # val_ds = SingleVentricleDataset(config, DatasetMode.VAL, load_flow=False)
+    val_ds = SingleVentricleDataset(config, DatasetMode.VAL, load_flow=False)
     save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'DA')
     save_dir_vol = plots.createSubDirectory(save_dir, train_ds.volumes_subdir_path)
     save_dir_masks = plots.createSubDirectory(save_dir, train_ds.segmentations_subdir_path)
@@ -46,7 +46,7 @@ if __name__ == "__main__":
     df = pd.DataFrame(columns=['Name', 'Systole', 'Diastole'])
     # pbar = tqdm(total=len(train_ds) + len(val_ds))
     pbar = tqdm(total=len(train_ds))
-    
+
     # Generate augmented training dataset
     for (patient_name, vol, *_) in train_ds:
         pbar.set_postfix_str(f'P: {patient_name}')
@@ -67,7 +67,7 @@ if __name__ == "__main__":
             df = pd.concat([df, df_patient], ignore_index=True)
         pbar.update(1)
 
-    # # Save valdation data
+    # # Save validation data
     # for (patient_name, vol, *_) in val_ds:
     #     ms, md = train_ds.systole_diastole_mask(patient_name)
     #     ts, td = train_ds.systole_diastole_time(patient_name)
