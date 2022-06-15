@@ -31,6 +31,12 @@ on windows:
 * New-Item -ItemType SymbolicLink -Target "C:\Users\...\results\" -Path "C:\Users\...\singleVentricleSegmentation\results"
 
 
+## preprocessing 
+
+first cut the original data:
+use python ./preprocessing/preprocessing_cutting.py
+
+
 ## TODOs
 
 ### saving
