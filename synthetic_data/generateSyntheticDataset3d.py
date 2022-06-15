@@ -10,10 +10,10 @@ import torch
 import pandas
 import os.path as osp
 
-utils_lib_path = osp.abspath(osp.join(osp.dirname(__file__), '../utils'))
-sys.path.append(utils_lib_path)
-import plots
-import torch_utils
+ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
+sys.path.append(ROOT_DIR)
+from utils import plots
+from utils import torch_utils
 
 
 class NoiseType(Enum):

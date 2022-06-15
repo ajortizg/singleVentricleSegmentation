@@ -15,6 +15,7 @@
 * pip install pandas
 * pip install openpyxl
 * pip install torchsummary
+* pip install elasticdeform
 
 to install setup file:
 * pip install . 
@@ -41,8 +42,3 @@ on windows:
 * convergence in number of warpings?
 * influence of smoothing the input images or using ROF-output as input
 * check Moreau identity u = prox_{tau F}(u) + tau prox_{F^{*}/tau}(u/tau) = u
-
-### cnn
-* analytic derivative L2 and Hubber loos functions
-* identity warping
-* compare cnn results with identity warping

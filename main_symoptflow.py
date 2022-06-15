@@ -1,17 +1,10 @@
-import sys
-import nibabel as nib
-import numpy as np
 import os.path as osp
-import matplotlib.pyplot as plt
 import os
 from enum import Enum
 from TVL1OF.TVL1SymOF3D import *
 from cnn.dataset import SingleVentricleDataset
-import csv
-utils_lib_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'utils'))
-sys.path.append(utils_lib_path)
-import plots
-import torch_utils
+from utils import plots
+from utils import torch_utils
 
 
 class OpticalFlowMode(Enum):
@@ -39,12 +32,12 @@ if __name__ == "__main__":
         CUDA_DEVICE = config.getint('DEVICE', 'cuda_device')
         torch.cuda.set_device(CUDA_DEVICE)
 
-        #test 
+        # test
         device_id = torch.cuda.device_count()
         device_name = torch.cuda.get_device_name(range(device_id))
-        print( "CUDA_DEVICE = ", CUDA_DEVICE )
-        print( "device_id = ", device_id )
-        print( "device_name = ", device_name )
+        print("CUDA_DEVICE = ", CUDA_DEVICE)
+        print("device_id = ", device_id)
+        print("device_name = ", device_name)
     else:
         DEVICE = 'cpu'
 
