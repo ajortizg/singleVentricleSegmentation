@@ -25,7 +25,7 @@ if __name__ == "__main__":
     config = configparser.ConfigParser()
     config.read('parser/configCNN.ini')
 
-    transf = T.ComposeTernary([T.Resize(size=(14, 90, 90))])
+    transf = T.ComposeTernary([T.Resize(size=(16, 96, 96))])
 
     ds = SingleVentricleDataset(config, DatasetMode.FULL, load_flow=False)
     save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'singleVentricleData_cut_r')

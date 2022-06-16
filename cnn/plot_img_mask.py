@@ -25,6 +25,8 @@ conifg_output = os.path.sep.join([save_dir, "config.ini"])
 with open(conifg_output, 'w') as configfile:
     config.write(configfile)
 
+print(ds.validation_patients)
+
 pbar = tqdm(total=len(ds))
 for (pname, data, m0, mk, init_ts, final_ts, _, _) in ds:
     pbar.set_postfix_str(f'P: {pname}')
@@ -32,15 +34,7 @@ for (pname, data, m0, mk, init_ts, final_ts, _, _) in ds:
     uk = data[:, :, :, final_ts]
 
     patient_dir = plots.createSubDirectory(save_dir, pname)
-    # # save_slices(u0, f'{pname}_u0.png', patient_dir)
-    # # save_slices(uk, f'{pname}_uk.png', patient_dir)
-    # # save_slices(m0, f'{pname}_m0.png', patient_dir)
-    # # save_slices(mk, f'{pname}_mk.png', patient_dir)
-    # # plots.save_img_mask_slices(u0, m0, f'{pname}_u0_m0.png', patient_dir)
-    # # plots.save_img_mask_slices(uk, mk, f'{pname}_uk_mk.png', patient_dir)
-
-    plots.save_img_mask_slices(u0, T.Erode()(m0), f'{pname}_border_u0_m0.png', patient_dir, color=[0, 0, 1], alpha=0.5)
-    plots.save_img_mask_slices(uk, T.Erode()(mk), f'{pname}_border_uk_mk.png', patient_dir, color=[0, 0, 1], alpha=0.5)
-    # # plots.save_img_mask_single_zslices(u0, m0, patient_dir, 'u0_m0_slices')
-    # # plots.save_img_mask_single_zslices(uk, mk, patient_dir, 'uk_mk_slices')
+    plots.save_img_masks(u0, [m0], f'{pname}_u0_m0.png', patient_dir, th=0.5, alphas=[0.3], colors=[[1, 0.75, 0]])
+    plots.save_img_masks(uk, [mk], f'{pname}_uk_mk.png', patient_dir, th=0.5, alphas=[0.3], colors=[[0, 0.75, 1]])
+   
     pbar.update(1)
