@@ -51,6 +51,7 @@ def getMeshLength(config,NZ,NY,NX):
         LX = config.getfloat('PARAMETERS', "LenghtX")
         return LZ, LY, LX
 
+
 if __name__ == "__main__":
 
     print("\n\n")
@@ -63,7 +64,7 @@ if __name__ == "__main__":
 
     # load config parser
     config = configparser.ConfigParser()
-    config.read('parser/configTVL1OF3D.ini')
+    config.read('parser/configPreprocessing.ini')
     cuda_availabe = config.get('DEVICE', 'cuda_availabe')
     DEVICE = "cuda" if cuda_availabe else "cpu"
 
@@ -90,8 +91,14 @@ if __name__ == "__main__":
     else:
         raise Exception("wrong BoundaryType in configParser")
 
+    # prolongation size
+    NX_prolong = config.getint('PROLONGATION', 'NX_prolong')
+    NY_prolong = config.getint('PROLONGATION', 'NY_prolong')
+    NZ_prolong = config.getint('PROLONGATION', 'NZ_prolong')
+    LZ_prolong,LY_prolong,LX_prolong = getMeshLength(config,NZ_prolong,NY_prolong,NX_prolong)
+
     # create save directory
-    saveDir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), "preprocessing3D_prolongation" )
+    saveDir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), "preprocessing_prolongation" )
 
     #save config file to save directory
     conifgOutput = os.path.sep.join([saveDir, "config.ini"])
@@ -143,17 +150,20 @@ if __name__ == "__main__":
 
         #read zooms from nifty file
         zooms = vol_hdr.get_zooms()
-        zoomX = round(zooms[0])
-        zoomY = round(zooms[1])
-        zoomZ = round(zooms[2])
+        # zoomX = round(zooms[0])
+        # zoomY = round(zooms[1])
+        # zoomZ = round(zooms[2])
+        zoomX = zooms[0]
+        zoomY = zooms[1]
+        zoomZ = zooms[2]
         zoomT = zooms[3]
+        # NZ_prolong,NY_prolong,NX_prolong = zoomZ*NZ,zoomY*NY,zoomX*NX
 
-        #generate old mesh and new mesh for prolongation 
+        #generate old mesh 
         LZ,LY,LX = getMeshLength(config,NZ,NY,NX)
         meshInfo_old = opticalFlow.MeshInfo3D(NZ,NY,NX,LZ,LY,LX)
 
-        NZ_prolong,NY_prolong,NX_prolong = zoomZ*NZ,zoomY*NY,zoomX*NX
-        LZ_prolong,LY_prolong,LX_prolong = getMeshLength(config,NZ_prolong,NY_prolong,NX_prolong)
+        #generate new mesh for prolongation 
         meshInfo_new = opticalFlow.MeshInfo3D(NZ_prolong,NY_prolong,NX_prolong,LZ_prolong,LY_prolong,LX_prolong)
         prolongationOp = opticalFlow.Prolongation3D(meshInfo_old,meshInfo_new,InterpolationTypeCuda,BoundaryTypeCuda)
 

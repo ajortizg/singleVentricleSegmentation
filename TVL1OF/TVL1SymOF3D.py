@@ -338,10 +338,11 @@ class TVL1SymOpticalFlow3D:
         diff = torch.abs(Ir_warped - Ic)
         save_slices(diff, f"Diff_Irwarped_to_Ic_it{step}.png", saveDirStep)
         save_single_zslices(diff, saveDirStep, "Diff_Irwarped_to_Ic_Slices", 1., 0)
-        print("norm of diff = ", diff.norm().item())
-        numZSlices = diff.shape[0]
-        for z in range(numZSlices):
-            print(" norm of diff(z=", z, ") = ", diff[z, :, :].norm().item())
+        #test
+        # print("norm of diff = ", diff.norm().item())
+        # numZSlices = diff.shape[0]
+        # for z in range(numZSlices):
+        #     print(" norm of diff(z=", z, ") = ", diff[z, :, :].norm().item())
 
 
         #save flow
