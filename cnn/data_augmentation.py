@@ -31,7 +31,7 @@ if __name__ == "__main__":
         # T.RandomFlipX(p=0.5),
         T.RandomRotate(p=1.0, range_z=(-180, 180))])
 
-    train_ds = SingleVentricleDataset(config, DatasetMode.VAL, load_flow=False)
+    train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, load_flow=False)
     val_ds = SingleVentricleDataset(config, DatasetMode.VAL, load_flow=False)
     save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'DA')
     save_dir_vol = plots.createSubDirectory(save_dir, train_ds.volumes_subdir_path)

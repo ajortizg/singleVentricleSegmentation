@@ -333,20 +333,6 @@ class TVL1OpticalFlow3D:
             fileNameFlow = os.path.join(saveDirStep, flowName)
             torch.save(torch.from_numpy(uf).to(self.DEVICE), fileNameFlow)
 
-        # umf_x = ndimage.median_filter(u_np[:, :, :, 0], size=3)
-        # umf_y = ndimage.median_filter(u_np[:, :, :, 1], size=3)
-        # umf_z = ndimage.median_filter(u_np[:, :, :, 2], size=3)
-        # umf = np.stack((umf_x, umf_y, umf_z), axis=3)
-        # umf = ndimage.median_filter(u_np, size=(3, 3, 3, 1))
-        # plotOpticalFlow3D(umf, "umf", saveDirStep, step)
-
-        # ak = 1 / 27 * np.ones((3, 3, 3, 1))
-        # uaf_x = ndimage.convolve(u_np[:, :, :, 0], weights=ak, mode='constant', cval=0.0)
-        # uaf_y = ndimage.convolve(u_np[:, :, :, 1], weights=ak, mode='constant', cval=0.0)
-        # uaf_z = ndimage.convolve(u_np[:, :, :, 2], weights=ak, mode='constant', cval=0.0)
-        # uaf = np.stack((uaf_x, uaf_y, uaf_z), axis=3)
-        # uaf = ndimage.convolve(u_np, ak, mode='constant', cval=0.0)
-        # plotOpticalFlow3D(uaf, "uaf", saveDirStep, step)
 
         # save3D_torch_to_nifty(I0, saveDirStep, f"I0.nii")
         # save_slices(I0, f"I0_it{step}.png", saveDirStep)
