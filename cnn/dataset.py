@@ -76,7 +76,7 @@ class SingleVentricleDataset(Dataset):
             self.bwdof_dir = self.config.get('DATA', 'BWD_OPTFLOW_RESULTS_DIR')
 
     def get_train_idxs(self):
-        validation_patients = self.get_validation_patients()
+        validation_patients = self.config.get('DATA', 'VALIDATION_PATIENTS')
         train_idxs = []
         for i in range(len(self.volume_files)):
             pname = self.get_patient_name(i)
@@ -87,18 +87,13 @@ class SingleVentricleDataset(Dataset):
         return np.asarray(train_idxs)
 
     def get_val_idxs(self):
-        validation_patients = self.get_validation_patients()
+        validation_patients = self.config.get('DATA', 'VALIDATION_PATIENTS')
         val_idxs = []
         for i in range(len(self.volume_files)):
             pname = self.get_patient_name(i)
             if pname in validation_patients:
                 val_idxs.append(i)
         return np.asarray(val_idxs)
-
-    def get_validation_patients(self):
-        val_str = self.config.get('DATA', 'VALIDATION_PATIENTS')
-        validation_patients = set(val_str.split(','))
-        return validation_patients
 
     def __len__(self):
         return len(self.volume_files)
