@@ -112,13 +112,13 @@ def save_weights(net: Module, epoch: int, every: int, save_dir: str, filename: s
 
 # ------------------------------------ BATCH OPERATIONS ------------------------------------
 
-def train_batch(net, opt, train_loader, pbar, DEVICE):
+def train_batch(net, opt, train_loader, pbar, config, DEVICE):
     net.train()
     total_train_loss = 0
 
     for i, (pnames, vols, m0s, mks, init_ts, final_ts, ff, bf, grid, offsets) in enumerate(train_loader):
         pbar.set_postfix_str(f'Train I: {i+1}')
-        mts, mtts = time_popagation_batch(net, vols, m0s, mks, init_ts, final_ts, ff, bf, grid, offsets, DEVICE)
+        mts, mtts = time_popagation_batch(net, vols, m0s, mks, init_ts, final_ts, ff, bf, grid, offsets, config, DEVICE)
 
         # train_loss, *_ = loss_func_complete(mts, mtts)
         train_loss = loss_func_batch(mts, mtts, offsets)
@@ -131,96 +131,48 @@ def train_batch(net, opt, train_loader, pbar, DEVICE):
     return total_train_loss
 
 
-def val_batch(net, val_loader, pbar, DEVICE):
+def val_batch(net, val_loader, pbar, config, DEVICE):
     net.eval()
     total_val_loss = 0
 
     with torch.no_grad():
         for i, (pnames, vols, m0s, mks, init_ts, final_ts, ff, bf, grid, offsets) in enumerate(val_loader):
             pbar.set_postfix_str(f'Val I: {i+1}')
-            mts, mtts = time_popagation_batch(net, vols, m0s, mks, init_ts, final_ts, ff, bf, grid, offsets, DEVICE)
+            mts, mtts = time_popagation_batch(net, vols, m0s, mks, init_ts, final_ts, ff, bf, grid, offsets, config, DEVICE)
 
             val_loss = loss_func_batch(mts, mtts, offsets)
             total_val_loss += val_loss.item()
     return total_val_loss
 
 
-def time_popagation_batch(net, vols, m0s, mks, init_ts, final_ts, ff, bf, grid, offsets, DEVICE):
+def time_popagation_batch(net, vols, m0s, mks, init_ts, final_ts, ff, bf, grid, offsets, config, DEVICE):
     mts = [m0s.to(DEVICE)]
     mtts = [mks.to(DEVICE)]
     grid = grid.to(DEVICE)
     flow_times = ff.shape[1]
     diff_t = flow_times - offsets
-
-    # t1 = Thread(target=forward_prop, args=(net, flow_times, vols, mts, init_ts, final_ts, grid, ff, diff_t, DEVICE), daemon=True)
-    # t2 = Thread(target=backward_prop, args=(net, flow_times, vols, mtts, init_ts, final_ts, grid, bf, diff_t, DEVICE), daemon=True)
-    # t1.start()
-    # t2.start()
-    # t1.join()
-    # t2.join()
+    NZ, NY, NX = m0s.shape[2:]
+    warp = Warp(config, NZ, NY, NX)
 
     for t in range(flow_times):
         # Forward propagation m0 -> mk
-        mt = torch_utils.warp(mts[-1], grid + ff[:, t, :, :, :, :].to(DEVICE))
+        # mt = torch_utils.warp(mts[-1], grid + ff[:, t, :, :, :, :].to(DEVICE))
+        mt = warp(mts[-1].squeeze(), ff[:, t, :, :, :, :].squeeze().to(DEVICE)).unsqueeze(0).unsqueeze(0)
         data_t = select_volume_fwd(vols, init_ts, final_ts, t, diff_t).to(DEVICE)
         x = torch.cat((data_t, mt), dim=1)
         x = net(x)
         mts.append(x)
 
         # Backward propagation mk -> m0
-        mtt = torch_utils.warp(mtts[-1], grid + bf[:, t, :, :, :, :].to(DEVICE))
+        # mtt = torch_utils.warp(mtts[-1], grid + bf[:, t, :, :, :, :].to(DEVICE))
+        mtt = warp(mtts[-1].squeeze(), bf[:, t, :, :, :, :].squeeze().to(DEVICE)).unsqueeze(0).unsqueeze(0)
         data_t = select_volume_bwd(vols, init_ts, final_ts, t, diff_t).to(DEVICE)
         x = torch.cat((data_t, mtt), dim=1)
         x = net(x)
         mtts.append(x)
-    mtts.reverse()
 
+    mtts.reverse()
     return (mts, mtts)
-
-
-def forward_prop(net, flow_times, vols, mts, init_ts, final_ts, grid, ff, diff_t, DEVICE):
-    for t in range(flow_times):
-        # Forward propagation m0 -> mk
-        mt = torch_utils.warp(mts[-1], grid + ff[:, t, :, :, :, :].to(DEVICE))
-        data_t = select_volume_fwd(vols, init_ts, final_ts, t, diff_t).to(DEVICE)
-        x = torch.cat((data_t, mt), dim=1)
-        x = net(x)
-        mts.append(x)
-
-
-def backward_prop(net, flow_times, vols, mtts, init_ts, final_ts, grid, bf, diff_t, DEVICE):
-    for t in range(flow_times):
-        # Backward propagation mk -> m0
-        mtt = torch_utils.warp(mtts[-1], grid + bf[:, t, :, :, :, :].to(DEVICE))
-        data_t = select_volume_bwd(vols, init_ts, final_ts, t, diff_t).to(DEVICE)
-        x = torch.cat((data_t, mtt), dim=1)
-        x = net(x)
-        mtts.append(x)
-    mtts.reverse()
-
-
-def batch_warping(ff, bf, grid, mt, mtt):
-    # mt_b = torch.zeros(size=info.net_shape(), dtype=info.dtype, device=info.device)
-    # mtt_b = torch.zeros(size=info.net_shape(), dtype=info.dtype, device=info.device)
-
-    mt = torch_utils.warp(mt, grid + ff, mode='bilinear')
-    mtt = torch_utils.warp(mtt, grid + bf, mode='bilinear')
-
-    # for b in range(info.BS):
-    #     uf = ff[b]
-    #     ub = bf[b]
-    #     maxts = uf.shape[0]
-    #     if t < maxts:
-    #         # mt = warp((mts[-1][b, :, :, :, :]).squeeze(), uf[t, :, :, :, :].to(info.device)).reshape(info.warp_shape())
-    #         # mt_b[b, :, :, :, :] = mt
-    #         # mtt = warp((mtts[-1][b, :, :, :, :]).squeeze(), ub[t, :, :, :, :].to(info.device)).reshape(info.warp_shape())
-    #         # mtt_b[b, :, :, :, :] = mtt
-    #         mt_b = torch_utils.warp(mts[-1], grid + uf, mode='bilinear')
-    #         mtt_b = torch_utils.warp(mtts[-1], grid + bf, mode='bilinear')
-    #     else:
-    #         mt_b[b, :, :, :, :] = torch.zeros(size=info.warp_shape(), dtype=info.dtype, device=info.device)
-    #         mtt_b[b, :, :, :, :] = torch.zeros(size=info.warp_shape(), dtype=info.dtype, device=info.device)
-    return (mt, mtt)
 
 
 def select_volume_fwd(vols: torch.Tensor, init_ts: torch.Tensor, final_ts: torch.Tensor, cur_t: int, diff_t: torch.Tensor) -> torch.Tensor:
@@ -237,7 +189,7 @@ def select_volume_fwd(vols: torch.Tensor, init_ts: torch.Tensor, final_ts: torch
         else:
             vols_t[b, :, :, :, :] = vols[b, :, :, :, :, ts[b]]
             # print(f'normal: b: {b} - {cur_t} - {ts[b]}')
-            
+
     return vols_t
 
 

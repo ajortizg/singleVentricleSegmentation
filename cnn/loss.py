@@ -5,7 +5,6 @@ import sys
 
 def loss_func_complete(mts, mtts):
     mse_loss = nn.MSELoss(reduction='sum')
-  
     l1 = torch.tensor([1.0])
     N = len(mtts)
     loss = 0
@@ -13,6 +12,7 @@ def loss_func_complete(mts, mtts):
         loss += mse_loss(mts[i], mtts[i])
     loss = loss / N
     return (loss, l1, l1, l1)
+
 
 def loss_func_three(mts, mtts):
     mse_loss = nn.MSELoss(reduction='sum')
@@ -33,7 +33,7 @@ def loss_func_three(mts, mtts):
 
 
 def loss_func_batch(mts, mtts, offsets):
-    mse_loss = nn.MSELoss(reduction='mean')
+    mse_loss = nn.MSELoss(reduction='sum')
     # {m0, m1, m2, m3, m4, m4, m4}, {m0, m1, m2, m3, m4, m5, m6}
     # offsets = [2, 0]
 
@@ -56,22 +56,21 @@ def loss_func_batch(mts, mtts, offsets):
     # {m0_b0, m0_b1}    mtts[6]     |   {m4_b0, m6_b1}    mtts[6]
 
     BS = mts[0].shape[0]
-    num_ts = len(mts)
+    timesteps = len(mts)
     loss = 0
-    # total_n = 0
+    N = 0
 
-    for k in range(num_ts):
+    for k in range(timesteps):
         mt = mts[k]
-        # mtt = torch.zeros_like(mt)
 
         for b in range(BS):
             idx = k + offsets[b]
-            if idx < num_ts:
+            if idx < timesteps:
                 mt_b = mt[b, :, :, :, :].unsqueeze(0)
                 mtt_b = mtts[idx][b, :, :, :, :].unsqueeze(0)
                 loss += mse_loss(mt_b, mtt_b)
-                # total_n += 1
-    # loss = loss / total_n
+                N += 1
+    loss = loss / (BS * N)
     return loss
 
 

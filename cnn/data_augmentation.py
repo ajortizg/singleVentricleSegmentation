@@ -22,14 +22,41 @@ def save_patient_data(vol, ms, md, ts, td, save_dir_vol, save_dir_masks, patient
 
 
 if __name__ == "__main__":
+    print("===========================================================")
+    print("Data augmentation")
+    print("===========================================================")
+
     config = configparser.ConfigParser()
-    config.read('parser/configCNN.ini')
+    config.read('parser/configDataAugmentation.ini')
+
+    FLIP_X_PROB = config.getfloat('PARAMETERS', 'FLIP_X_PROB')
+    FLIP_Y_PROB = config.getfloat('PARAMETERS', 'FLIP_Y_PROB')
+    FLIP_Z_PROB = config.getfloat('PARAMETERS', 'FLIP_Z_PROB')
+
+    ROT_PROB = config.getfloat('PARAMETERS', 'ROT_PROB')
+    ROT_Z_RANGE = tuple(map(float, config.get('PARAMETERS', 'ROT_Z_RANGE').split(',')))
+    ROT_Y_RANGE = tuple(map(float, config.get('PARAMETERS', 'ROT_Y_RANGE').split(',')))
+    ROT_X_RANGE = tuple(map(float, config.get('PARAMETERS', 'ROT_X_RANGE').split(',')))
+
+    ELASTIC_DEFORM_PROB = config.getfloat('PARAMETERS', 'ELASTIC_DEFORM_PROB')
+    ELASTIC_DEFORM_GRID = config.getint('PARAMETERS', 'ELASTIC_DEFORM_GRID')
+    ELASTIC_DEFORM_SIGMA = config.getfloat('PARAMETERS', 'ELASTIC_DEFORM_SIGMA')
+
+    SAVE_ORIGINAL_DATA = config.getboolean('PARAMETERS', 'SAVE_ORIGINAL_DATA')
+    SAVE_VAL_DATA = config.getboolean('PARAMETERS', 'SAVE_VAL_DATA')
+    N = config.getint('PARAMETERS', 'CREATE_NEW')
 
     transf = T.ComposeTernary([
-        # T.RandomFlipZ(p=0.5),
-        # T.RandomFlipY(p=0.5),
-        # T.RandomFlipX(p=0.5),
-        T.RandomRotate(p=1.0, range_z=(-180, 180))])
+        T.RandomFlipZ(p=FLIP_Z_PROB),
+        T.RandomFlipY(p=FLIP_Y_PROB),
+        T.RandomFlipX(p=FLIP_X_PROB),
+        T.RandomRotate(p=ROT_PROB, range_z=ROT_Z_RANGE, range_y=ROT_Y_RANGE, range_x=ROT_X_RANGE)])
+
+    print(f'\t* Create: {N} new patientes')
+    print(f'\t* Flip probs: {FLIP_X_PROB}, {FLIP_Y_PROB}, {FLIP_Z_PROB}')
+    print(f'\t* Rot prob: {ROT_PROB}, with ranges: {ROT_X_RANGE}, {ROT_Y_RANGE}, {ROT_Z_RANGE}')
+    print(f'\t* Elastic def prob: {ELASTIC_DEFORM_PROB}, grid: {ELASTIC_DEFORM_GRID}, sigma: {ELASTIC_DEFORM_SIGMA}')
+    print()
 
     train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, load_flow=False)
     val_ds = SingleVentricleDataset(config, DatasetMode.VAL, load_flow=False)
@@ -42,10 +69,8 @@ if __name__ == "__main__":
     with open(conifg_output, 'w') as configfile:
         config.write(configfile)
 
-    N = 5
     df = pd.DataFrame(columns=['Name', 'Systole', 'Diastole'])
-    # pbar = tqdm(total=len(train_ds) + len(val_ds))
-    pbar = tqdm(total=len(train_ds))
+    pbar = tqdm(total=len(train_ds) + (len(val_ds) if SAVE_VAL_DATA else 0))
 
     # Generate augmented training dataset
     for (patient_name, vol, *_) in train_ds:
@@ -55,8 +80,9 @@ if __name__ == "__main__":
         ts, td = train_ds.systole_diastole_time(patient_name)
 
         # Save original data
-        df_patient = save_patient_data(vol, ms, md, ts, td, save_dir_vol, save_dir_masks, patient_name)
-        df = pd.concat([df, df_patient], ignore_index=True)
+        if SAVE_ORIGINAL_DATA:
+            df_patient = save_patient_data(vol, ms, md, ts, td, save_dir_vol, save_dir_masks, patient_name)
+            df = pd.concat([df, df_patient], ignore_index=True)
 
         # Generate new data
         for i in range(N):
@@ -67,12 +93,13 @@ if __name__ == "__main__":
             df = pd.concat([df, df_patient], ignore_index=True)
         pbar.update(1)
 
-    # # Save validation data
-    # for (patient_name, vol, *_) in val_ds:
-    #     ms, md = train_ds.systole_diastole_mask(patient_name)
-    #     ts, td = train_ds.systole_diastole_time(patient_name)
-    #     df_patient = save_patient_data(vol, ms, md, ts, td, save_dir_vol, save_dir_masks, patient_name)
-    #     df = pd.concat([df, df_patient], ignore_index=True)
-    #     pbar.update(1)
+    # Save validation data
+    if SAVE_VAL_DATA:
+        for (patient_name, vol, *_) in val_ds:
+            ms, md = train_ds.systole_diastole_mask(patient_name)
+            ts, td = train_ds.systole_diastole_time(patient_name)
+            df_patient = save_patient_data(vol, ms, md, ts, td, save_dir_vol, save_dir_masks, patient_name)
+            df = pd.concat([df, df_patient], ignore_index=True)
+            pbar.update(1)
 
     df.to_excel(osp.join(save_dir, train_ds.segmetations_filename))

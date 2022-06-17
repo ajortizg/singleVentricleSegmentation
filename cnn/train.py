@@ -46,21 +46,23 @@ if __name__ == "__main__":
     VERBOSE = config.getboolean('DEBUG', 'VERBOSE')
 
     # Create train and validation datasets
-    data_transforms = T.ComposeUnary([T.Normalize(), T.PadTime(maxt=40)])
-    data_mask_transforms = T.ComposeTernary([T.Resize(size=(14, 90, 90))])
-    mask_transforms = T.ComposeUnary([T.Round(th=0.5)])
-    flow_transforms = T.ComposeUnary([T.ResizeFlow3d(size=(14, 90, 90))])
+    # data_transforms = T.ComposeUnary([T.Normalize(), T.PadTime(maxt=40)])
+    # data_mask_transforms = T.ComposeTernary([T.Resize(size=(14, 90, 90))])
+    # mask_transforms = T.ComposeUnary([T.Round(th=0.5)])
+    # flow_transforms = T.ComposeUnary([T.ResizeFlow3d(size=(14, 90, 90))])
+
+    data_transforms = T.ComposeUnary([T.Normalize()])
 
     train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, load_flow=True,
                                       data_transforms=data_transforms,
-                                      mask_transforms=mask_transforms,
-                                      data_mask_transforms=data_mask_transforms,
-                                      flow_transforms=flow_transforms)
+                                      mask_transforms=None,
+                                      data_mask_transforms=None,
+                                      flow_transforms=None)
     val_ds = SingleVentricleDataset(config, DatasetMode.VAL, load_flow=True,
                                     data_transforms=data_transforms,
-                                    mask_transforms=mask_transforms,
-                                    data_mask_transforms=data_mask_transforms,
-                                    flow_transforms=flow_transforms)
+                                    mask_transforms=None,
+                                    data_mask_transforms=None,
+                                    flow_transforms=None)
 
     # Create data loaders
     train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=SHUFFLE, num_workers=os.cpu_count(), collate_fn=cnn_utils.collate_fn)
@@ -78,13 +80,14 @@ if __name__ == "__main__":
         print(f"\t* Patients for validation: {len(val_ds)}")
         print(f'\t* Device: {DEVICE}')
         print(f'\t* Learning rate: {LR}')
+        print(f'\t* Batch size: {BATCH_SIZE}')
         print(f'\t* Num epochs: {NUM_EPOCHS}')
         print("===========================================================")
         print("\n")
 
     net = torch.nn.DataParallel(net, device_ids=[0, 1, 2, 3])
     opt = Adam(net.parameters(), lr=LR, weight_decay=WEIGHT_DECAY, betas=(BETA1, BETA2))
-    # wd = StepLR(opt, step_size=STEP_SIZE, gamma=GAMMA)
+    schedule_lr = StepLR(opt, step_size=STEP_SIZE, gamma=GAMMA)
 
     save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'CNN')
     writer = SummaryWriter(log_dir=save_dir)
@@ -104,13 +107,14 @@ if __name__ == "__main__":
     H = {"train_loss": [], "val_loss": []}
 
     print('[INFO]: Trainig CNN')
-    normalize = T.Normalize()
+
     pbar = tqdm(total=NUM_EPOCHS)
     tic = time.time()
     for e in range(NUM_EPOCHS):
-        total_train_loss = cnn_utils.train_batch(net, opt, train_loader, pbar, DEVICE)
-        total_val_loss = cnn_utils.val_batch(net, val_loader, pbar, DEVICE)
+        total_train_loss = cnn_utils.train_batch(net, opt, train_loader, pbar, config, DEVICE)
+        total_val_loss = cnn_utils.val_batch(net, val_loader, pbar, config, DEVICE)
 
+        schedule_lr.step()
         avg_train_loss = total_train_loss / train_steps
         avg_val_loss = total_val_loss / val_steps
         H['train_loss'].append(avg_train_loss)

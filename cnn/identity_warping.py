@@ -69,17 +69,8 @@ pbar = tqdm(total=len(ds))
 posp_masks = T.ComposeUnary([T.Normalize(), T.Erode()])
 for (pname, vol, m0, mk, init_ts, final_ts, ff, bf) in ds:
     NZ, NY, NX, NT = vol.shape
-    info = BatchInfo(1, NZ, NY, NX, vol.dtype, DEVICE)
     grid = torch_utils.create_grid(NZ, NY, NX).unsqueeze(0).to(DEVICE)
-    print(grid.shape)
-    xt = torch.cat([grid for _ in range(4)], dim=0)
 
-    print(xt.shape)
-    print(torch.equal(grid.squeeze(), xt[0, :, :, :]))
-    print(torch.equal(grid.squeeze(), xt[1, :, :, :]))
-    print(torch.equal(grid.squeeze(), xt[2, :, :, :]))
-    print(torch.equal(grid.squeeze(), xt[3, :, :, :]))
-    # grid.unsqueeze_(0)
     # patient_dir = plots.createSubDirectory(save_dir, pname)
     # plots.save_slices(m0, 'm0.png', patient_dir)
     # plots.save_slices(mk, 'mk.png', patient_dir)
@@ -106,7 +97,7 @@ for (pname, vol, m0, mk, init_ts, final_ts, ff, bf) in ds:
         #     color2=[0, 0, 1])
         u = ff[t, :, :, :, :].unsqueeze(0).to(DEVICE)
         # mt = warp(mts[-1], u)
-        mt = torch_utils.warp(mts[-1].reshape(info.net_shape()), grid + u).squeeze()
+        mt = torch_utils.warp(mts[-1].unsqueeze(0).unsqueeze(0), grid + u).squeeze()
         mts.append(mt)
 
         # Backward mask propagation mk -> m0
@@ -119,7 +110,7 @@ for (pname, vol, m0, mk, init_ts, final_ts, ff, bf) in ds:
         #                            alpha=0.5)
         u = bf[t, :, :, :, :].unsqueeze(0).to(DEVICE)
         # mtt = warp(mtts[-1], u)
-        mtt = torch_utils.warp(mtts[-1].reshape(info.net_shape()), grid + u).squeeze()
+        mtt = torch_utils.warp(mtts[-1].unsqueeze(0).unsqueeze(0), grid + u).squeeze()
         mtts.append(mtt)
 
     mtts.reverse()
@@ -130,13 +121,6 @@ for (pname, vol, m0, mk, init_ts, final_ts, ff, bf) in ds:
     row.append('{:.2f}'.format(l2.item()))
     row.append('{:.2f}'.format(l3.item()))
     row.append('{:.2f}'.format(loss.item()))
-
-    # for k in range(len(mtts)):
-    #     diff = torch.abs(mts[k] - mtts[k])
-    #     mse = F.mse_loss(mtts[k], mts[k])
-    #     rmse = torch.sqrt(mse)
-    #     row.append('{:.4f}'.format(rmse))
-    #     # plots.save_colorbar_slices(diff, f'Diff_mt_mtt_t{k}.png', patient_dir)
 
     pbar.update(1)
     writer.writerow(row)

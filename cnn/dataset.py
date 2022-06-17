@@ -9,35 +9,10 @@ import torch
 from enum import Enum
 
 
-# def split_train_val_dataset(total_patients: int, val_percent: float = 0.2):
-#     val_patients = int(total_patients * val_percent)
-#     train_patients = total_patients - val_patients
-#     assert((val_patients + train_patients) == total_patients)
-
-#     total_idxs = np.arange(total_patients).astype(int)
-#     val_idxs = total_idxs[:val_patients]  # First N patients for evaluation
-#     train_idxs = total_idxs[val_patients:]  # The rest for training
-#     return (train_idxs, val_idxs)
-
-
 class DatasetMode(Enum):
     TRAIN = 1
     VAL = 2
     FULL = 3
-
-
-val_patients = {'Adolescent_1',
-                'Adolescent_20',
-                'Adolescent_53',
-                'Adolescent_62',
-                'Adult_3',
-                'Adult_11',
-                'Adult_24',
-                'Adult_36',
-                'Child_2',
-                'Child_14',
-                'Child_24',
-                'Child_36'}
 
 
 class SingleVentricleDataset(Dataset):
@@ -64,7 +39,6 @@ class SingleVentricleDataset(Dataset):
         self.volume_files = glob(osp.join(self.volumes_path, '*.nii.gz'))
 
         # Split for Train and Test
-        # train_idxs, val_idxs = split_train_val_dataset(len(self.volume_files), 0.2)
         if mode == DatasetMode.TRAIN:
             train_idxs = self.get_train_idxs()
             self.volume_files = np.asarray(self.volume_files)[train_idxs]
@@ -102,20 +76,22 @@ class SingleVentricleDataset(Dataset):
             self.bwdof_dir = self.config.get('DATA', 'BWD_OPTFLOW_RESULTS_DIR')
 
     def get_train_idxs(self):
+        validation_patients = self.config.get('DATA', 'VALIDATION_PATIENTS')
         train_idxs = []
         for i in range(len(self.volume_files)):
             pname = self.get_patient_name(i)
-            if pname in val_patients:
+            if pname in validation_patients:
                 continue
             else:
                 train_idxs.append(i)
         return np.asarray(train_idxs)
 
     def get_val_idxs(self):
+        validation_patients = self.config.get('DATA', 'VALIDATION_PATIENTS')
         val_idxs = []
         for i in range(len(self.volume_files)):
             pname = self.get_patient_name(i)
-            if pname in val_patients:
+            if pname in validation_patients:
                 val_idxs.append(i)
         return np.asarray(val_idxs)
 

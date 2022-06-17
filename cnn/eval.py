@@ -16,33 +16,38 @@ from utils import plots
 
 
 if __name__ == "__main__":
-    config = configparser.ConfigParser()
-    config.read('parser/configCNN.ini')
-    USE_CUDA = config.get('DEVICE', 'CUDA_AVAILABLE')
-    VERBOSE = config.getboolean('DEBUG', 'VERBOSE')
+    config_eval = configparser.ConfigParser()
+    config_eval.read('parser/configCNNEval.ini')
+
+    TRAINED_MODEL_DIR = config_eval.get('DATA', 'TRAINED_MODEL_DIR')
+    MODEL_NAME = config_eval.get('DATA', 'MODEL_NAME')
+    USE_CUDA = config_eval.get('DEVICE', 'CUDA_AVAILABLE')
+    VERBOSE = config_eval.getboolean('DEBUG', 'VERBOSE')
     if USE_CUDA and torch.cuda.is_available():
         DEVICE = 'cuda'
-        CUDA_DEVICE = config.getint('DEVICE', 'cuda_device')
+        CUDA_DEVICE = config_eval.getint('DEVICE', 'cuda_device')
         torch.cuda.set_device(CUDA_DEVICE)
     else:
         DEVICE = 'cpu'
 
+    config_train = configparser.ConfigParser()
+    config_train.read(TRAINED_MODEL_DIR + 'config.ini')
+
     # transf = [transforms.Normalize(mean=0.1478, std=0.1385)]
     transf = T.ComposeUnary([T.Normalize()])
-    ds = SingleVentricleDataset(config, DatasetMode.TRAIN, load_flow=True, data_transforms=transf)
-    save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'CNN_EVAL')
+    ds = SingleVentricleDataset(config_train, DatasetMode.VAL, load_flow=True, data_transforms=transf)
+    save_dir = plots.createSaveDirectory(config_eval.get('DATA', 'OUTPUT_PATH'), 'CNN_EVAL')
 
     # save config file to save directory
     conifg_output = osp.join(save_dir, 'config.ini')
     with open(conifg_output, 'w') as config_file:
-        config.write(config_file)
+        config_eval.write(config_file)
 
     csv_file = open(osp.join(save_dir, 'loss.csv'), 'w')
     csv_writer = csv.writer(csv_file)
     csv_writer.writerow(['Patient', 'L1-CNN', 'L2-CNN', 'L3-CNN', 'LT-CNN', 'L1-OF', 'L2-OF', 'L3-OF', 'LT-OF'])
 
-    TRAINED_MODEL = config.get('DATA', 'TRAINED_MODEL')
-    net = torch.load(TRAINED_MODEL).to(DEVICE)
+    net = torch.load(TRAINED_MODEL_DIR + MODEL_NAME).to(DEVICE)
     pbar = tqdm(total=len(ds))
 
     mask_transf = T.ComposeUnary([T.Normalize(), T.Erode()])
@@ -52,7 +57,7 @@ if __name__ == "__main__":
             NZ, NY, NX, NT = vol.shape
             nsize = (1, 1, NZ, NY, NX)
 
-            warp = Warp(config, NZ, NY, NX)
+            warp = Warp(config_train, NZ, NY, NX)
             mts_cnn = [m0.reshape(nsize).to(DEVICE)]
             mtts_cnn = [mk.reshape(nsize).to(DEVICE)]
 
@@ -114,7 +119,5 @@ if __name__ == "__main__":
 
                     plots.save_img_masks(data_t, [mask_transf(mtts_cnn[i].squeeze().cpu()), mask_transf(mtts_iw[i].cpu())],
                                          f'im_tt_{init_ts + i}', bwd_dir, th=0.5, alphas=[1.0, 1.0], colors=[[0, 1, 0], [0, 0, 1]])
-
             pbar.update(1)
-
     csv_file.close()
