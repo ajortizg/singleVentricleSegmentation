@@ -22,10 +22,6 @@ def save_patient_data(vol, ms, md, ts, td, save_dir_vol, save_dir_masks, patient
 
 
 if __name__ == "__main__":
-    print("===========================================================")
-    print("Data augmentation")
-    print("===========================================================")
-
     config = configparser.ConfigParser()
     config.read('parser/configDataAugmentation.ini')
 
@@ -38,9 +34,9 @@ if __name__ == "__main__":
     ROT_Y_RANGE = tuple(map(float, config.get('PARAMETERS', 'ROT_Y_RANGE').split(',')))
     ROT_X_RANGE = tuple(map(float, config.get('PARAMETERS', 'ROT_X_RANGE').split(',')))
 
-    ELASTIC_DEFORM_PROB = config.getfloat('PARAMETERS', 'ELASTIC_DEFORM_PROB')
-    ELASTIC_DEFORM_GRID = config.getint('PARAMETERS', 'ELASTIC_DEFORM_GRID')
-    ELASTIC_DEFORM_SIGMA = config.getfloat('PARAMETERS', 'ELASTIC_DEFORM_SIGMA')
+    ED_PROB = config.getfloat('PARAMETERS', 'ELASTIC_DEFORM_PROB')
+    ED_GRID = config.getint('PARAMETERS', 'ELASTIC_DEFORM_GRID')
+    ED_SIGMA = config.getfloat('PARAMETERS', 'ELASTIC_DEFORM_SIGMA')
 
     SAVE_ORIGINAL_DATA = config.getboolean('PARAMETERS', 'SAVE_ORIGINAL_DATA')
     SAVE_VAL_DATA = config.getboolean('PARAMETERS', 'SAVE_VAL_DATA')
@@ -50,12 +46,16 @@ if __name__ == "__main__":
         T.RandomFlipZ(p=FLIP_Z_PROB),
         T.RandomFlipY(p=FLIP_Y_PROB),
         T.RandomFlipX(p=FLIP_X_PROB),
-        T.RandomRotate(p=ROT_PROB, range_z=ROT_Z_RANGE, range_y=ROT_Y_RANGE, range_x=ROT_X_RANGE)])
+        T.RandomRotate(p=ROT_PROB, range_z=ROT_Z_RANGE, range_y=ROT_Y_RANGE, range_x=ROT_X_RANGE),
+        T.ElasticDeformation(p=ED_PROB, sigma_range=(ED_SIGMA, ED_SIGMA), points_range=(ED_GRID, ED_GRID))])
 
+    print("===========================================================")
+    print("Data augmentation")
+    print("===========================================================")
     print(f'\t* Create: {N} new patientes')
     print(f'\t* Flip probs: {FLIP_X_PROB}, {FLIP_Y_PROB}, {FLIP_Z_PROB}')
     print(f'\t* Rot prob: {ROT_PROB}, with ranges: {ROT_X_RANGE}, {ROT_Y_RANGE}, {ROT_Z_RANGE}')
-    print(f'\t* Elastic def prob: {ELASTIC_DEFORM_PROB}, grid: {ELASTIC_DEFORM_GRID}, sigma: {ELASTIC_DEFORM_SIGMA}')
+    print(f'\t* Elastic def prob: {ED_PROB}, grid: {ED_GRID}, sigma: {ED_SIGMA}')
     print()
 
     train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, load_flow=False)

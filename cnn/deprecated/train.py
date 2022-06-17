@@ -30,7 +30,7 @@ print("\n\n")
 
 
 config = configparser.ConfigParser()
-config.read('parser/configCNN.ini')
+config.read('parser/configCNNTrain.ini')
 cuda_availabe = config.get('DEVICE', 'CUDA_AVAILABLE')
 if cuda_availabe and torch.cuda.is_available():
     DEVICE = 'cuda'

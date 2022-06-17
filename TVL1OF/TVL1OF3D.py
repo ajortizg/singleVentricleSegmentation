@@ -16,7 +16,6 @@ sys.path.append("../utils")
 from utils.plots import *
 # from utils.config import *
 from utils.flow_viz import *
-from utils.median_pool import *
 
 # sys.path.append("../pythonOps/")
 # from pythonOps.mesh import *

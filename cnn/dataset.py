@@ -72,8 +72,8 @@ class SingleVentricleDataset(Dataset):
             use_filtered_flow = config.getboolean('PARAMETERS', 'USE_MEDIAN_FILTERED_FLOW')
             self.flow_name = 'flow_m_it0.pt' if use_filtered_flow else 'flow_it0.pt'
             self.flow_level = 'it0'
-            self.fwdof_dir = self.config.get('DATA', 'FWD_OPTFLOW_RESULTS_DIR')
-            self.bwdof_dir = self.config.get('DATA', 'BWD_OPTFLOW_RESULTS_DIR')
+            self.fwdof_dir = self.config.get('DATA', 'FWD_OPTFLOW_DIR')
+            self.bwdof_dir = self.config.get('DATA', 'BWD_OPTFLOW_DIR')
 
     def get_train_idxs(self):
         validation_patients = self.config.get('DATA', 'VALIDATION_PATIENTS')

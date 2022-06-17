@@ -248,10 +248,6 @@ def collate_fn(data):
     grid = torch_utils.create_grid(NZ, NY, NX).unsqueeze(0)
     grid = torch.cat([grid for _ in range(BS)], dim=0)
 
-    # ff = to_tensor(ff)
-    # bf = to_tensor(bf)
-    # print(ff.shape, bf.shape)
-
     return (pnames, vols.unsqueeze_(1), m0s.unsqueeze_(1), mks.unsqueeze_(1), init_ts, final_ts, fwd_t, bwd_t, grid, offsets)
 
 # def max_dim(x):

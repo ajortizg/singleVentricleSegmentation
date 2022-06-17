@@ -15,7 +15,7 @@ from torchsummary import summary
 import cnn_utils
 import transforms as T
 import os
-
+# import torch.multiprocessing
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
@@ -23,8 +23,10 @@ from utils import plots
 
 
 if __name__ == "__main__":
+    # torch.multiprocessing.set_sharing_strategy('file_system')
+
     config = configparser.ConfigParser()
-    config.read('parser/configCNN.ini')
+    config.read('parser/configCNNTrain.ini')
     cuda_availabe = config.get('DEVICE', 'CUDA_AVAILABLE')
     if cuda_availabe and torch.cuda.is_available():
         DEVICE = 'cuda'
@@ -65,8 +67,8 @@ if __name__ == "__main__":
                                     flow_transforms=None)
 
     # Create data loaders
-    train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=SHUFFLE, num_workers=os.cpu_count(), collate_fn=cnn_utils.collate_fn)
-    val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=os.cpu_count(), collate_fn=cnn_utils.collate_fn)
+    train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=SHUFFLE, num_workers=os.cpu_count() // 2, collate_fn=cnn_utils.collate_fn)
+    val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=os.cpu_count() // 2, collate_fn=cnn_utils.collate_fn)
 
     # UNet3D model
     net = UNet3D(config).to(DEVICE)
@@ -82,10 +84,11 @@ if __name__ == "__main__":
         print(f'\t* Learning rate: {LR}')
         print(f'\t* Batch size: {BATCH_SIZE}')
         print(f'\t* Num epochs: {NUM_EPOCHS}')
+        print(f'\t* Num workers: {os.cpu_count()//2}')
         print("===========================================================")
         print("\n")
 
-    net = torch.nn.DataParallel(net, device_ids=[0, 1, 2, 3])
+    net = torch.nn.DataParallel(net, device_ids=[0, 1, 2])
     opt = Adam(net.parameters(), lr=LR, weight_decay=WEIGHT_DECAY, betas=(BETA1, BETA2))
     schedule_lr = StepLR(opt, step_size=STEP_SIZE, gamma=GAMMA)
 

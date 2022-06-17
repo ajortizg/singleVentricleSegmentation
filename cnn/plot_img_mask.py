@@ -16,7 +16,6 @@ import utils.plots as plots
 config = configparser.ConfigParser()
 config.read('parser/configCNNTrain.ini')
 
-normalize = T.Normalize()
 transf = T.ComposeUnary([T.Normalize()])
 ds = SingleVentricleDataset(config, DatasetMode.TRAIN, load_flow=False, data_transforms=transf)
 save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'ImageMasks')
@@ -32,8 +31,8 @@ for (pname, data, m0, mk, init_ts, final_ts, _, _) in ds:
     u0 = data[:, :, :, init_ts]
     uk = data[:, :, :, final_ts]
 
-    patient_dir = plots.createSubDirectory(save_dir, pname)
-    plots.save_img_masks(u0, [m0], f'{pname}_u0_m0.png', patient_dir, th=0.5, alphas=[0.3], colors=[[1, 0.75, 0]])
-    plots.save_img_masks(uk, [mk], f'{pname}_uk_mk.png', patient_dir, th=0.5, alphas=[0.3], colors=[[0, 0.75, 1]])
+    # patient_dir = plots.createSubDirectory(save_dir, pname)
+    plots.save_img_masks(u0, [m0], f'{pname}_u0_m0.png', save_dir, th=0.5, alphas=[0.3], colors=[[1, 0.75, 0]])
+    plots.save_img_masks(uk, [mk], f'{pname}_uk_mk.png', save_dir, th=0.5, alphas=[0.3], colors=[[0, 0.75, 1]])
 
     pbar.update(1)
