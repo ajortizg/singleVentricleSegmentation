@@ -25,7 +25,6 @@ from PIL import Image
 # general helper functions
 #########################
 
-
 def createSaveDirectory(OUTPUT_PATH, name):
     timestr = time.strftime("%Y%m%d-%H%M%S")
     saveDir = os.path.sep.join([OUTPUT_PATH, name + "_" + timestr])
@@ -40,6 +39,15 @@ def createSubDirectory(saveDir, SUBDIR_PATH):
     if not os.path.exists(subDir):
         os.makedirs(subDir)
     return subDir
+
+def printConsoleOutput_Header(title):
+    print("\n\n")
+    print("==================================================")
+    print("==================================================")
+    print("  ", title)
+    print("==================================================")
+    print("==================================================")
+    print("\n\n")
 
 
 def printColoredError(diff, tol=1.e-5, accTol=1.e-2):
