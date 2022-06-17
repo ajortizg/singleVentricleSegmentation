@@ -36,23 +36,24 @@ always use /parser/configPreprocessing.ini
 
 1. possibly flip the original data
     ```
-    python ./preprocessing/preprocessing_cutting.py
+    python ./dataset/preprocessing/preprocessing_cutting.py
     ```
     save resulting folder to /data/singleVentricleData_flip
 
 2. cut the (possibly flipped) original data
     in parser set BASE_PATH_3D to data/singleVentricleData_flip
     ```
-    python ./preprocessing/preprocessing_cutting.py
+    python ./dataset/preprocessing/preprocessing_cutting.py
     ```
     save resulting folder to /data/singleVentricleData_cut
 
-2. resize the (flipped and cutted) data
+3. resize the (flipped and cutted) data
     in parser set BASE_PATH_3D to data/singleVentricleData_cut
     ```
-    python ./preprocessing/preprocessing_prolongation.py
+    python ./dataset/preprocessing/preprocessing_prolongation.py
     ```
-    save resulting folder to /data/singleVentricleData_prolong
+    Save resulting folder to /data/singleVentricleData_prolong.
+    Note that this depends on the Interpolationtype and Bondarytype.
 
 
 ## TODOs
