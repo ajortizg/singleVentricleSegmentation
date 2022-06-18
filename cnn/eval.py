@@ -31,11 +31,11 @@ if __name__ == "__main__":
         DEVICE = 'cpu'
 
     config_train = configparser.ConfigParser()
-    config_train.read(TRAINED_MODEL_DIR + 'config.ini')
+    config_train.read(osp.join(TRAINED_MODEL_DIR, 'config.ini'))
 
     # transf = [transforms.Normalize(mean=0.1478, std=0.1385)]
     transf = T.ComposeUnary([T.Normalize()])
-    ds = SingleVentricleDataset(config_train, DatasetMode.VAL, load_flow=True, data_transforms=transf)
+    ds = SingleVentricleDataset(config_train, DatasetMode.TRAIN, load_flow=True, data_transforms=transf)
     save_dir = plots.createSaveDirectory(config_eval.get('DATA', 'OUTPUT_PATH'), 'CNN_EVAL')
 
     # save config file to save directory
@@ -47,7 +47,7 @@ if __name__ == "__main__":
     csv_writer = csv.writer(csv_file)
     csv_writer.writerow(['Patient', 'L1-CNN', 'L2-CNN', 'L3-CNN', 'LT-CNN', 'L1-OF', 'L2-OF', 'L3-OF', 'LT-OF'])
 
-    net = torch.load(TRAINED_MODEL_DIR + MODEL_NAME).to(DEVICE)
+    net = torch.load(osp.join(TRAINED_MODEL_DIR, MODEL_NAME)).to(DEVICE)
     pbar = tqdm(total=len(ds))
 
     mask_transf = T.ComposeUnary([T.Normalize(), T.Erode()])

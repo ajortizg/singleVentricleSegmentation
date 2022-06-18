@@ -56,6 +56,9 @@ def loss_func_batch(mts, mtts, offsets):
     # {m0_b0, m0_b1}    mtts[6]     |   {m4_b0, m6_b1}    mtts[6]
 
     BS = mts[0].shape[0]
+    if BS == 1:
+        return loss_func_three(mts, mtts)[0]
+
     timesteps = len(mts)
     loss = 0
     N = 0

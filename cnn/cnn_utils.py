@@ -157,7 +157,8 @@ def time_popagation_batch(net, vols, m0s, mks, init_ts, final_ts, ff, bf, grid, 
     for t in range(flow_times):
         # Forward propagation m0 -> mk
         # mt = torch_utils.warp(mts[-1], grid + ff[:, t, :, :, :, :].to(DEVICE))
-        mt = warp(mts[-1].squeeze(), ff[:, t, :, :, :, :].squeeze().to(DEVICE)).unsqueeze(0).unsqueeze(0)
+        # mt = warp(mts[-1].squeeze(), ff[:, t, :, :, :, :].squeeze().to(DEVICE)).unsqueeze(0).unsqueeze(0)
+        mt = torch.zeros_like(mts[-1])
         data_t = select_volume_fwd(vols, init_ts, final_ts, t, diff_t).to(DEVICE)
         x = torch.cat((data_t, mt), dim=1)
         x = net(x)
@@ -165,7 +166,8 @@ def time_popagation_batch(net, vols, m0s, mks, init_ts, final_ts, ff, bf, grid, 
 
         # Backward propagation mk -> m0
         # mtt = torch_utils.warp(mtts[-1], grid + bf[:, t, :, :, :, :].to(DEVICE))
-        mtt = warp(mtts[-1].squeeze(), bf[:, t, :, :, :, :].squeeze().to(DEVICE)).unsqueeze(0).unsqueeze(0)
+        # mtt = warp(mtts[-1].squeeze(), bf[:, t, :, :, :, :].squeeze().to(DEVICE)).unsqueeze(0).unsqueeze(0)
+        mtt = torch.zeros_like(mtts[-1])
         data_t = select_volume_bwd(vols, init_ts, final_ts, t, diff_t).to(DEVICE)
         x = torch.cat((data_t, mtt), dim=1)
         x = net(x)
