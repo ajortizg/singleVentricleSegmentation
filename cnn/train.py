@@ -1,7 +1,6 @@
 import torch
 import configparser
 import sys
-from dataset import SingleVentricleDataset, DatasetMode
 from torch.optim import Adam
 from tqdm import tqdm
 from torch.optim.lr_scheduler import StepLR
@@ -13,13 +12,14 @@ import time
 import os.path as osp
 from torchsummary import summary
 import cnn_utils
-import transforms as T
 import os
 # import torch.multiprocessing
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 from utils import plots
+import utils.transforms as T
+from cnn.dataset import SingleVentricleDataset, DatasetMode
 
 
 if __name__ == "__main__":

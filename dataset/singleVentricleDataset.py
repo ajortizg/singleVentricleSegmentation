@@ -64,9 +64,11 @@ class SingleVentricleDataset(Dataset):
         self.config = config
         self.mode = mode
 
+        self.base_path = config.get('DATA', 'BASE_PATH_3D')
+
         # load data base
         if mode == 'train' or mode == 'val':
-            self.base_path = osp.join(config.get('DATA', 'BASE_PATH_3D'), mode)
+            self.base_path = osp.join(self.base_path, mode)
 
         self.segmentations_subdir_path = config.get('DATA', 'SEGMENTATIONS_SUBDIR_PATH')
         self.segmentations_path = osp.join(self.base_path, self.segmentations_subdir_path)

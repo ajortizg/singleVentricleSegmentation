@@ -10,7 +10,7 @@ import os.path as osp
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../../'))
 sys.path.append(ROOT_DIR)
 from utils import plots
-from dataset import singleVentricleDataset
+from dataset.singleVentricleDataset import SingleVentricleDataset
 
 
 def save_np_to_nifty(file, saveDir, fileName, hdr_old):
@@ -53,7 +53,7 @@ if __name__ == "__main__":
     with open(conifgOutput, 'w') as configfile:
         config.write(configfile)
 
-    dataSet = singleVentricleDataset.SingleVentricleDataset(config)
+    dataSet = SingleVentricleDataset(config)
 
     # load specific patients for validation
     val_patients = config.get('SPLIT', 'validation_patients')
@@ -87,7 +87,7 @@ if __name__ == "__main__":
 
     pbar.close()
 
-    # save data base with shifts
+    # save data base
     print("\n")
     print("==================================")
     print("save database to excel file")

@@ -4,7 +4,7 @@ from enum import Enum
 from TVL1OF.TVL1OF3D import *
 from cnn.dataset import SingleVentricleDataset, DatasetMode
 from utils import plots
-import cnn.transforms as T
+import utils.transforms as T
 
 
 class OpticalFlowMode(Enum):
@@ -18,9 +18,7 @@ def compute_optical_flow(ds: SingleVentricleDataset, idx: int, mode: OpticalFlow
     data = T.Normalize()(data.to(device))
     NZ, NY, NX, NT = data.shape
 
-    patient_dir = osp.join(save_dir, pname)
-    if not os.path.exists(patient_dir):
-        os.makedirs(patient_dir)
+    patient_dir = plots.createSubDirectory(save_dir, pname)
 
     # initialization of optical flow and mask
     u = torch.zeros([NZ, NY, NX, 3]).float().to(device)
@@ -82,24 +80,28 @@ if __name__ == "__main__":
         config.write(configfile)
 
     transf = T.ComposeUnary([T.Normalize()])
-    ds = SingleVentricleDataset(config, DatasetMode.FULL, load_flow=False, data_transforms=transf)
+    train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, load_flow=False, data_transforms=transf)
+    val_ds = SingleVentricleDataset(config, DatasetMode.VAL, load_flow=False, data_transforms=transf)
 
     compute_all_patients = config.get('DATA', 'COMPUTE_ALL_PATIENTS')
     step = config.getint('PARAMETERS', 'step')
 
     if compute_all_patients:
-        N = len(ds)
-        pbar = tqdm(total=N)
-        for idx in range(N):
-            compute_optical_flow(ds, idx, mode, save_dir, device, step, config)
+        pbar = tqdm(total=len(train_ds) + len(val_ds))
+        for idx in range(len(train_ds)):
+            compute_optical_flow(train_ds, idx, mode, save_dir, device, step, config)
+            pbar.update(1)
+
+        for idx in range(len(val_ds)):
+            compute_optical_flow(val_ds, idx, mode, save_dir, device, step, config)
             pbar.update(1)
     else:
         pbar = tqdm(total=1)
         patient_name = config.get('DATA', 'PATIENT_NAME')
-        idx, found = ds.index_for_patient(patient_name)
+        idx, found = train_ds.index_for_patient(patient_name)
         if not found:
             print(patient_name + " not found!")
             sys.exit()
         else:
-            compute_optical_flow(ds, idx, mode, save_dir, device, step, config)
+            compute_optical_flow(train_ds, idx, mode, save_dir, device, step, config)
             pbar.update(1)
