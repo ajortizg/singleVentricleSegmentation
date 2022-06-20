@@ -463,4 +463,54 @@ __device__ T cuda_interpolateMatrixField3d_trilinear(const torch::PackedTensorAc
   return out;
 }
 
+//=====================
+// CNN
+//=====================
+template <typename T>
+__device__ T cuda_interpolateCNN3d_trilinear(const torch::PackedTensorAccessor32<T,5,torch::RestrictPtrTraits> u,
+                                          const int batch, const int channel,
+                                          const int NZ, const int NY, const int NX,
+                                          const float LZ, const float LY, const float LX,
+                                          const float hZ, const float hY, const float hX,
+                                          const int boundary,
+                                          const T inter_coord_z, const T inter_coord_y, const T inter_coord_x ) {
+  const int ix_f = floorf(inter_coord_x / hX );
+  const int ix_c = ix_f + 1;
+  const T wx = inter_coord_x / hX - ix_f;
+  const int ix_f_out = getIndexInterpolate(ix_f,NX,boundary);  
+  const int ix_c_out = getIndexInterpolate(ix_c,NX,boundary);
+
+  const int iy_f = floorf(inter_coord_y / hY );
+  const int iy_c = iy_f + 1;
+  const T wy = inter_coord_y / hY - iy_f;
+  const int iy_f_out = getIndexInterpolate(iy_f,NY,boundary);  
+  const int iy_c_out = getIndexInterpolate(iy_c,NY,boundary);
+
+  const int iz_f = floorf(inter_coord_z / hZ );
+  const int iz_c = iz_f + 1;
+  const T wz = inter_coord_z / hZ - iz_f;
+  const int iz_f_out = getIndexInterpolate(iz_f,NZ,boundary);
+  const int iz_c_out = getIndexInterpolate(iz_c,NZ,boundary);
+
+  T u_fff = u[batch][channel][iz_f_out][iy_f_out][ix_f_out];
+  T u_ffc = u[batch][channel][iz_c_out][iy_f_out][ix_f_out];
+  T u_fcf = u[batch][channel][iz_f_out][iy_c_out][ix_f_out];
+  T u_fcc = u[batch][channel][iz_c_out][iy_c_out][ix_f_out];
+  T u_cff = u[batch][channel][iz_f_out][iy_f_out][ix_c_out];
+  T u_cfc = u[batch][channel][iz_c_out][iy_f_out][ix_c_out];
+  T u_ccf = u[batch][channel][iz_f_out][iy_c_out][ix_c_out];
+  T u_ccc = u[batch][channel][iz_c_out][iy_c_out][ix_c_out];
+
+  T out = (1 - wz) * (1 - wy) * (1 - wx) * u_fff;
+  out += wz * (1 - wy) * (1 - wx) * u_ffc;
+  out += (1 - wz) * (1 - wy) * wx * u_cff;
+  out += wz * (1 - wy) * wx * u_cfc;
+  out += (1 - wz) * wy * (1 - wx) * u_fcf;
+  out += wz * wy * (1 - wx) * u_fcc;
+  out += (1 - wz) * wy * wx * u_ccf;
+  out += wz * wy * wx * u_ccc;
+
+  return out;
+}
+
 #endif

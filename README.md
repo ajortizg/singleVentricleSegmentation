@@ -17,8 +17,9 @@
 * pip install torchsummary
 * pip install elasticdeform
 
-to install setup file:
+to install setup file use one of the following:
 * pip install . 
+* pip install . --use-feature=in-tree-build
 
 to use config file link data and result folder: 
 

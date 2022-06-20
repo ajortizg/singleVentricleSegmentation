@@ -397,7 +397,6 @@ __device__ T cuda_interpolateVectorField3d_nearest(const torch::PackedTensorAcce
     iz_out = getIndexInterpolate(iz_c,NZ,boundary);
   }
 
-
   return u[iz_out][iy_out][ix_out][comp];
 }
 
@@ -446,8 +445,55 @@ __device__ T cuda_interpolateMatrixField3d_nearest(const torch::PackedTensorAcce
     iz_out = getIndexInterpolate(iz_c,NZ,boundary);
   }
 
-
   return u[iz_out][iy_out][ix_out][comp_i][comp_j];
+}
+
+
+//=====================
+// CNN
+//=====================
+template <typename T>
+__device__ T cuda_interpolateCNN3d_nearest(const torch::PackedTensorAccessor32<T,5,torch::RestrictPtrTraits> u,
+                                          const int batch, const int channel,
+                                          const int NZ, const int NY, const int NX,
+                                          const float LZ, const float LY, const float LX,
+                                          const float hZ, const float hY, const float hX,
+                                          const int boundary,
+                                          const T inter_coord_z, const T inter_coord_y, const T inter_coord_x ) {
+  const int ix_f = floorf(inter_coord_x / hX);
+  const float dist_x_f = inter_coord_x / hX - ix_f;
+  const int ix_c = ix_f + 1;
+  const float dist_x_c = ix_c - inter_coord_x / hX;
+  int ix_out;
+  if(dist_x_f < dist_x_c ){
+    ix_out = getIndexInterpolate(ix_f,NX,boundary);
+  }else{
+    ix_out = getIndexInterpolate(ix_c,NX,boundary);
+  }
+
+  const int iy_f = floorf(inter_coord_y / hY);
+  const float dist_y_f = inter_coord_y / hY - iy_f;
+  const int iy_c = iy_f + 1;
+  const float dist_y_c = iy_c - inter_coord_y / hY;
+  int iy_out;
+  if(dist_y_f < dist_y_c ){
+    iy_out = getIndexInterpolate(iy_f,NY,boundary);
+  }else{
+    iy_out = getIndexInterpolate(iy_c,NY,boundary);
+  }
+
+  const int iz_f = floorf(inter_coord_z / hZ);
+  const float dist_z_f = inter_coord_z / hZ - iz_f;
+  const int iz_c = iz_f + 1;
+  const float dist_z_c = iz_c - inter_coord_z / hZ;
+  int iz_out;
+  if(dist_z_f < dist_z_c ){
+    iz_out = getIndexInterpolate(iz_f,NZ,boundary);
+  }else{
+    iz_out = getIndexInterpolate(iz_c,NZ,boundary);
+  }
+
+  return u[batch][channel][iz_out][iy_out][ix_out];
 }
 
 #endif
