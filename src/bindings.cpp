@@ -3,6 +3,7 @@
 #include "anisotropicDifferentialOps.h"
 #include "prolongationOps.h"
 #include "warpingOps.h"
+#include "warpingOpsCNN.h"
 #include "opticalFlowOps.h"
 #include "ROFOps.h"
 
@@ -120,6 +121,13 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
       .def("forward", &Warping3D::forward)
       .def("backward", &Warping3D::backward)
       .def("forwardVectorField", &Warping3D::forwardVectorField);
+
+  //=======================================
+  // warping cnn
+  //======================================= 
+  py::class_<WarpingCNN3D>(m,"WarpingCNN3D")
+      .def(py::init<const MeshInfo3D&, const InterpolationType, const BoundaryType>())
+      .def("forward", &WarpingCNN3D::forward);
 
   //=======================================
   // prolongation
