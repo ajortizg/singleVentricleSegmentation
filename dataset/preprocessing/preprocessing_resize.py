@@ -4,7 +4,7 @@ import sys
 from tqdm import tqdm
 import pandas as pd
 
-ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
+ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../..'))
 sys.path.append(ROOT_DIR)
 from utils import plots
 from cnn.dataset import SingleVentricleDataset, DatasetMode
@@ -23,12 +23,12 @@ def save_patient_data(vol, ms, md, ts, td, save_dir_vol, save_dir_masks, patient
 
 if __name__ == "__main__":
     config = configparser.ConfigParser()
-    config.read('parser/configCNN.ini')
+    config.read('parser/configDataAugmentation.ini')
 
-    transf = T.ComposeTernary([T.Resize(size=(16, 96, 96))])
+    transf = T.ComposeTernary([T.Resize(size=(80, 80, 80))])
 
     ds = SingleVentricleDataset(config, DatasetMode.FULL, load_flow=False)
-    save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'singleVentricleData_cut_r')
+    save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'DA')
     save_dir_vol = plots.createSubDirectory(save_dir, ds.volumes_subdir_path)
     save_dir_masks = plots.createSubDirectory(save_dir, ds.segmentations_subdir_path)
 

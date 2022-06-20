@@ -14,25 +14,30 @@ import utils.plots as plots
 
 
 config = configparser.ConfigParser()
-config.read('parser/configCNNTrain.ini')
+config.read('parser/configDataAugmentation.ini')
 
 transf = T.ComposeUnary([T.Normalize()])
-ds = SingleVentricleDataset(config, DatasetMode.TRAIN, load_flow=False, data_transforms=transf)
+ds = SingleVentricleDataset(config, DatasetMode.FULL, load_flow=False, data_transforms=transf)
 save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'ImageMasks')
 
 conifg_output = os.path.sep.join([save_dir, "config.ini"])
 with open(conifg_output, 'w') as configfile:
     config.write(configfile)
 
-
+erode = T.Erode(0.5)
 pbar = tqdm(total=len(ds))
 for (pname, data, m0, mk, init_ts, final_ts, _, _) in ds:
     pbar.set_postfix_str(f'P: {pname}')
+
+
     u0 = data[:, :, :, init_ts]
     uk = data[:, :, :, final_ts]
 
-    # patient_dir = plots.createSubDirectory(save_dir, pname)
-    plots.save_img_masks(u0, [m0], f'{pname}_u0_m0.png', save_dir, th=0.5, alphas=[0.3], colors=[[1, 0.75, 0]])
-    plots.save_img_masks(uk, [mk], f'{pname}_uk_mk.png', save_dir, th=0.5, alphas=[0.3], colors=[[0, 0.75, 1]])
+    patient_dir = plots.createSubDirectory(save_dir, pname)
+    plots.save_img_masks(u0, [m0, erode(m0)], f'{pname}_u0_m0.png', patient_dir, th=0.5, alphas=[0.2, 1.0], colors=[[1, 0.75, 0], [0, 1, 0]])
+    plots.save_img_masks(uk, [mk, erode(mk)], f'{pname}_uk_mk.png', patient_dir, th=0.5, alphas=[0.2, 1.0], colors=[[0, 0.75, 1], [1, 0, 0]])
+
+    plots.save_img_masks_slices(u0, [m0, erode(m0)], patient_dir, 'm0', 0.5, alphas=[0.2, 1.0], colors=[[1, 0.75, 0], [0, 1, 0]])
+    plots.save_img_masks_slices(uk, [mk, erode(mk)], patient_dir, 'mk', 0.5, alphas=[0.2, 1.0], colors=[[0, 0.75, 1], [1, 0, 0]])
 
     pbar.update(1)

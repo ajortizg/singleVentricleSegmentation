@@ -25,6 +25,7 @@ from PIL import Image
 # general helper functions
 #########################
 
+
 def createSaveDirectory(OUTPUT_PATH, name):
     timestr = time.strftime("%Y%m%d-%H%M%S")
     saveDir = os.path.sep.join([OUTPUT_PATH, name + "_" + timestr])
@@ -39,6 +40,7 @@ def createSubDirectory(saveDir, SUBDIR_PATH):
     if not os.path.exists(subDir):
         os.makedirs(subDir)
     return subDir
+
 
 def printConsoleOutput_Header(title):
     print("\n\n")
@@ -263,6 +265,25 @@ def save_img_masks(img3d: torch.Tensor, masks3d: list[torch.Tensor], filename: s
     path_name = os.path.join(save_dir, filename)
     plt.savefig(path_name, dpi=100)
     plt.close('all')
+
+
+def save_img_masks_slices(img3d: torch.Tensor, masks3d: list[torch.Tensor],
+                          save_dir: str, sub_dir: str, th: float, alphas=list, colors=list, max_gray_value=1):
+    save_dir_slices = os.path.sep.join([save_dir, sub_dir])
+    if not os.path.exists(save_dir_slices):
+        os.makedirs(save_dir_slices)
+    factor_gray_value = 255. / max_gray_value
+    NZ = img3d.shape[0]
+
+    for z in range(NZ):
+        img = img3d[z, :, :].cpu().detach().numpy()
+        img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+        for i, mask3d in enumerate(masks3d):
+            mask = mask3d[z, :, :].cpu().detach().numpy()
+            img = merge_img_mask(img, mask, th, alphas[i], colors[i])
+            img_name = f"img_mask_m{i}_z{z}.png"
+            path_name = os.path.join(save_dir_slices, img_name)
+            cv2.imwrite(path_name, factor_gray_value * img)
 
 
 def merge_img_mask(img, mask, th=0.5, alpha=0.35, color=[1, 1, 0]):
