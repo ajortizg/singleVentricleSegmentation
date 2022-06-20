@@ -330,8 +330,7 @@ class TVL1OpticalFlow3D:
             # plotOpticalFlow3D(uf, "uf", saveDirStep, step)
             flowName = f"flow_m_it{step}.pt"
             fileNameFlow = os.path.join(saveDirStep, flowName)
-            torch.save(torch.from_numpy(uf).to(self.DEVICE), fileNameFlow)
-
+            torch.save(torch.from_numpy(uf), fileNameFlow)
 
         # save3D_torch_to_nifty(I0, saveDirStep, f"I0.nii")
         # save_slices(I0, f"I0_it{step}.png", saveDirStep)
@@ -356,7 +355,7 @@ class TVL1OpticalFlow3D:
 
         flowName = f"flow_it{step}.pt"
         fileNameFlow = os.path.join(saveDirStep, flowName)
-        torch.save(u, fileNameFlow)
+        torch.save(u.cpu().detach(), fileNameFlow)
 
         # dualName = f"dual_it{step}.pt"
         # fileNameDual = os.path.join(saveDirStep, dualName)

@@ -55,6 +55,13 @@ always use /parser/configPreprocessing.ini
     Save resulting folder to /data/singleVentricleData_prolong.
     Note that this depends on the Interpolationtype and Bondarytype.
 
+4. split
+    For training the CNN split the dataset in validation and training sets
+    in parser set BASE_PATH_3D to data/singleVentricleData_prolongLinear
+    ```
+    python ./dataset/preprocessing/preprocessing_split.py
+    ```
+    Save resulting folder to /data/singleVentricleData_prolongLinear_split.
 
 ## TODOs
 

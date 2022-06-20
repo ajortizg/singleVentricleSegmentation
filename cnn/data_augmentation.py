@@ -4,7 +4,10 @@ import os.path as osp
 import sys
 from tqdm import tqdm
 import pandas as pd
+import torch
 import transforms as T
+import nibabel as nib
+import numpy as np
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)

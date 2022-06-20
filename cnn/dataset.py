@@ -124,6 +124,11 @@ class SingleVentricleDataset(Dataset):
         tdias = int(row_patient.loc[index_patient, 'Diastole'])
         return (tsyst, tdias)
 
+    def header(self, patient_name):
+        idx = self.index_for_patient(patient_name)
+        vol = nib.load(self.volume_files[idx])
+        return vol.header
+
     def systole_diastole_mask(self, patient_name):
         mask_syst_zyx = self.load_mask(patient_name, '_Systole_Labelmap.nii')
         mask_syst_zyx = torch.from_numpy(mask_syst_zyx).float()
@@ -141,7 +146,7 @@ class SingleVentricleDataset(Dataset):
 
     def index_for_patient(self, patient_name):
         found = False
-        for idx in range(self.__len__()):
+        for idx in range(len(self.volume_files)):
             query = self.get_patient_name(idx)
             if patient_name == query:
                 found = True

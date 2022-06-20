@@ -17,36 +17,36 @@ from dataset import singleVentricleDataset
 from opticalFlow_cuda_ext import opticalFlow
 
 
-def save_torch_to_nifty(file,saveDir,fileName,hdr_old,zooms="old"):
-    #convert
+def save_torch_to_nifty(file, saveDir, fileName, hdr_old, zooms="old"):
+    # convert
     file_np = file.cpu().detach().numpy()
     file_xyzt = np.swapaxes(file_np, 0, 2)
-    #header 
+    # header
     hdr = nib.nifti1.Nifti1Header()
     hdr.set_data_shape(file.shape)
-    hdr.set_qform( hdr_old.get_qform() )
-    hdr.set_sform( hdr_old.get_sform() )
+    hdr.set_qform(hdr_old.get_qform())
+    hdr.set_sform(hdr_old.get_sform())
     if zooms == "old":
-      hdr.set_zooms( hdr_old.get_zooms() )
-    else: 
-      hdr.set_zooms( zooms  )
-    #img
+        hdr.set_zooms(hdr_old.get_zooms())
+    else:
+        hdr.set_zooms(zooms)
+    # img
     ni_img = nib.Nifti1Image(file_xyzt, affine=None, header=hdr)
-    #save
+    # save
     outputFile = os.path.sep.join([saveDir, fileName])
     nib.save(ni_img, outputFile)
     # print("old header:")
-    # print(hdr_old) 
+    # print(hdr_old)
     # print("new header:")
-    # print(hdr) 
+    # print(hdr)
 
 
-def getMeshLength(config,NZ,NY,NX):
+def getMeshLength(config, NZ, NY, NX):
     LenghtType = config.get('PARAMETERS', 'LenghtType')
     if LenghtType == "numDofs":
-        LZ = NZ-1
-        LY = NY-1
-        LX = NX-1
+        LZ = NZ - 1
+        LY = NY - 1
+        LX = NX - 1
         return LZ, LY, LX
     elif LenghtType == "fixed":
         LZ = config.getfloat('PARAMETERS', "LenghtZ")
@@ -76,7 +76,7 @@ if __name__ == "__main__":
         InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_CUBIC_HERMITESPLINE
     else:
         raise Exception("wrong InterpolationType in configParser")
-    #boundary
+    # boundary
     boundaryType = config.get('PARAMETERS', 'BoundaryType')
     BoundaryTypeCuda = None
     if boundaryType == "NEAREST":
@@ -92,15 +92,15 @@ if __name__ == "__main__":
     NX_prolong = config.getint('PROLONGATION', 'NX_prolong')
     NY_prolong = config.getint('PROLONGATION', 'NY_prolong')
     NZ_prolong = config.getint('PROLONGATION', 'NZ_prolong')
-    LZ_prolong,LY_prolong,LX_prolong = getMeshLength(config,NZ_prolong,NY_prolong,NX_prolong)
+    LZ_prolong, LY_prolong, LX_prolong = getMeshLength(config, NZ_prolong, NY_prolong, NX_prolong)
 
     # create save directory
-    saveDir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), "preprocessing_prolongation" )
+    saveDir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), "preprocessing_prolongation")
 
-    #save config file to save directory
+    # save config file to save directory
     conifgOutput = os.path.sep.join([saveDir, "config.ini"])
     with open(conifgOutput, 'w') as configfile:
-      config.write(configfile)
+        config.write(configfile)
 
     # # load data base
     # BASE_PATH_3D = config.get('DATA', 'BASE_PATH_3D')
@@ -120,21 +120,20 @@ if __name__ == "__main__":
     saveDir4D = plots.createSubDirectory(saveDir, dataSet.volumes_subdir_path)
     saveDirSegmentations = plots.createSubDirectory(saveDir, dataSet.segmentations_subdir_path)
 
-    #generate columns for prolongation factors
+    # generate columns for prolongation factors
     xprolongfac = np.zeros(len(dataSet))
     yprolongfac = np.zeros(len(dataSet))
     zprolongfac = np.zeros(len(dataSet))
 
-
-    #iterate over all patients
+    # iterate over all patients
     pbar = tqdm(total=len(dataSet))
-    for index in range(0,len(dataSet)):
+    for index in range(0, len(dataSet)):
 
         patient = dataSet[index]
 
         pbar.set_postfix_str(f'P: {patient.name}')
 
-        #read zooms from nifty file
+        # read zooms from nifty file
         zooms = patient.nii_header_xyzt.get_zooms()
         # zoomX = round(zooms[0])
         # zoomY = round(zooms[1])
@@ -145,39 +144,41 @@ if __name__ == "__main__":
         zoomT = zooms[3]
         # NZ_prolong,NY_prolong,NX_prolong = zoomZ*NZ,zoomY*NY,zoomX*NX
 
-        #generate old mesh 
-        LZ,LY,LX = getMeshLength(config,patient.NZ,patient.NY,patient.NX)
-        meshInfo_old = opticalFlow.MeshInfo3D(patient.NZ,patient.NY,patient.NX,LZ,LY,LX)
+        # generate old mesh
+        LZ, LY, LX = getMeshLength(config, patient.NZ, patient.NY, patient.NX)
+        meshInfo_old = opticalFlow.MeshInfo3D(patient.NZ, patient.NY, patient.NX, LZ, LY, LX)
 
-        #generate new mesh for prolongation 
-        meshInfo_new = opticalFlow.MeshInfo3D(NZ_prolong,NY_prolong,NX_prolong,LZ_prolong,LY_prolong,LX_prolong)
-        prolongationOp = opticalFlow.Prolongation3D(meshInfo_old,meshInfo_new,InterpolationTypeCuda,BoundaryTypeCuda)
+        # generate new mesh for prolongation
+        meshInfo_new = opticalFlow.MeshInfo3D(NZ_prolong, NY_prolong, NX_prolong, LZ_prolong, LY_prolong, LX_prolong)
+        prolongationOp = opticalFlow.Prolongation3D(meshInfo_old, meshInfo_new, InterpolationTypeCuda, BoundaryTypeCuda)
 
-        #convert 4d file to pytorch tensor 
+        # convert 4d file to pytorch tensor
         data_4d = torch.from_numpy(patient.nii_data_zyxt).float().to(DEVICE)
 
-        #convert masks to pytorch tensor
+        # convert masks to pytorch tensor
         mask_diastole = torch.from_numpy(patient.nii_mask_diastole).float().to(DEVICE)
         mask_systole = torch.from_numpy(patient.nii_mask_systole).float().to(DEVICE)
 
-        #prolongate 
+        # prolongate
         prolongation_diastole = prolongationOp.forward(mask_diastole)
         prolongation_systole = prolongationOp.forward(mask_systole)
         prolongation_4d = prolongationOp.forwardVectorField(data_4d.contiguous())
 
         # save as nifty
         saveDirPatient = plots.createSubDirectory(saveDirSegmentations, patient.name)
-        save_torch_to_nifty(prolongation_4d, saveDir4D, patient.name + ".nii.gz", patient.nii_header_xyzt, zooms=(zoomX*patient.NX/NX_prolong, zoomY*patient.NY/NY_prolong,zoomZ*patient.NZ/NZ_prolong, zoomT) )
-        save_torch_to_nifty(prolongation_diastole, saveDirPatient, patient.name + "_Diastole_Labelmap.nii", patient.hdr_mask_diastole, zooms=(zoomX*patient.NX/NX_prolong, zoomY*patient.NY/NY_prolong,zoomZ*patient.NZ/NZ_prolong) )
-        save_torch_to_nifty(prolongation_systole, saveDirPatient, patient.name + "_Systole_Labelmap.nii", patient.hdr_mask_systole, zooms=(zoomX*patient.NX/NX_prolong, zoomY*patient.NY/NY_prolong,zoomZ*patient.NZ/NZ_prolong) )
+        save_torch_to_nifty(prolongation_4d, saveDir4D, patient.name + ".nii.gz", patient.nii_header_xyzt,
+                            zooms=(zoomX * patient.NX / NX_prolong, zoomY * patient.NY / NY_prolong, zoomZ * patient.NZ / NZ_prolong, zoomT))
+        save_torch_to_nifty(prolongation_diastole, saveDirPatient, patient.name + "_Diastole_Labelmap.nii", patient.hdr_mask_diastole,
+                            zooms=(zoomX * patient.NX / NX_prolong, zoomY * patient.NY / NY_prolong, zoomZ * patient.NZ / NZ_prolong))
+        save_torch_to_nifty(prolongation_systole, saveDirPatient, patient.name + "_Systole_Labelmap.nii", patient.hdr_mask_systole,
+                            zooms=(zoomX * patient.NX / NX_prolong, zoomY * patient.NY / NY_prolong, zoomZ * patient.NZ / NZ_prolong))
 
         #
-        xprolongfac[index] = NX_prolong/patient.NX
-        yprolongfac[index] = NY_prolong/patient.NY
-        zprolongfac[index] = NZ_prolong/patient.NZ
+        xprolongfac[index] = NX_prolong / patient.NX
+        yprolongfac[index] = NY_prolong / patient.NY
+        zprolongfac[index] = NZ_prolong / patient.NZ
 
         pbar.update(1)
-
 
     # save data base
     print("\n")
@@ -188,7 +189,7 @@ if __name__ == "__main__":
     output_df['yprolongfac'] = yprolongfac
     output_df['zprolongfac'] = zprolongfac
     output_df_file = os.path.sep.join([saveDir, dataSet.segmentations_filename])
-    output_df.to_excel(output_df_file,index=False)
+    output_df.to_excel(output_df_file, index=False)
 
     # for index, row in df.iterrows():
 
@@ -216,7 +217,6 @@ if __name__ == "__main__":
     #     print("   * diastole at time: ", tDiastole)
     #     print("=======================================")
 
-
     #     #read zooms from nifty file
     #     zooms = vol_hdr.get_zooms()
     #     # zoomX = round(zooms[0])
@@ -228,11 +228,11 @@ if __name__ == "__main__":
     #     zoomT = zooms[3]
     #     # NZ_prolong,NY_prolong,NX_prolong = zoomZ*NZ,zoomY*NY,zoomX*NX
 
-    #     #generate old mesh 
+    #     #generate old mesh
     #     LZ,LY,LX = getMeshLength(config,NZ,NY,NX)
     #     meshInfo_old = opticalFlow.MeshInfo3D(NZ,NY,NX,LZ,LY,LX)
 
-    #     #generate new mesh for prolongation 
+    #     #generate new mesh for prolongation
     #     meshInfo_new = opticalFlow.MeshInfo3D(NZ_prolong,NY_prolong,NX_prolong,LZ_prolong,LY_prolong,LX_prolong)
     #     prolongationOp = opticalFlow.Prolongation3D(meshInfo_old,meshInfo_new,InterpolationTypeCuda,BoundaryTypeCuda)
 
@@ -244,7 +244,7 @@ if __name__ == "__main__":
     #     nii_mask_diastole = np.swapaxes(nii_mask_diastole_xyz, 0, 2)
     #     mask_diastole = torch.from_numpy(nii_mask_diastole).float().to(DEVICE)
 
-    #     # get input masks for systole 
+    #     # get input masks for systole
     #     nii_mask_systole_load = nib.load(os.path.sep.join([SEGMENTATIONS_PATH, PATIENT_NAME, PATIENT_NAME + "_Systole_Labelmap.nii"]))
     #     hdr_mask_systole = nii_mask_systole_load.header
     #     affine_mask_systole = nii_mask_systole_load.affine
@@ -252,7 +252,7 @@ if __name__ == "__main__":
     #     nii_mask_systole = np.swapaxes(nii_mask_systole_xyz, 0, 2)
     #     mask_systole = torch.from_numpy(nii_mask_systole).float().to(DEVICE)
 
-    #     #prolongate 
+    #     #prolongate
     #     prolongation_diastole = prolongationOp.forward(mask_diastole)
     #     prolongation_systole = prolongationOp.forward(mask_systole)
     #     prolongation_4d = prolongationOp.forwardVectorField(data_4d.contiguous())
@@ -270,7 +270,7 @@ if __name__ == "__main__":
     #     # #convert
     #     # prolongation_4d_np = prolongation_4d.cpu().detach().numpy()
     #     # prolongation_4d_xyzt = np.swapaxes(prolongation_4d_np, 0, 2)
-    #     # #header 
+    #     # #header
     #     # ni_img_4d_hdr = nib.nifti1.Nifti1Header()
     #     # ni_img_4d_hdr.set_data_shape((NX_prolong,NY_prolong,NZ_prolong,NT))
     #     # ni_img_4d_hdr.set_qform( vol_hdr.get_qform() )
@@ -283,10 +283,10 @@ if __name__ == "__main__":
     #     # nib.save(ni_img_4d, outputFile_4d)
 
     #     # #save diastole as nifty
-    #     # #convert 
+    #     # #convert
     #     # prolongation_diastole_np = prolongation_diastole.cpu().detach().numpy()
     #     # prolongation_diastole_xyzt = np.swapaxes(prolongation_diastole_np, 0, 2)
-    #     # #header 
+    #     # #header
     #     # hdr_mask_diastole_prolong = nib.nifti1.Nifti1Header()
     #     # hdr_mask_diastole_prolong.set_data_shape((NX_prolong,NY_prolong,NZ_prolong))
     #     # hdr_mask_diastole_prolong.set_qform( hdr_mask_diastole.get_qform() )
@@ -299,10 +299,10 @@ if __name__ == "__main__":
     #     # nib.save(ni_img_diastole, outputFile_diastole)
 
     #     # #save systole as nifty
-    #     # #convert 
+    #     # #convert
     #     # prolongation_systole_np = prolongation_systole.cpu().detach().numpy()
     #     # prolongation_systole_xyzt = np.swapaxes(prolongation_systole_np, 0, 2)
-    #     # #header 
+    #     # #header
     #     # hdr_mask_systole_prolong = nib.nifti1.Nifti1Header()
     #     # hdr_mask_systole_prolong.set_data_shape((NX_prolong,NY_prolong,NZ_prolong))
     #     # hdr_mask_systole_prolong.set_qform( hdr_mask_systole.get_qform() )

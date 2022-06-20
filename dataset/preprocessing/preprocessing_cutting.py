@@ -4,15 +4,14 @@ import numpy as np
 import nibabel as nib
 from tqdm import tqdm
 import os
-import pandas
 import configparser
-import time
 import os.path as osp
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../../'))
 sys.path.append(ROOT_DIR)
 from utils import plots
 from dataset import singleVentricleDataset
+
 
 def getRangeOfMask_xyz(mask, printRange=False, name=""):
     x, y, z = np.nonzero(mask)
@@ -66,7 +65,7 @@ if __name__ == "__main__":
 
     dataSet = singleVentricleDataset.SingleVentricleDataset(config)
 
-    #load specific patients
+    # load specific patients
     xTol = config.getint('CUTTING', 'xTol')
     yTol = config.getint('CUTTING', 'yTol')
     zTol = config.getint('CUTTING', 'zTol')
@@ -80,20 +79,20 @@ if __name__ == "__main__":
     saveDir4D = plots.createSubDirectory(saveDir, dataSet.volumes_subdir_path)
     saveDirSegmentations = plots.createSubDirectory(saveDir, dataSet.segmentations_subdir_path)
 
-
-    #iterate over all patients
+    # iterate over all patients
     pbar = tqdm(total=len(dataSet))
-    for index in range(0,len(dataSet)):
-
+    for index in range(0, len(dataSet)):
         patient = dataSet[index]
 
         pbar.set_postfix_str(f'P: {patient.name}')
 
-        #get range of diastole and systole
-        zmin_dia, zmax_dia, ymin_dia, ymax_dia, xmin_dia, xmax_dia = getRangeOfMask_xyz(patient.nii_mask_diastole_xyz, printRange=False, name="diastole")
-        zmin_sys, zmax_sys, ymin_sys, ymax_sys, xmin_sys, xmax_sys = getRangeOfMask_xyz(patient.nii_mask_systole_xyz, printRange=False, name="systole")
+        # get range of diastole and systole
+        zmin_dia, zmax_dia, ymin_dia, ymax_dia, xmin_dia, xmax_dia = getRangeOfMask_xyz(
+            patient.nii_mask_diastole_xyz, printRange=False, name="diastole")
+        zmin_sys, zmax_sys, ymin_sys, ymax_sys, xmin_sys, xmax_sys = getRangeOfMask_xyz(
+            patient.nii_mask_systole_xyz, printRange=False, name="systole")
 
-        #extend range by tolerance
+        # extend range by tolerance
         xmin_total = max(0, min(xmin_dia, xmin_sys) - xTol)
         xmax_total = min(patient.NX - 1, max(xmax_dia, xmax_sys) + xTol)
         ymin_total = max(0, min(ymin_dia, ymin_sys) - yTol)
@@ -121,7 +120,7 @@ if __name__ == "__main__":
         saveDirPatient = plots.createSubDirectory(saveDirSegmentations, patient.name)
         save_np_to_nifty(cutting_4d, saveDir4D, patient.name + ".nii.gz", patient.nii_header_xyzt)
         save_np_to_nifty(cutting_diastole, saveDirPatient, patient.name + "_Diastole_Labelmap.nii", patient.hdr_mask_diastole)
-        save_np_to_nifty(cutting_systole, saveDirPatient,patient.name + "_Systole_Labelmap.nii", patient.hdr_mask_systole)
+        save_np_to_nifty(cutting_systole, saveDirPatient, patient.name + "_Systole_Labelmap.nii", patient.hdr_mask_systole)
 
         pbar.update(1)
 
@@ -134,4 +133,4 @@ if __name__ == "__main__":
     output_df['yshift'] = yshifts
     output_df['zshift'] = zshifts
     output_df_file = os.path.sep.join([saveDir, dataSet.segmentations_filename])
-    output_df.to_excel(output_df_file,index=False)
+    output_df.to_excel(output_df_file, index=False)
