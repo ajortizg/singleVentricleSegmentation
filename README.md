@@ -36,7 +36,7 @@ always use /parser/configPreprocessing.ini
 
 1. possibly flip the original data
     ```
-    python ./dataset/preprocessing/preprocessing_cutting.py
+    python ./dataset/preprocessing/preprocessing_flipping.py
     ```
     save resulting folder to /data/singleVentricleData_flip
 
@@ -55,13 +55,20 @@ always use /parser/configPreprocessing.ini
     Save resulting folder to /data/singleVentricleData_prolong.
     Note that this depends on the Interpolationtype and Bondarytype.
 
-4. split
-    For training the CNN split the dataset in validation and training sets
+4. split the dataset for training the CNN in validation and training sets, 
     in parser set BASE_PATH_3D to data/singleVentricleData_prolongLinear
     ```
     python ./dataset/preprocessing/preprocessing_split.py
     ```
     Save resulting folder to /data/singleVentricleData_prolongLinear_split.
+
+5. Data augmentation only for training the CNN.
+    in parset set BASE_PATH_3D to /data/singleVentricleData_prolongLinear_split
+    ```
+    python ./dataset/preprocessing/preprocessing_data_augmentation.py
+    ```
+    Save resulting folder to /data/singleVentricleData_prolongLinear_split_xN,
+    where N is the number of new patients created per patient.
 
 ## TODOs
 

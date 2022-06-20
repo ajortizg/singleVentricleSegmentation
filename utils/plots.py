@@ -125,6 +125,24 @@ def save4D_torch_to_nifty(data, saveDir, fileName, affine=None):
     # nib.save(ni_img_4d, outputFile_4d)
 
 
+def save_torch_to_nifty_header(data: torch.Tensor, header_old, saveDir, fileName, affine=None):
+    # convert zyx.. to xyz..
+    data_np = np.swapaxes(data.cpu().detach().numpy(), 0, 2)
+
+    # header
+    hdr = nib.nifti1.Nifti1Header()
+    hdr.set_data_shape(data_np.shape)
+    hdr.set_qform(header_old.get_qform())
+    hdr.set_sform(header_old.get_sform())
+    hdr.set_zooms(header_old.get_zooms())
+
+    # img
+    nii_img = nib.Nifti1Image(data_np, affine=affine, header=hdr)
+    # save
+    outputFile = os.path.sep.join([saveDir, fileName])
+    nib.save(nii_img, outputFile)
+
+
 def save_single_zslices(image3D, saveDir, subdir, max_gray_value=1., color_channel=-1):
     saveDirSlices = os.path.sep.join([saveDir, subdir])
     if not os.path.exists(saveDirSlices):

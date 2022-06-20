@@ -1,9 +1,8 @@
 import torch
-from dataset import SingleVentricleDataset, DatasetMode
+from cnn.dataset import SingleVentricleDataset, DatasetMode
 import configparser
 import os
 import os.path as osp
-import transforms as T
 from tqdm import tqdm
 import sys
 
@@ -11,6 +10,7 @@ import sys
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 import utils.plots as plots
+import utils.transforms as T
 
 
 config = configparser.ConfigParser()

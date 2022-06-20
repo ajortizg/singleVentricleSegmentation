@@ -30,6 +30,14 @@ class SingleVentricleDataset(Dataset):
         self.flow_transforms = flow_transforms              # transformations applied on optical flow
 
         self.base_path = config.get('DATA', 'BASE_PATH_3D')
+        if mode == DatasetMode.TRAIN:
+            self.base_path = osp.join(self.base_path, 'train')
+            self.mode_str = 'train'
+        elif mode == DatasetMode.VAL:
+            self.base_path = osp.join(self.base_path, 'val')
+            self.mode_str = 'val'
+        else:
+            self.mode_str = 'full'
 
         self.segmentations_subdir_path = config.get('DATA', 'SEGMENTATIONS_SUBDIR_PATH')
         self.masks_root = osp.join(self.base_path, self.segmentations_subdir_path)
@@ -37,14 +45,6 @@ class SingleVentricleDataset(Dataset):
         self.volumes_subdir_path = config.get('DATA', 'VOLUMES_SUBDIR_PATH')
         self.volumes_path = osp.join(self.base_path, self.volumes_subdir_path)
         self.volume_files = glob(osp.join(self.volumes_path, '*.nii.gz'))
-
-        # Split for Train and Test
-        if mode == DatasetMode.TRAIN:
-            train_idxs = self.get_train_idxs()
-            self.volume_files = np.asarray(self.volume_files)[train_idxs]
-        elif mode == DatasetMode.VAL:
-            val_idxs = self.get_val_idxs()
-            self.volume_files = np.asarray(self.volume_files)[val_idxs]
 
         self.segmetations_filename = config.get('DATA', 'SEGMENTATIONS_FILE_NAME')
         self.segmetations_path = osp.join(self.base_path, self.segmetations_filename)
@@ -62,26 +62,6 @@ class SingleVentricleDataset(Dataset):
             self.flow_level = 'it0'
             self.fwdof_dir = self.config.get('DATA', 'FWD_OPTFLOW_DIR')
             self.bwdof_dir = self.config.get('DATA', 'BWD_OPTFLOW_DIR')
-
-    def get_train_idxs(self):
-        validation_patients = self.config.get('DATA', 'VALIDATION_PATIENTS')
-        train_idxs = []
-        for i in range(len(self.volume_files)):
-            pname = self.get_patient_name(i)
-            if pname in validation_patients:
-                continue
-            else:
-                train_idxs.append(i)
-        return np.asarray(train_idxs)
-
-    def get_val_idxs(self):
-        validation_patients = self.config.get('DATA', 'VALIDATION_PATIENTS')
-        val_idxs = []
-        for i in range(len(self.volume_files)):
-            pname = self.get_patient_name(i)
-            if pname in validation_patients:
-                val_idxs.append(i)
-        return np.asarray(val_idxs)
 
     def __len__(self):
         return len(self.volume_files)
@@ -124,11 +104,6 @@ class SingleVentricleDataset(Dataset):
         tdias = int(row_patient.loc[index_patient, 'Diastole'])
         return (tsyst, tdias)
 
-    def header(self, patient_name):
-        idx = self.index_for_patient(patient_name)
-        vol = nib.load(self.volume_files[idx])
-        return vol.header
-
     def systole_diastole_mask(self, patient_name):
         mask_syst_zyx = self.load_mask(patient_name, '_Systole_Labelmap.nii')
         mask_syst_zyx = torch.from_numpy(mask_syst_zyx).float()
@@ -152,13 +127,6 @@ class SingleVentricleDataset(Dataset):
                 found = True
                 return (idx, found)
         return (-1, found)
-
-    def data_for_patient(self, patient_name):
-        idx, found = self.index_for_patient(patient_name)
-        if found:
-            return self.__getitem__(idx)
-        else:
-            return (None, None, None, None, None, None, None, None)
 
     def optflow(self, idx):
         patient_name = self.get_patient_name(idx)
