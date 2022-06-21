@@ -14,7 +14,7 @@ import utils.transforms as T
 from dataset.singleVentricleDataset import SingleVentricleDataset, SingleVentriclePatient
 
 
-def save_np_to_nifty(file, saveDir, fileName, hdr_old):
+def save_np_to_nifty(file: np.array, saveDir: str, fileName: str, hdr_old):
     # header
     hdr = nib.nifti1.Nifti1Header()
     hdr.set_data_shape(file.shape)
@@ -28,7 +28,7 @@ def save_np_to_nifty(file, saveDir, fileName, hdr_old):
     nib.save(ni_img, outputFile)
 
 
-def save_data(patient, saveDir4D, saveDirSegmentations):
+def save_data(patient: SingleVentriclePatient, saveDir4D: str, saveDirSegmentations: str):
     saveDirPatient = plots.createSubDirectory(saveDirSegmentations, patient.name)
     save_np_to_nifty(patient.nii_data_xyzt, saveDir4D, patient.name + ".nii.gz", patient.nii_header_xyzt)
     save_np_to_nifty(patient.nii_mask_diastole_xyz, saveDirPatient, patient.name + "_Diastole_Labelmap.nii", patient.hdr_mask_diastole)
@@ -80,14 +80,14 @@ if __name__ == "__main__":
     val_ds = SingleVentricleDataset(config, mode='val')
 
     saveDir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'preprocessing_da')
-    saveDir_train = plots.createSubDirectory(saveDir, 'train')
-    saveDir_val = plots.createSubDirectory(saveDir, 'val')
 
     # train paths
+    saveDir_train = plots.createSubDirectory(saveDir, 'train')
     saveDir4D_train = plots.createSubDirectory(saveDir_train, train_ds.volumes_subdir_path)
     saveDirSegmentations_train = plots.createSubDirectory(saveDir_train, train_ds.segmentations_subdir_path)
 
     # validation paths
+    saveDir_val = plots.createSubDirectory(saveDir, 'val')
     saveDir4D_val = plots.createSubDirectory(saveDir_val, val_ds.volumes_subdir_path)
     saveDirSegmentations_val = plots.createSubDirectory(saveDir_val, val_ds.segmentations_subdir_path)
 

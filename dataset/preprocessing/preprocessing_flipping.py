@@ -12,7 +12,7 @@ import os.path as osp
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../../'))
 sys.path.append(ROOT_DIR)
 from utils import plots
-from dataset import singleVentricleDataset
+from dataset.singleVentricleDataset import SingleVentricleDataset
 
 
 def flip_mask(patient_name, mask_xyz, flip_all):
@@ -36,13 +36,7 @@ def save_np_to_nifty(file, saveDir, fileName, hdr_old):
     ni_img = nib.Nifti1Image(file, affine=None, header=hdr)
     # save
     outputFile = os.path.sep.join([saveDir, fileName])
-    print(outputFile)
-    print(file.shape)
     nib.save(ni_img, outputFile)
-    # print("old header:")
-    # print(hdr_old)
-    # print("new header:")
-    # print(hdr)
 
 
 if __name__ == "__main__":
@@ -62,10 +56,10 @@ if __name__ == "__main__":
         config.write(configfile)
 
     # load data base
-    dataSet = singleVentricleDataset.SingleVentricleDataset(config)
+    dataSet = SingleVentricleDataset(config)
 
     # load specific patients
-    flip_all = config.get('FLIPPING', 'flip_all')
+    flip_all = set(config.get('FLIPPING', 'flip_all').replace('{', '').replace('}', '').replace('\n', '').split(','))
 
     # generate columns for flipping axis
     xflip = np.zeros(len(dataSet))

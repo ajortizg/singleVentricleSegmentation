@@ -88,13 +88,11 @@ if __name__ == "__main__":
 
     if compute_all_patients:
         pbar = tqdm(total=len(train_ds) + len(val_ds))
-        for idx in range(len(train_ds)):
-            compute_optical_flow(train_ds, idx, mode, save_dir, device, step, config)
-            pbar.update(1)
+        for ds in [train_ds, val_ds]:
+            for idx in range(len(ds)):
+                compute_optical_flow(ds, idx, mode, save_dir, device, step, config)
+                pbar.update(1)
 
-        for idx in range(len(val_ds)):
-            compute_optical_flow(val_ds, idx, mode, save_dir, device, step, config)
-            pbar.update(1)
     else:
         pbar = tqdm(total=1)
         patient_name = config.get('DATA', 'PATIENT_NAME')

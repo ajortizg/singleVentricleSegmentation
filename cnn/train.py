@@ -53,7 +53,7 @@ if __name__ == "__main__":
     # mask_transforms = T.ComposeUnary([T.Round(th=0.5)])
     # flow_transforms = T.ComposeUnary([T.ResizeFlow3d(size=(14, 90, 90))])
 
-    data_transforms = T.ComposeUnary([T.Normalize()])
+    data_transforms = T.ComposeUnary([T.Normalize(), T.PadTime(maxt=40)])
 
     train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, load_flow=True,
                                       data_transforms=data_transforms,
@@ -88,7 +88,7 @@ if __name__ == "__main__":
         print("===========================================================")
         print("\n")
 
-    net = torch.nn.DataParallel(net, device_ids=[0, 1, 2])
+    net = torch.nn.DataParallel(net, device_ids=[0, 1])
     opt = Adam(net.parameters(), lr=LR, weight_decay=WEIGHT_DECAY, betas=(BETA1, BETA2))
     schedule_lr = StepLR(opt, step_size=STEP_SIZE, gamma=GAMMA)
 

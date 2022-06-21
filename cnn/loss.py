@@ -57,7 +57,7 @@ def loss_func_batch(mts, mtts, offsets):
 
     BS = mts[0].shape[0]
     if BS == 1:
-        return loss_func_three(mts, mtts)[0]
+        return loss_func_complete(mts, mtts)[0]
 
     timesteps = len(mts)
     loss = 0

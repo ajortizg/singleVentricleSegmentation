@@ -3,20 +3,20 @@ import numpy as np
 from torch.nn import Module
 import sys
 import os.path as osp
-from threading import Thread
 import os
-from warp import Warp
+from warp import WarpCNN
 from loss import loss_func_complete, loss_func_batch
-import transforms as T
+
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
-import utils.torch_utils as torch_utils
+# import utils.torch_utils as torch_utils
+import utils.transforms as T
 
 
 def warp_forward(net: Module, warp, data: torch.Tensor, nsize: tuple, u: torch.Tensor, mt: torch.Tensor):
     data_t = data.reshape(nsize)
-    mt = warp(mt.squeeze(), u).reshape(nsize)
+    mt = warp(mt, u)
     x = torch.cat((data_t, mt), dim=1)
     mt = net(x)
     return mt
@@ -25,7 +25,7 @@ def warp_forward(net: Module, warp, data: torch.Tensor, nsize: tuple, u: torch.T
 def time_propagation(net: Module, vol, m0, mk, init_ts, final_ts, ff, bf, config, DEVICE):
     NZ, NY, NX, NT = vol.shape
     nsize = (1, 1, NZ, NY, NX)
-    warp = Warp(config, NZ, NY, NX)
+    warp = WarpCNN(config, NZ, NY, NX)
     mts = [m0.reshape(nsize).to(DEVICE)]
     mtts = [mk.reshape(nsize).to(DEVICE)]
     ts = ff.shape[0]
@@ -116,9 +116,9 @@ def train_batch(net, opt, train_loader, pbar, config, DEVICE):
     net.train()
     total_train_loss = 0
 
-    for i, (pnames, vols, m0s, mks, init_ts, final_ts, ff, bf, grid, offsets) in enumerate(train_loader):
+    for i, (pnames, vols, m0s, mks, init_ts, final_ts, ff, bf, offsets) in enumerate(train_loader):
         pbar.set_postfix_str(f'Train I: {i+1}')
-        mts, mtts = time_popagation_batch(net, vols, m0s, mks, init_ts, final_ts, ff, bf, grid, offsets, config, DEVICE)
+        mts, mtts = time_popagation_batch(net, vols, m0s, mks, init_ts, final_ts, ff, bf, offsets, config, DEVICE)
 
         # train_loss, *_ = loss_func_complete(mts, mtts)
         train_loss = loss_func_batch(mts, mtts, offsets)
@@ -136,29 +136,28 @@ def val_batch(net, val_loader, pbar, config, DEVICE):
     total_val_loss = 0
 
     with torch.no_grad():
-        for i, (pnames, vols, m0s, mks, init_ts, final_ts, ff, bf, grid, offsets) in enumerate(val_loader):
+        for i, (pnames, vols, m0s, mks, init_ts, final_ts, ff, bf, offsets) in enumerate(val_loader):
             pbar.set_postfix_str(f'Val I: {i+1}')
-            mts, mtts = time_popagation_batch(net, vols, m0s, mks, init_ts, final_ts, ff, bf, grid, offsets, config, DEVICE)
+            mts, mtts = time_popagation_batch(net, vols, m0s, mks, init_ts, final_ts, ff, bf, offsets, config, DEVICE)
 
             val_loss = loss_func_batch(mts, mtts, offsets)
             total_val_loss += val_loss.item()
     return total_val_loss
 
 
-def time_popagation_batch(net, vols, m0s, mks, init_ts, final_ts, ff, bf, grid, offsets, config, DEVICE):
+def time_popagation_batch(net, vols, m0s, mks, init_ts, final_ts, ff, bf, offsets, config, DEVICE):
     mts = [m0s.to(DEVICE)]
     mtts = [mks.to(DEVICE)]
-    grid = grid.to(DEVICE)
     flow_times = ff.shape[1]
     diff_t = flow_times - offsets
     NZ, NY, NX = m0s.shape[2:]
-    warp = Warp(config, NZ, NY, NX)
+    warp = WarpCNN(config, NZ, NY, NX)
 
     for t in range(flow_times):
         # Forward propagation m0 -> mk
         # mt = torch_utils.warp(mts[-1], grid + ff[:, t, :, :, :, :].to(DEVICE))
-        mt = warp(mts[-1].squeeze(), ff[:, t, :, :, :, :].squeeze().to(DEVICE)).unsqueeze(0).unsqueeze(0)
-        # mt = torch.zeros_like(mts[-1])
+        # mt = warp(mts[-1].squeeze(), ff[:, t, :, :, :, :].squeeze().to(DEVICE)).unsqueeze(0).unsqueeze(0)
+        mt = warp(mts[-1], ff[:, t, :, :, :, :].to(DEVICE))
         data_t = select_volume_fwd(vols, init_ts, final_ts, t, diff_t).to(DEVICE)
         x = torch.cat((data_t, mt), dim=1)
         x = net(x)
@@ -166,8 +165,8 @@ def time_popagation_batch(net, vols, m0s, mks, init_ts, final_ts, ff, bf, grid, 
 
         # Backward propagation mk -> m0
         # mtt = torch_utils.warp(mtts[-1], grid + bf[:, t, :, :, :, :].to(DEVICE))
-        mtt = warp(mtts[-1].squeeze(), bf[:, t, :, :, :, :].squeeze().to(DEVICE)).unsqueeze(0).unsqueeze(0)
-        # mtt = torch.zeros_like(mtts[-1])
+        # mtt = warp(mtts[-1].squeeze(), bf[:, t, :, :, :, :].squeeze().to(DEVICE)).unsqueeze(0).unsqueeze(0)
+        mtt = warp(mtts[-1], bf[:, t, :, :, :, :].to(DEVICE))
         data_t = select_volume_bwd(vols, init_ts, final_ts, t, diff_t).to(DEVICE)
         x = torch.cat((data_t, mtt), dim=1)
         x = net(x)
@@ -247,10 +246,10 @@ def collate_fn(data):
             fwd_t[b, :, :, :, :, :] = ff[b]
             bwd_t[b, :, :, :, :, :] = bf[b]
 
-    grid = torch_utils.create_grid(NZ, NY, NX).unsqueeze(0)
-    grid = torch.cat([grid for _ in range(BS)], dim=0)
+    # grid = torch_utils.create_grid(NZ, NY, NX).unsqueeze(0)
+    # grid = torch.cat([grid for _ in range(BS)], dim=0)
 
-    return (pnames, vols.unsqueeze_(1), m0s.unsqueeze_(1), mks.unsqueeze_(1), init_ts, final_ts, fwd_t, bwd_t, grid, offsets)
+    return (pnames, vols.unsqueeze_(1), m0s.unsqueeze_(1), mks.unsqueeze_(1), init_ts, final_ts, fwd_t, bwd_t, offsets)
 
 # def max_dim(x):
 #     BS = len(x)

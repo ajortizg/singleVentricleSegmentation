@@ -56,7 +56,7 @@ if __name__ == "__main__":
     dataSet = SingleVentricleDataset(config)
 
     # load specific patients for validation
-    val_patients = config.get('SPLIT', 'validation_patients')
+    val_patients = set(config.get('SPLIT', 'validation_patients').replace('{', '').replace('}', '').replace('\n', '').split(','))
 
     # Paths for training dataset
     saveDir_train = plots.createSubDirectory(saveDir, 'train')
