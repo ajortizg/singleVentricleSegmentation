@@ -299,9 +299,9 @@ def save_img_masks_slices(img3d: torch.Tensor, masks3d: list[torch.Tensor],
         for i, mask3d in enumerate(masks3d):
             mask = mask3d[z, :, :].cpu().detach().numpy()
             img = merge_img_mask(img, mask, th, alphas[i], colors[i])
-            img_name = f"img_mask_m{i}_z{z}.png"
-            path_name = os.path.join(save_dir_slices, img_name)
-            cv2.imwrite(path_name, factor_gray_value * img)
+        img_name = f"img_mask_z{z}.png"
+        path_name = os.path.join(save_dir_slices, img_name)
+        cv2.imwrite(path_name, factor_gray_value * img)
 
 
 def merge_img_mask(img, mask, th=0.5, alpha=0.35, color=[1, 1, 0]):

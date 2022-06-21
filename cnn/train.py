@@ -48,13 +48,7 @@ if __name__ == "__main__":
     VERBOSE = config.getboolean('DEBUG', 'VERBOSE')
 
     # Create train and validation datasets
-    # data_transforms = T.ComposeUnary([T.Normalize(), T.PadTime(maxt=40)])
-    # data_mask_transforms = T.ComposeTernary([T.Resize(size=(14, 90, 90))])
-    # mask_transforms = T.ComposeUnary([T.Round(th=0.5)])
-    # flow_transforms = T.ComposeUnary([T.ResizeFlow3d(size=(14, 90, 90))])
-
     data_transforms = T.ComposeUnary([T.Normalize(), T.PadTime(maxt=40)])
-
     train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, load_flow=True,
                                       data_transforms=data_transforms,
                                       mask_transforms=None,
@@ -74,16 +68,18 @@ if __name__ == "__main__":
     net = UNet3D(config).to(DEVICE)
 
     if VERBOSE:
-        summary(net, input_size=(2, 16, 100, 100), batch_size=-1)
+        summary(net, input_size=(2, 16, 80, 80), batch_size=-1)
         print("\n")
         print("===========================================================")
         print('CNN parameters')
         print(f"\t* Patients for training: {len(train_ds)}")
         print(f"\t* Patients for validation: {len(val_ds)}")
         print(f'\t* Device: {DEVICE}')
-        print(f'\t* Learning rate: {LR}')
         print(f'\t* Batch size: {BATCH_SIZE}')
         print(f'\t* Num epochs: {NUM_EPOCHS}')
+        print(f'\t* Learning rate: {LR}')
+        print(f'\t* Weight decay: {WEIGHT_DECAY}, betas: {(BETA1, BETA2)}')
+        print(f'\t* Step size: {STEP_SIZE}, gamma: {GAMMA}')
         print(f'\t* Num workers: {os.cpu_count()//2}')
         print("===========================================================")
         print("\n")
@@ -123,6 +119,8 @@ if __name__ == "__main__":
         H['train_loss'].append(avg_train_loss)
         H['val_loss'].append(avg_val_loss)
         writer.add_scalars('loss', {'e_train_loss': avg_train_loss, 'e_val_loss': avg_val_loss}, e)
+        print(schedule_lr.get_last_lr())
+        writer.add_scalar('lr', schedule_lr.get_last_lr()[0], e)
         cnn_utils.save_weights(net, e, 10, save_dir, 'model_e.pth')
 
         pbar.update(1)

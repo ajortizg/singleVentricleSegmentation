@@ -92,7 +92,6 @@ if __name__ == "__main__":
             for idx in range(len(ds)):
                 compute_optical_flow(ds, idx, mode, save_dir, device, step, config)
                 pbar.update(1)
-
     else:
         pbar = tqdm(total=1)
         patient_name = config.get('DATA', 'PATIENT_NAME')

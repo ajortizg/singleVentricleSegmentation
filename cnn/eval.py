@@ -1,18 +1,19 @@
 import torch
 import configparser
 from tqdm import tqdm
-from dataset import SingleVentricleDataset, DatasetMode
 from warp import Warp
 from cnn_utils import warp_forward
 import sys
 import os.path as osp
 from loss import loss_func_three
 import csv
-import transforms as T
+
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 from utils import plots
+import utils.transforms as T
+from cnn.dataset import SingleVentricleDataset, DatasetMode
 
 
 if __name__ == "__main__":
@@ -23,6 +24,7 @@ if __name__ == "__main__":
     MODEL_NAME = config_eval.get('DATA', 'MODEL_NAME')
     USE_CUDA = config_eval.get('DEVICE', 'CUDA_AVAILABLE')
     VERBOSE = config_eval.getboolean('DEBUG', 'VERBOSE')
+
     if USE_CUDA and torch.cuda.is_available():
         DEVICE = 'cuda'
         CUDA_DEVICE = config_eval.getint('DEVICE', 'cuda_device')
@@ -34,8 +36,13 @@ if __name__ == "__main__":
     config_train.read(osp.join(TRAINED_MODEL_DIR, 'config.ini'))
 
     # transf = [transforms.Normalize(mean=0.1478, std=0.1385)]
+    DATASET = config_eval.get('DATA', 'DATASET')
     transf = T.ComposeUnary([T.Normalize()])
-    ds = SingleVentricleDataset(config_train, DatasetMode.TRAIN, load_flow=True, data_transforms=transf)
+    if DATASET == 'train':
+        ds = SingleVentricleDataset(config_train, DatasetMode.TRAIN, load_flow=True, data_transforms=transf)
+    else:
+        ds = SingleVentricleDataset(config_train, DatasetMode.VAL, load_flow=True, data_transforms=transf)
+
     save_dir = plots.createSaveDirectory(config_eval.get('DATA', 'OUTPUT_PATH'), 'CNN_EVAL')
 
     # save config file to save directory

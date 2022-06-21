@@ -223,9 +223,9 @@ class RandomRotate:
 
             vol_n = np.zeros(shape=(NX, NY, NZ, NT))
             for t in range(NT):
-                vol_n[:, :, :, t] = affine_transform(vol[:, :, :, t].swapaxes(0, 2).numpy(), matrix=Rot, offset=offset, order=3, mode='reflect')
-            ms_n = affine_transform(ms.swapaxes(0, 2).numpy(), matrix=Rot, offset=offset, order=3, mode='reflect')
-            md_n = affine_transform(md.swapaxes(0, 2).numpy(), matrix=Rot, offset=offset, order=3, mode='reflect')
+                vol_n[:, :, :, t] = affine_transform(vol[:, :, :, t].swapaxes(0, 2).numpy(), matrix=Rot, offset=offset, order=3, mode='nearest')
+            ms_n = affine_transform(ms.swapaxes(0, 2).numpy(), matrix=Rot, offset=offset, order=3, mode='nearest')
+            md_n = affine_transform(md.swapaxes(0, 2).numpy(), matrix=Rot, offset=offset, order=3, mode='nearest')
             return (torch.from_numpy(vol_n).swapaxes(0, 2), torch.from_numpy(ms_n).swapaxes(0, 2), torch.from_numpy(md_n).swapaxes(0, 2))
         else:
             return (vol, ms, md)

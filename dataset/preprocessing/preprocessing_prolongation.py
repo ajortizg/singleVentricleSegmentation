@@ -94,6 +94,9 @@ if __name__ == "__main__":
     NZ_prolong = config.getint('PROLONGATION', 'NZ_prolong')
     LZ_prolong, LY_prolong, LX_prolong = getMeshLength(config, NZ_prolong, NY_prolong, NX_prolong)
 
+    use_th = config.getboolean('PROLONGATION', 'USE_TH')
+    bin_th = config.getfloat('PROLONGATION', 'BIN_TH')
+
     # create save directory
     saveDir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), "preprocessing_prolongation")
 
@@ -163,6 +166,11 @@ if __name__ == "__main__":
         prolongation_diastole = prolongationOp.forward(mask_diastole)
         prolongation_systole = prolongationOp.forward(mask_systole)
         prolongation_4d = prolongationOp.forwardVectorField(data_4d.contiguous())
+
+        # binarize prolonganted masks
+        if use_th:
+            prolongation_diastole = torch.where(prolongation_diastole > bin_th, 1.0, 0.0)
+            prolongation_systole = torch.where(prolongation_systole > bin_th, 1.0, 0.0)
 
         # save as nifty
         saveDirPatient = plots.createSubDirectory(saveDirSegmentations, patient.name)
