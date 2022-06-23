@@ -46,8 +46,10 @@ if __name__ == "__main__":
     NUM_EPOCHS = config.getint('PARAMETERS', 'NUM_EPOCHS')
     SHUFFLE = config.getboolean('PARAMETERS', 'SHUFFLE')
     VERBOSE = config.getboolean('DEBUG', 'VERBOSE')
+    RESIDUAL = config.getboolean('PARAMETERS', 'RESIDUAL')
 
     # Create train and validation datasets
+    # data_transforms = T.ComposeUnary([T.Normalize(mean=0.04717000863622656, std=0.08217189410007013), T.PadTime(maxt=40)])
     data_transforms = T.ComposeUnary([T.Normalize(), T.PadTime(maxt=40)])
     train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, load_flow=True,
                                       data_transforms=data_transforms,
@@ -80,6 +82,7 @@ if __name__ == "__main__":
         print(f'\t* Learning rate: {LR}')
         print(f'\t* Weight decay: {WEIGHT_DECAY}, betas: {(BETA1, BETA2)}')
         print(f'\t* Step size: {STEP_SIZE}, gamma: {GAMMA}')
+        print(f'\t* Residual learning: {RESIDUAL}')
         print(f'\t* Num workers: {os.cpu_count()//2}')
         print("===========================================================")
         print("\n")
@@ -119,7 +122,6 @@ if __name__ == "__main__":
         H['train_loss'].append(avg_train_loss)
         H['val_loss'].append(avg_val_loss)
         writer.add_scalars('loss', {'e_train_loss': avg_train_loss, 'e_val_loss': avg_val_loss}, e)
-        print(schedule_lr.get_last_lr())
         writer.add_scalar('lr', schedule_lr.get_last_lr()[0], e)
         cnn_utils.save_weights(net, e, 10, save_dir, 'model_e.pth')
 

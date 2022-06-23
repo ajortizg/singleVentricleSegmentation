@@ -151,6 +151,7 @@ def time_popagation_batch(net, vols, m0s, mks, init_ts, final_ts, ff, bf, offset
     diff_t = flow_times - offsets
     NZ, NY, NX = m0s.shape[2:]
     warp = WarpCNN(config, NZ, NY, NX)
+    RESIDUAL = config.getboolean('PARAMETERS', 'RESIDUAL')
 
     for t in range(flow_times):
         # Forward propagation m0 -> mk
@@ -158,6 +159,8 @@ def time_popagation_batch(net, vols, m0s, mks, init_ts, final_ts, ff, bf, offset
         data_t = select_volume_fwd(vols, init_ts, final_ts, t, diff_t).to(DEVICE)
         x = torch.cat((data_t, mt), dim=1)
         x = net(x)
+        if RESIDUAL:
+            x = mt + x
         mts.append(x)
 
         # Backward propagation mk -> m0
@@ -165,6 +168,8 @@ def time_popagation_batch(net, vols, m0s, mks, init_ts, final_ts, ff, bf, offset
         data_t = select_volume_bwd(vols, init_ts, final_ts, t, diff_t).to(DEVICE)
         x = torch.cat((data_t, mtt), dim=1)
         x = net(x)
+        if RESIDUAL:
+            x = mtt + x
         mtts.append(x)
 
     mtts.reverse()

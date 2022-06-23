@@ -56,8 +56,8 @@ def loss_func_batch(mts, mtts, offsets):
     # {m0_b0, m0_b1}    mtts[6]     |   {m4_b0, m6_b1}    mtts[6]
 
     BS = mts[0].shape[0]
-    if BS == 1:
-        return loss_func_complete(mts, mtts)[0]
+    # if BS == 1:
+    #     return loss_func_complete(mts, mtts)[0]
 
     timesteps = len(mts)
     loss = 0
@@ -73,7 +73,8 @@ def loss_func_batch(mts, mtts, offsets):
                 mtt_b = mtts[idx][b, :, :, :, :].unsqueeze(0)
                 loss += mse_loss(mt_b, mtt_b)
                 N += 1
-    loss = loss / (BS * N)
+    # loss = loss / (BS * N)
+    loss = loss / N
     return loss
 
 

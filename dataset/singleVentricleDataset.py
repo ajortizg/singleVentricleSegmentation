@@ -4,7 +4,6 @@ import nibabel as nib
 import numpy as np
 import os
 import pandas
-from enum import Enum
 
 
 class SingleVentriclePatient:
