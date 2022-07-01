@@ -13,9 +13,9 @@ import utils.transforms as T
 config = configparser.ConfigParser()
 config.read('parser/configPreprocessing.ini')
 
-# transf = T.ComposeUnary([T.Standarize(mean=4131.408831052098, std=7339.299260790935)])
+# transf = T.ComposeUnary([T.Standarize(mean=4167.181616023748, std=7324.106522252932)])
 # transf = T.ComposeUnary([T.Normalize()])
-# transf = T.ComposeUnary([T.Normalize(min=-4972.10205078125, max=266556.09375)])
+# transf = T.ComposeUnary([T.Normalize(min=-6418.61376953125, max=269167.3125)])
 
 ds_train = SingleVentricleDataset(config, mode='train')
 ds_val = SingleVentricleDataset(config, mode='val')

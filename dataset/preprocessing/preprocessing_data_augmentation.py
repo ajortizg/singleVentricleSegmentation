@@ -66,19 +66,20 @@ if __name__ == "__main__":
         T.ElasticDeformation(p=ed_prob, sigma_range=(ed_sigma, ed_sigma), points_range=(ed_grid, ed_grid))
     ])
 
-    print("===========================================================")
-    print("Data augmentation")
-    print("===========================================================")
-    print(f'\t* Create: {N} new patients')
-    print(f'\t* Flip probs: {flip_prob_x}, {flip_prob_y}, {flip_prob_z}')
-    print(f'\t* Rot prob: {prob_rot}, with ranges: {rot_range_x}, {rot_range_y}, {rot_range_z}')
-    print(f'\t* Elastic def prob: {ed_prob}, grid: {ed_grid}, sigma: {ed_sigma}')
-    print()
-
     train_ds = SingleVentricleDataset(config, mode='train')
     val_ds = SingleVentricleDataset(config, mode='val')
 
     saveDir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'preprocessing_da')
+    logger = plots.create_logger(saveDir)
+
+    logger.info("===========================================================")
+    logger.info("Data augmentation")
+    logger.info("===========================================================")
+    logger.info(f'\t* Create: {N} new patients')
+    logger.info(f'\t* Flip probs: {flip_prob_x}, {flip_prob_y}, {flip_prob_z}')
+    logger.info(f'\t* Rot prob: {prob_rot}, with ranges: {rot_range_x}, {rot_range_y}, {rot_range_z}')
+    logger.info(f'\t* Elastic def prob: {ed_prob}, grid: {ed_grid}, sigma: {ed_sigma}')
+    logger.info('save directory: ' + saveDir)
 
     # train paths
     saveDir_train = plots.createSubDirectory(saveDir, 'train')
@@ -98,11 +99,14 @@ if __name__ == "__main__":
     df_train = pd.DataFrame(columns=['Name', 'Systole', 'Diastole'])
     df_val = pd.DataFrame(columns=['Name', 'Systole', 'Diastole'])
     pbar = tqdm(total=len(train_ds) + (len(val_ds)))
-
+    logger.info(f'Found {len(train_ds)} training patientes')
+    logger.info(f'Found {len(val_ds)} validation patients')
+    
     # Generate augmented training dataset
     for index in range(0, len(train_ds)):
         patient = train_ds[index]
         pbar.set_postfix_str(f'P: {patient.name}')
+        logger.info(f'[Train]: {index} -> {patient.name}')
 
         # Save original data
         df = save_data(patient, saveDir4D_train, saveDirSegmentations_train)
@@ -137,6 +141,7 @@ if __name__ == "__main__":
     for index in range(0, len(val_ds)):
         patient = val_ds[index]
         pbar.set_postfix_str(f'P: {patient.name}')
+        logger.info(f'[Val]: {index} -> {patient.name}')
 
         df = save_data(patient, saveDir4D_val, saveDirSegmentations_val)
         df_val = pd.concat([df_val, df])

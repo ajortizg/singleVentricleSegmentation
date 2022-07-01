@@ -13,12 +13,13 @@ class OpticalFlowMode(Enum):
     UNKNOWN = 0
 
 
-def compute_optical_flow(ds: SingleVentricleDataset, idx: int, mode: OpticalFlowMode, save_dir: str, device: str, step: int, config):
+def compute_optical_flow(ds: SingleVentricleDataset, idx: int, mode: OpticalFlowMode, save_dir: str, device: str, step: int, config, logger):
     (pname, data, _, _, init_ts, final_ts, _, _) = ds[idx]
     data = data.to(device)
     NZ, NY, NX, NT = data.shape
 
     patient_dir = plots.createSubDirectory(save_dir, pname)
+    logger.info(f'{idx} - {pname}')
 
     # initialization of optical flow and mask
     u = torch.zeros([NZ, NY, NX, 3]).float().to(device)
@@ -67,10 +68,13 @@ if __name__ == "__main__":
 
     mode_str = config.get('PARAMETERS', 'mode')
     mode = OpticalFlowMode.FORWARD if mode_str == 'Forward' else OpticalFlowMode.BACKWARD
-    plots.printConsoleOutput_Header(f'Compute TV-L1 optical flow ({mode_str})')
+    # plots.printConsoleOutput_Header(f'Compute TV-L1 optical flow ({mode_str})')
 
     # create save directory
     save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), f'TVL1OF3D{mode_str}')
+
+    logger = plots.create_logger(save_dir)
+    logger.info(f'Compute TV-L1 optical flow ({mode_str})')
 
     # save config file to save directory
     conifg_output = os.path.sep.join([save_dir, "config.ini"])
@@ -107,15 +111,15 @@ if __name__ == "__main__":
             to_idx = to_idx if use_indices else len(ds)
 
             for idx in range(from_idx, to_idx):
-                compute_optical_flow(ds, idx, mode, save_dir, device, step, config)
+                compute_optical_flow(ds, idx, mode, save_dir, device, step, config, logger)
                 pbar.update(1)
     else:
         pbar = tqdm(total=1)
         patient_name = config.get('DATA', 'PATIENT_NAME')
         idx, found = train_ds.index_for_patient(patient_name)
         if not found:
-            print(patient_name + " not found!")
+            logger.info(patient_name + " not found!")
             sys.exit()
         else:
-            compute_optical_flow(train_ds, idx, mode, save_dir, device, step, config)
+            compute_optical_flow(train_ds, idx, mode, save_dir, device, step, config, logger)
             pbar.update(1)

@@ -88,6 +88,28 @@ class Normalize:
         return f"{self.__class__.__name__}()"
 
 
+class BinaryClosing:
+    def __init__(self):
+        pass
+
+    def __call__(self, x: np.array) -> np.array:
+        return ndimage.binary_closing(x)
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}()"
+
+
+class BinaryOpening:
+    def __init__(self):
+        pass
+
+    def __call__(self, x: np.array) -> np.array:
+        return ndimage.binary_opening(x)
+    
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}()"
+
+
 class Standarize:
     def __init__(self, mean: float, std: float):
         self.mean = mean
@@ -273,8 +295,8 @@ class Round:
     def __init__(self, th=0.5):
         self.th = th
 
-    def __call__(self, x: torch.Tensor):
-        y = torch.where(x > self.th, 1.0, 0.0)
+    def __call__(self, x: np.array) -> np.array:
+        y = np.where(x > self.th, 1.0, 0.0)
         return y
 
     def __repr__(self) -> str:
