@@ -1,0 +1,178 @@
+save results to directory:  results/CNN_EVAL_20220701-103716 
+
+  0%|          | 0/72 [00:00<?, ?it/s]  0%|          | 0/72 [00:00<?, ?it/s, P: Adult_39, S: 1/22]  0%|          | 0/72 [00:01<?, ?it/s, P: Adult_39, S: 2/22]  0%|          | 0/72 [00:01<?, ?it/s, P: Adult_39, S: 3/22]  0%|          | 0/72 [00:01<?, ?it/s, P: Adult_39, S: 4/22]  0%|          | 0/72 [00:01<?, ?it/s, P: Adult_39, S: 5/22]  0%|          | 0/72 [00:01<?, ?it/s, P: Adult_39, S: 6/22]  0%|          | 0/72 [00:01<?, ?it/s, P: Adult_39, S: 7/22]  0%|          | 0/72 [00:01<?, ?it/s, P: Adult_39, S: 8/22]  0%|          | 0/72 [00:01<?, ?it/s, P: Adult_39, S: 9/22]  0%|          | 0/72 [00:01<?, ?it/s, P: Adult_39, S: 10/22]  0%|          | 0/72 [00:01<?, ?it/s, P: Adult_39, S: 11/22]  0%|          | 0/72 [00:01<?, ?it/s, P: Adult_39, S: 12/22]  0%|          | 0/72 [00:01<?, ?it/s, P: Adult_39, S: 13/22]  0%|          | 0/72 [00:01<?, ?it/s, P: Adult_39, S: 14/22]  0%|          | 0/72 [00:01<?, ?it/s, P: Adult_39, S: 15/22]  0%|          | 0/72 [00:01<?, ?it/s, P: Adult_39, S: 16/22]  0%|          | 0/72 [00:01<?, ?it/s, P: Adult_39, S: 17/22]  0%|          | 0/72 [00:01<?, ?it/s, P: Adult_39, S: 18/22]  0%|          | 0/72 [00:01<?, ?it/s, P: Adult_39, S: 19/22]  0%|          | 0/72 [00:01<?, ?it/s, P: Adult_39, S: 20/22]  0%|          | 0/72 [00:01<?, ?it/s, P: Adult_39, S: 21/22]  0%|          | 0/72 [00:01<?, ?it/s, P: Adult_39, S: 22/22]Clipping input data to the valid range for imshow with RGB data ([0..1] for floats or [0..255] for integers).
+Clipping input data to the valid range for imshow with RGB data ([0..1] for floats or [0..255] for integers).
+Clipping input data to the valid range for imshow with RGB data ([0..1] for floats or [0..255] for integers).
+Clipping input data to the valid range for imshow with RGB data ([0..1] for floats or [0..255] for integers).
+Clipping input data to the valid range for imshow with RGB data ([0..1] for floats or [0..255] for integers).
+Clipping input data to the valid range for imshow with RGB data ([0..1] for floats or [0..255] for integers).
+tensor(0.0071) tensor(0.7438)
+tensor(0.) tensor(1.)
+
+tensor(0.) tensor(0.7481)
+tensor(-0.0111) tensor(1.0066)
+
+tensor(0.0112) tensor(0.7480)
+tensor(0.0017) tensor(1.0078)
+
+tensor(0.0199) tensor(0.7192)
+tensor(0.0159) tensor(0.9659)
+
+tensor(0.0201) tensor(0.7077)
+tensor(0.0130) tensor(0.9457)
+
+tensor(0.0153) tensor(0.6914)
+tensor(0.0066) tensor(0.9268)
+
+tensor(0.0215) tensor(0.7073)
+tensor(0.0116) tensor(0.9721)
+
+Traceback (most recent call last):
+  File "/home/antonio/anaconda3/envs/svs/lib/python3.9/site-packages/PIL/ImageFile.py", line 495, in _save
+    fh = fp.fileno()
+AttributeError: '_idat' object has no attribute 'fileno'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/antonio/singleVentricleSegmentation/cnn/eval.py", line 139, in <module>
+    plots.save_img_masks(data_t, [mt_cnn, mt_iw], f'im_t_{init_ts + i}', fwd_dir, th=0.5,
+  File "/home/antonio/singleVentricleSegmentation/utils/plots.py", line 284, in save_img_masks
+    plt.savefig(path_name, dpi=100)
+  File "/home/antonio/anaconda3/envs/svs/lib/python3.9/site-packages/matplotlib/pyplot.py", line 958, in savefig
+    res = fig.savefig(*args, **kwargs)
+  File "/home/antonio/anaconda3/envs/svs/lib/python3.9/site-packages/matplotlib/figure.py", line 3019, in savefig
+    self.canvas.print_figure(fname, **kwargs)
+  File "/home/antonio/anaconda3/envs/svs/lib/python3.9/site-packages/matplotlib/backend_bases.py", line 2319, in print_figure
+    result = print_method(
+  File "/home/antonio/anaconda3/envs/svs/lib/python3.9/site-packages/matplotlib/backend_bases.py", line 1648, in wrapper
+    return func(*args, **kwargs)
+  File "/home/antonio/anaconda3/envs/svs/lib/python3.9/site-packages/matplotlib/_api/deprecation.py", line 412, in wrapper
+    return func(*inner_args, **inner_kwargs)
+  File "/home/antonio/anaconda3/envs/svs/lib/python3.9/site-packages/matplotlib/backends/backend_agg.py", line 541, in print_png
+    mpl.image.imsave(
+  File "/home/antonio/anaconda3/envs/svs/lib/python3.9/site-packages/matplotlib/image.py", line 1675, in imsave
+    image.save(fname, **pil_kwargs)
+  File "/home/antonio/anaconda3/envs/svs/lib/python3.9/site-packages/PIL/Image.py", line 2212, in save
+    save_handler(self, fp, filename)
+  File "/home/antonio/anaconda3/envs/svs/lib/python3.9/site-packages/PIL/PngImagePlugin.py", line 1348, in _save
+    ImageFile._save(im, _idat(fp, chunk), [("zip", (0, 0) + im.size, 0, rawmode)])
+  File "/home/antonio/anaconda3/envs/svs/lib/python3.9/site-packages/PIL/ImageFile.py", line 509, in _save
+    l, s, d = e.encode(bufsize)
+KeyboardInterrupt
+  0%|          | 0/72 [00:16<?, ?it/s, P: Adult_39, S: 22/22]
+save results to directory:  results/CNN_20220701-124149 
+
+
+================CNN===============
+Layers: 4                
+Classes: 1                
+Input channels: 2                
+Features start: 8                
+Dropout: False                
+Dropout prob: 0.5                
+Trilinear interp: False                
+Padding: 1                
+Kernel size: (3, 3, 3)                
+Norm: IN                
+Residual net: False
+==================================
+----------------------------------------------------------------
+        Layer (type)               Output Shape         Param #
+================================================================
+            Conv3d-1        [-1, 8, 16, 80, 80]             440
+    InstanceNorm3d-2        [-1, 8, 16, 80, 80]              16
+              ReLU-3        [-1, 8, 16, 80, 80]               0
+            Conv3d-4        [-1, 8, 16, 80, 80]           1,736
+    InstanceNorm3d-5        [-1, 8, 16, 80, 80]              16
+              ReLU-6        [-1, 8, 16, 80, 80]               0
+      DoubleConv3D-7        [-1, 8, 16, 80, 80]               0
+         MaxPool3d-8         [-1, 8, 8, 40, 40]               0
+            Conv3d-9        [-1, 16, 8, 40, 40]           3,472
+   InstanceNorm3d-10        [-1, 16, 8, 40, 40]              32
+             ReLU-11        [-1, 16, 8, 40, 40]               0
+           Conv3d-12        [-1, 16, 8, 40, 40]           6,928
+   InstanceNorm3d-13        [-1, 16, 8, 40, 40]              32
+             ReLU-14        [-1, 16, 8, 40, 40]               0
+     DoubleConv3D-15        [-1, 16, 8, 40, 40]               0
+           Down3D-16        [-1, 16, 8, 40, 40]               0
+        MaxPool3d-17        [-1, 16, 4, 20, 20]               0
+           Conv3d-18        [-1, 32, 4, 20, 20]          13,856
+   InstanceNorm3d-19        [-1, 32, 4, 20, 20]              64
+             ReLU-20        [-1, 32, 4, 20, 20]               0
+           Conv3d-21        [-1, 32, 4, 20, 20]          27,680
+   InstanceNorm3d-22        [-1, 32, 4, 20, 20]              64
+             ReLU-23        [-1, 32, 4, 20, 20]               0
+     DoubleConv3D-24        [-1, 32, 4, 20, 20]               0
+           Down3D-25        [-1, 32, 4, 20, 20]               0
+        MaxPool3d-26        [-1, 32, 2, 10, 10]               0
+           Conv3d-27        [-1, 64, 2, 10, 10]          55,360
+   InstanceNorm3d-28        [-1, 64, 2, 10, 10]             128
+             ReLU-29        [-1, 64, 2, 10, 10]               0
+           Conv3d-30        [-1, 64, 2, 10, 10]         110,656
+   InstanceNorm3d-31        [-1, 64, 2, 10, 10]             128
+             ReLU-32        [-1, 64, 2, 10, 10]               0
+     DoubleConv3D-33        [-1, 64, 2, 10, 10]               0
+           Down3D-34        [-1, 64, 2, 10, 10]               0
+  ConvTranspose3d-35        [-1, 32, 4, 20, 20]          16,416
+           Conv3d-36        [-1, 32, 4, 20, 20]          55,328
+   InstanceNorm3d-37        [-1, 32, 4, 20, 20]              64
+             ReLU-38        [-1, 32, 4, 20, 20]               0
+           Conv3d-39        [-1, 32, 4, 20, 20]          27,680
+   InstanceNorm3d-40        [-1, 32, 4, 20, 20]              64
+             ReLU-41        [-1, 32, 4, 20, 20]               0
+     DoubleConv3D-42        [-1, 32, 4, 20, 20]               0
+             Up3D-43        [-1, 32, 4, 20, 20]               0
+  ConvTranspose3d-44        [-1, 16, 8, 40, 40]           4,112
+           Conv3d-45        [-1, 16, 8, 40, 40]          13,840
+   InstanceNorm3d-46        [-1, 16, 8, 40, 40]              32
+             ReLU-47        [-1, 16, 8, 40, 40]               0
+           Conv3d-48        [-1, 16, 8, 40, 40]           6,928
+   InstanceNorm3d-49        [-1, 16, 8, 40, 40]              32
+             ReLU-50        [-1, 16, 8, 40, 40]               0
+     DoubleConv3D-51        [-1, 16, 8, 40, 40]               0
+             Up3D-52        [-1, 16, 8, 40, 40]               0
+  ConvTranspose3d-53        [-1, 8, 16, 80, 80]           1,032
+           Conv3d-54        [-1, 8, 16, 80, 80]           3,464
+   InstanceNorm3d-55        [-1, 8, 16, 80, 80]              16
+             ReLU-56        [-1, 8, 16, 80, 80]               0
+           Conv3d-57        [-1, 8, 16, 80, 80]           1,736
+   InstanceNorm3d-58        [-1, 8, 16, 80, 80]              16
+             ReLU-59        [-1, 8, 16, 80, 80]               0
+     DoubleConv3D-60        [-1, 8, 16, 80, 80]               0
+             Up3D-61        [-1, 8, 16, 80, 80]               0
+           Conv3d-62        [-1, 1, 16, 80, 80]               9
+================================================================
+Total params: 351,377
+Trainable params: 351,377
+Non-trainable params: 0
+----------------------------------------------------------------
+Input size (MB): 0.78
+Forward/backward pass size (MB): 135.79
+Params size (MB): 1.34
+Estimated Total Size (MB): 137.91
+----------------------------------------------------------------
+
+
+===========================================================
+CNN parameters
+	* Patients for training: 72
+	* Patients for validation: 18
+	* Device: cuda
+	* Batch size: 1
+	* Num epochs: 500
+	* Learning rate: 0.01
+	* Weight decay: 0.001, betas: (0.9, 0.999)
+	* Step size: 100.0, gamma: 0.6
+	* Data normalization: MIN_MAX_LOCAL
+	* Loss lambda: 1.0
+	* Num workers: 32
+===========================================================
+
+
+
+[INFO] Save directory: results/CNN_20220701-124149
+
+[INFO]: Trainig CNN
+  0%|          | 0/500 [00:00<?, ?it/s]  0%|          | 0/500 [00:01<?, ?it/s, Train I: 1]  0%|          | 0/500 [00:04<?, ?it/s, Train I: 2]  0%|          | 0/500 [00:04<?, ?it/s, Train I: 3]  0%|          | 0/500 [00:05<?, ?it/s, Train I: 4]  0%|          | 0/500 [00:06<?, ?it/s, Train I: 5]  0%|          | 0/500 [00:07<?, ?it/s, Train I: 6]  0%|          | 0/500 [00:07<?, ?it/s, Train I: 7]  0%|          | 0/500 [00:08<?, ?it/s, Train I: 8]  0%|          | 0/500 [00:09<?, ?it/s, Train I: 9]  0%|          | 0/500 [00:10<?, ?it/s, Train I: 10]  0%|          | 0/500 [00:11<?, ?it/s, Train I: 11]  0%|          | 0/500 [00:11<?, ?it/s, Train I: 12]  0%|          | 0/500 [00:12<?, ?it/s, Train I: 13]  0%|          | 0/500 [00:13<?, ?it/s, Train I: 14]  0%|          | 0/500 [00:13<?, ?it/s, Train I: 15]  0%|          | 0/500 [00:14<?, ?it/s, Train I: 16]  0%|          | 0/500 [00:15<?, ?it/s, Train I: 17]  0%|          | 0/500 [00:15<?, ?it/s, Train I: 18]  0%|          | 0/500 [00:16<?, ?it/s, Train I: 19]  0%|          | 0/500 [00:17<?, ?it/s, Train I: 20]  0%|          | 0/500 [00:17<?, ?it/s, Train I: 21]  0%|          | 0/500 [00:17<?, ?it/s, Train I: 22]  0%|          | 0/500 [00:18<?, ?it/s, Train I: 23]  0%|          | 0/500 [00:19<?, ?it/s, Train I: 24]  0%|          | 0/500 [00:19<?, ?it/s, Train I: 25]  0%|          | 0/500 [00:20<?, ?it/s, Train I: 26]  0%|          | 0/500 [00:21<?, ?it/s, Train I: 27]  0%|          | 0/500 [00:22<?, ?it/s, Train I: 28]  0%|          | 0/500 [00:23<?, ?it/s, Train I: 29]  0%|          | 0/500 [00:23<?, ?it/s, Train I: 30]  0%|          | 0/500 [00:24<?, ?it/s, Train I: 31]  0%|          | 0/500 [00:25<?, ?it/s, Train I: 32]  0%|          | 0/500 [00:26<?, ?it/s, Train I: 33]  0%|          | 0/500 [00:27<?, ?it/s, Train I: 34]
+  0%|          | 0/500 [00:27<?, ?it/s, Train I: 34]

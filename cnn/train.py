@@ -14,12 +14,14 @@ from torchsummary import summary
 import cnn_utils
 import os
 # import torch.multiprocessing
+import logging
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 from utils import plots
 import utils.transforms as T
-from cnn.dataset import SingleVentricleDataset, DatasetMode
+import cnn.dataset as ds
+from cnn.trainer import Trainer
 
 
 if __name__ == "__main__":
@@ -27,14 +29,8 @@ if __name__ == "__main__":
 
     config = configparser.ConfigParser()
     config.read('parser/configCNNTrain.ini')
-    cuda_availabe = config.get('DEVICE', 'CUDA_AVAILABLE')
-    if cuda_availabe and torch.cuda.is_available():
-        DEVICE = 'cuda'
-        # CUDA_DEVICE = config.getint('DEVICE', 'CUDA_DEVICE')
-        # torch.cuda.set_device(CUDA_DEVICE)
-    else:
-        DEVICE = 'cpu'
 
+    DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
     BATCH_SIZE = config.getint('PARAMETERS', 'BATCH_SIZE')
     LR = config.getfloat('PARAMETERS', 'LR')
     STEP_SIZE = config.getfloat('PARAMETERS', 'STEP_SIZE')
@@ -46,52 +42,68 @@ if __name__ == "__main__":
     NUM_EPOCHS = config.getint('PARAMETERS', 'NUM_EPOCHS')
     SHUFFLE = config.getboolean('PARAMETERS', 'SHUFFLE')
     VERBOSE = config.getboolean('DEBUG', 'VERBOSE')
-    RESIDUAL = config.getboolean('PARAMETERS', 'RESIDUAL')
+    DATA_NORM = config.get('PARAMETERS', 'DATA_NORM')
+    LOSS_LAMBDA = config.getfloat('PARAMETERS', 'LOSS_LAMBDA')
 
     # Create train and validation datasets
-    # data_transforms = T.ComposeUnary([T.Normalize(mean=0.04717000863622656, std=0.08217189410007013), T.PadTime(maxt=40)])
-    data_transforms = T.ComposeUnary([T.Normalize(), T.PadTime(maxt=40)])
-    train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, load_flow=True,
-                                      data_transforms=data_transforms,
-                                      mask_transforms=None,
-                                      data_mask_transforms=None,
-                                      flow_transforms=None)
-    val_ds = SingleVentricleDataset(config, DatasetMode.VAL, load_flow=True,
-                                    data_transforms=data_transforms,
-                                    mask_transforms=None,
-                                    data_mask_transforms=None,
-                                    flow_transforms=None)
+    mean, std, min_obs, max_obs = ds.read_stats(config, 'stats.yaml')
+
+    mask_transforms = T.ComposeUnary([T.Normalize(), T.ToTensor()])
+    if DATA_NORM == 'MIN_MAX_LOCAL':
+        data_transforms = T.ComposeUnary([T.Normalize(), T.ToTensor()])
+    elif DATA_NORM == 'MIN_MAX_GLOBAL':
+        data_transforms = T.ComposeUnary([T.Normalize(min=min_obs, max=max_obs), T.ToTensor()])
+    elif DATA_NORM == 'STANDARIZATION':
+        data_transforms = T.ComposeUnary([T.Standarize(mean=mean, std=std), T.ToTensor()])
+    else:
+        data_transforms = None
+        print(f'[ERROR]: invaldia DATA_NORM: {DATA_NORM}')
+        sys.exit()
+
+    train_ds = ds.SingleVentricleDataset(config, ds.DatasetMode.TRAIN, load_flow=True,
+                                         data_transforms=data_transforms,
+                                         mask_transforms=mask_transforms,
+                                         data_mask_transforms=None,
+                                         flow_transforms=None)
+    val_ds = ds.SingleVentricleDataset(config, ds.DatasetMode.VAL, load_flow=True,
+                                       data_transforms=data_transforms,
+                                       mask_transforms=mask_transforms,
+                                       data_mask_transforms=None,
+                                       flow_transforms=None)
 
     # Create data loaders
     train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=SHUFFLE, num_workers=os.cpu_count() // 2, collate_fn=cnn_utils.collate_fn)
     val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=os.cpu_count() // 2, collate_fn=cnn_utils.collate_fn)
 
+    save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'CNN')
+    logger = plots.create_logger(save_dir)
+
     # UNet3D model
-    net = UNet3D(config).to(DEVICE)
+    net = UNet3D(config, logger).to(DEVICE)
 
     if VERBOSE:
         summary(net, input_size=(2, 16, 80, 80), batch_size=-1)
-        print("\n")
-        print("===========================================================")
-        print('CNN parameters')
-        print(f"\t* Patients for training: {len(train_ds)}")
-        print(f"\t* Patients for validation: {len(val_ds)}")
-        print(f'\t* Device: {DEVICE}')
-        print(f'\t* Batch size: {BATCH_SIZE}')
-        print(f'\t* Num epochs: {NUM_EPOCHS}')
-        print(f'\t* Learning rate: {LR}')
-        print(f'\t* Weight decay: {WEIGHT_DECAY}, betas: {(BETA1, BETA2)}')
-        print(f'\t* Step size: {STEP_SIZE}, gamma: {GAMMA}')
-        print(f'\t* Residual learning: {RESIDUAL}')
-        print(f'\t* Num workers: {os.cpu_count()//2}')
-        print("===========================================================")
-        print("\n")
+        logger.info("\n")
+        logger.info("===========================================================")
+        logger.info('CNN parameters')
+        logger.info(f"\t* Patients for training: {len(train_ds)}")
+        logger.info(f"\t* Patients for validation: {len(val_ds)}")
+        logger.info(f'\t* Device: {DEVICE}')
+        logger.info(f'\t* Batch size: {BATCH_SIZE}')
+        logger.info(f'\t* Num epochs: {NUM_EPOCHS}')
+        logger.info(f'\t* Learning rate: {LR}')
+        logger.info(f'\t* Weight decay: {WEIGHT_DECAY}, betas: {(BETA1, BETA2)}')
+        logger.info(f'\t* Step size: {STEP_SIZE}, gamma: {GAMMA}')
+        logger.info(f'\t* Data normalization: {DATA_NORM}')
+        logger.info(f'\t* Loss lambda: {LOSS_LAMBDA}')
+        logger.info(f'\t* Num workers: {os.cpu_count()//2}')
+        logger.info("===========================================================")
+        logger.info("\n")
 
     net = torch.nn.DataParallel(net, device_ids=[0, 1])
     opt = Adam(net.parameters(), lr=LR, weight_decay=WEIGHT_DECAY, betas=(BETA1, BETA2))
     schedule_lr = StepLR(opt, step_size=STEP_SIZE, gamma=GAMMA)
 
-    save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'CNN')
     writer = SummaryWriter(log_dir=save_dir)
 
     # save config file to save directory
@@ -108,20 +120,24 @@ if __name__ == "__main__":
     val_steps = len(val_ds) // BATCH_SIZE
     H = {"train_loss": [], "val_loss": []}
 
-    print('[INFO]: Trainig CNN')
+    logger.info('\n[INFO] Save directory: ' + save_dir)
+    logger.info('\n[INFO]: Trainig CNN')
 
     pbar = tqdm(total=NUM_EPOCHS)
     tic = time.time()
+    trainer = Trainer(net, pbar, config, DEVICE)
     for e in range(NUM_EPOCHS):
-        total_train_loss = cnn_utils.train_batch(net, opt, train_loader, pbar, config, DEVICE)
-        total_val_loss = cnn_utils.val_batch(net, val_loader, pbar, config, DEVICE)
+        total_train_loss = trainer.train_epoch(train_loader, opt)
+        total_val_loss = trainer.val_epoch(val_loader)
 
         schedule_lr.step()
         avg_train_loss = total_train_loss / train_steps
         avg_val_loss = total_val_loss / val_steps
+        logger.info(f'epoch: {e}\t train_loss: {avg_train_loss}\t val_loss: {avg_val_loss}')
+
         H['train_loss'].append(avg_train_loss)
         H['val_loss'].append(avg_val_loss)
-        writer.add_scalars('loss', {'e_train_loss': avg_train_loss, 'e_val_loss': avg_val_loss}, e)
+        writer.add_scalars('loss', {'e_train_loss': avg_train_loss, 'e_val_loss:': avg_val_loss}, e)
         writer.add_scalar('lr', schedule_lr.get_last_lr()[0], e)
         cnn_utils.save_weights(net, e, 10, save_dir, 'model_e.pth')
 
@@ -129,7 +145,7 @@ if __name__ == "__main__":
 
 
 toc = time.time()
-print('\nTotal time taken to train the model: {:.2f}s'.format(toc - tic))
+logger.info('\nTotal time taken to train the model: {:.2f}s'.format(toc - tic))
 
 plt.style.use('ggplot')
 plt.figure()

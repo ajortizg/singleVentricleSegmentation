@@ -7,6 +7,7 @@ import os
 import pandas
 import torch
 from enum import Enum
+import yaml
 
 
 class DatasetMode(Enum):
@@ -69,7 +70,7 @@ class SingleVentricleDataset(Dataset):
     def __getitem__(self, idx):
         # Load 4D nifty [x,y,z,t]
         vol = nib.load(self.volume_files[idx])
-        vol_zyxt = torch.from_numpy(np.swapaxes(vol.get_fdata(), 0, 2)).float()
+        vol_zyxt = np.swapaxes(vol.get_fdata(), 0, 2)
 
         # Read time steps for systole and diastole
         patient_name = self.get_patient_name(idx)
@@ -106,9 +107,7 @@ class SingleVentricleDataset(Dataset):
 
     def systole_diastole_mask(self, patient_name):
         mask_syst_zyx = self.load_mask(patient_name, '_Systole_Labelmap.nii')
-        mask_syst_zyx = torch.from_numpy(mask_syst_zyx).float()
         mask_diast_zyx = self.load_mask(patient_name, '_Diastole_Labelmap.nii')
-        mask_diast_zyx = torch.from_numpy(mask_diast_zyx).float()
         return (mask_syst_zyx, mask_diast_zyx)
 
     def get_patient_name(self, idx):
@@ -186,3 +185,14 @@ class SingleVentricleDataset(Dataset):
             for i in range(len(self.volume_files)):
                 pfile.write(self.get_patient_name(i) + '\n')
         pfile.close()
+
+
+def read_stats(config, filename):
+    base_path = config.get('DATA', 'BASE_PATH_3D')
+    with open(osp.join(base_path, filename), 'r') as stast_file:
+        stats = yaml.load(stast_file, Loader=yaml.FullLoader)
+        mean = stats['mean']
+        std = stats['std']
+        min_obs = stats['min']
+        max_obs = stats['max']
+        return (mean, std, min_obs, max_obs)

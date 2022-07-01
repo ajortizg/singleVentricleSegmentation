@@ -15,6 +15,7 @@ import math
 import time
 from termcolor import colored
 from PIL import Image
+import logging
 
 # scipy
 # from mpl_toolkits.mplot3d.art3d import Poly3DCollection
@@ -40,6 +41,16 @@ def createSubDirectory(saveDir, SUBDIR_PATH):
     if not os.path.exists(subDir):
         os.makedirs(subDir)
     return subDir
+
+
+def create_logger(save_dir):
+    logging.basicConfig(filename=os.path.join(save_dir, "console.log"),
+                        format='%(asctime)s %(levelname)s %(message)s',
+                        datefmt='%H:%M:%S',
+                        level=logging.INFO)
+    logger = logging.getLogger()
+    logger.addHandler(logging.StreamHandler(sys.stdout))
+    return logger
 
 
 def printConsoleOutput_Header(title):

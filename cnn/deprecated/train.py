@@ -1,45 +1,32 @@
 import torch
 import configparser
 import sys
-from dataset import SingleVentricleDataset, DatasetMode
 from torch.optim import Adam
 from tqdm import tqdm
 from torch.optim.lr_scheduler import StepLR
-from unet_3d import UNet3D
 from torch.utils.tensorboard import SummaryWriter
 import time
 import os.path as osp
 from torchsummary import summary
 import numpy as np
 import matplotlib.pyplot as plt
-import cnn_utils
-import transforms as T
 
-ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
+ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../..'))
 sys.path.append(ROOT_DIR)
 from utils import plots
+import utils.transforms as T
+from cnn.dataset import SingleVentricleDataset, DatasetMode
+from cnn.unet_3d import UNet3D
+from cnn import cnn_utils
 
 
-print("\n\n")
-print("===========================================================")
-print("===========================================================")
-print("                      Train CNN:")
-print("===========================================================")
-print("===========================================================")
-print("\n\n")
+plots.printConsoleOutput_Header('Train CNN')
 
 
 config = configparser.ConfigParser()
 config.read('parser/configCNNTrain.ini')
-cuda_availabe = config.get('DEVICE', 'CUDA_AVAILABLE')
-if cuda_availabe and torch.cuda.is_available():
-    DEVICE = 'cuda'
-    CUDA_DEVICE = config.getint('DEVICE', 'CUDA_DEVICE')
-    torch.cuda.set_device(CUDA_DEVICE)
-else:
-    DEVICE = 'cpu'
 
-
+DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 BATCH_SIZE = config.getint('PARAMETERS', 'BATCH_SIZE')
 LR = config.getfloat('PARAMETERS', 'LR')
 STEP_SIZE = config.getfloat('PARAMETERS', 'STEP_SIZE')
@@ -52,26 +39,11 @@ NUM_EPOCHS = config.getint('PARAMETERS', 'NUM_EPOCHS')
 VERBOSE = config.getboolean('DEBUG', 'VERBOSE')
 SHUFFLE = config.getboolean('PARAMETERS', 'SHUFFLE')
 
-# # Create train and validation datasets
-# data_transforms = T.ComposeUnary([T.Normalize(), T.PadTime(maxt=40)])
-# data_mask_transforms = T.ComposeTernary([T.Resize(size=(14, 90, 90))])
-# mask_transforms = T.ComposeUnary([T.Round(th=0.5)])
-# flow_transforms = T.ComposeUnary([T.ResizeFlow3d(size=(14, 90, 90))])
-
-# train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, load_flow=True,
-#                                   data_transforms=data_transforms,
-#                                   mask_transforms=mask_transforms,
-#                                   data_mask_transforms=data_mask_transforms,
-#                                   flow_transforms=flow_transforms)
-# val_ds = SingleVentricleDataset(config, DatasetMode.VAL, load_flow=True,
-#                                 data_transforms=data_transforms,
-#                                 mask_transforms=mask_transforms,
-#                                 data_mask_transforms=data_mask_transforms,
-#                                 flow_transforms=flow_transforms)
-
-transf = T.ComposeUnary([T.Normalize()])
-train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, load_flow=True, data_transforms=transf)
-val_ds = SingleVentricleDataset(config, DatasetMode.VAL, load_flow=True, data_transforms=transf)
+# Create train and validation datasets
+data_transf = T.ComposeUnary([T.Normalize(mean=0.1696055308066859, std=0.13478938549287428), T.ToTensor()])
+mask_transf = T.ComposeUnary([T.Normalize(), T.ToTensor()])
+train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, load_flow=True, data_transforms=data_transf, mask_transforms=mask_transf)
+val_ds = SingleVentricleDataset(config, DatasetMode.VAL, load_flow=True, data_transforms=data_transf, mask_transforms=mask_transf)
 
 # UNet3D model
 net = UNet3D(config).to(DEVICE)
@@ -109,11 +81,7 @@ train_steps = len(train_ds) // BATCH_SIZE
 val_steps = len(val_ds) // BATCH_SIZE
 H = {"train_loss": [], "val_loss": []}
 
-print("\n")
-print("===========================================================")
-print("Training the network")
-print("===========================================================")
-print("\n")
+print("[INFO]: Training the network")
 
 # seeding(42)
 
@@ -136,7 +104,7 @@ for e in range(NUM_EPOCHS):
     H['train_loss'].append(avg_train_loss)
     H['val_loss'].append(avg_val_loss)
     writer.add_scalars('loss', {'e_train_loss': avg_train_loss, 'e_val_loss': avg_val_loss}, e)
-    cnn_utils.save_weights(net, e, 10, save_dir, 'model.pth')
+    cnn_utils.save_weights(net, e, 10, save_dir, 'model_e.pth')
 
 
 toc = time.time()

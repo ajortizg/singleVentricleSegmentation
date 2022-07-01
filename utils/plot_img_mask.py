@@ -14,9 +14,10 @@ if __name__ == "__main__":
     config = configparser.ConfigParser()
     config.read('parser/configPreprocessing.ini')
 
-    transf = T.ComposeUnary([T.Normalize()])
-    train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, load_flow=False, data_transforms=transf)
-    val_ds = SingleVentricleDataset(config, DatasetMode.VAL, load_flow=False, data_transforms=transf)
+    data_transf = T.ComposeUnary([T.Normalize(), T.ToTensor()])
+    mask_transf = T.ComposeUnary([T.Normalize(), T.ToTensor()])
+    train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, load_flow=False, data_transforms=data_transf, mask_transforms=mask_transf)
+    val_ds = SingleVentricleDataset(config, DatasetMode.VAL, load_flow=False, data_transforms=data_transf, mask_transforms=mask_transf)
 
     save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'ImageMask')
 
@@ -24,7 +25,7 @@ if __name__ == "__main__":
     with open(conifg_output, 'w') as configfile:
         config.write(configfile)
 
-    erode = T.Erode(0.5)
+    erode = T.ComposeUnary([T.ToArray(), T.Erode(0.5), T.ToTensor()])
     pbar = tqdm(total=len(train_ds) + len(val_ds))
     for ds in [train_ds, val_ds]:
         for (pname, data, m0, mk, init_ts, final_ts, _, _) in ds:
@@ -37,7 +38,7 @@ if __name__ == "__main__":
             plots.save_img_masks(u0, [m0, erode(m0)], f'{pname}_u0_m0.png', patient_dir, th=0.5, alphas=[0.2, 1.0], colors=[[1, 0.75, 0], [0, 1, 0]])
             plots.save_img_masks(uk, [mk, erode(mk)], f'{pname}_uk_mk.png', patient_dir, th=0.5, alphas=[0.2, 1.0], colors=[[0, 0.75, 1], [1, 0, 0]])
 
-            plots.save_img_masks_slices(u0, [m0, erode(m0)], patient_dir, 'm0', 0.5, alphas=[0.2, 1.0], colors=[[1, 0.75, 0], [0, 1, 0]])
-            plots.save_img_masks_slices(uk, [mk, erode(mk)], patient_dir, 'mk', 0.5, alphas=[0.2, 1.0], colors=[[0, 0.75, 1], [1, 0, 0]])
+            # plots.save_img_masks_slices(u0, [m0, erode(m0)], patient_dir, 'm0', 0.5, alphas=[0.2, 1.0], colors=[[1, 0.75, 0], [0, 1, 0]])
+            # plots.save_img_masks_slices(uk, [mk, erode(mk)], patient_dir, 'mk', 0.5, alphas=[0.2, 1.0], colors=[[0, 0.75, 1], [1, 0, 0]])
 
             pbar.update(1)

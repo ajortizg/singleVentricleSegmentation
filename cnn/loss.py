@@ -14,7 +14,7 @@ def loss_func_complete(mts, mtts):
     return (loss, l1, l1, l1)
 
 
-def loss_func_three(mts, mtts):
+def loss_func_three(mts, mtts, lambda_=1.0):
     mse_loss = nn.MSELoss(reduction='sum')
     m0 = mts[0]
     m0tt = mtts[0]
@@ -27,13 +27,14 @@ def loss_func_three(mts, mtts):
     N = len(mtts)
     for i in range(1, N - 1):
         l3 += mse_loss(mts[i], mtts[i])
-    l3 = l3 / (N - 2)
+    l3 = (lambda_ / (N - 2)) * l3
     total_loss = l1 + l2 + l3
     return (total_loss, l1, l2, l3)
 
 
-def loss_func_batch(mts, mtts, offsets):
+def loss_func_batch(mts, mtts, offsets, lambda_):
     mse_loss = nn.MSELoss(reduction='sum')
+    # hubber_loss = nn.HuberLoss(reduction='sum', delta=1.35)
     # {m0, m1, m2, m3, m4, m4, m4}, {m0, m1, m2, m3, m4, m5, m6}
     # offsets = [2, 0]
 
@@ -56,8 +57,8 @@ def loss_func_batch(mts, mtts, offsets):
     # {m0_b0, m0_b1}    mtts[6]     |   {m4_b0, m6_b1}    mtts[6]
 
     BS = mts[0].shape[0]
-    # if BS == 1:
-    #     return loss_func_complete(mts, mtts)[0]
+    if BS == 1:
+        return loss_func_three(mts, mtts, lambda_)[0]
 
     timesteps = len(mts)
     loss = 0

@@ -15,7 +15,7 @@ class OpticalFlowMode(Enum):
 
 def compute_optical_flow(ds: SingleVentricleDataset, idx: int, mode: OpticalFlowMode, save_dir: str, device: str, step: int, config):
     (pname, data, _, _, init_ts, final_ts, _, _) = ds[idx]
-    data = T.Normalize()(data.to(device))
+    data = data.to(device)
     NZ, NY, NX, NT = data.shape
 
     patient_dir = plots.createSubDirectory(save_dir, pname)
@@ -62,8 +62,6 @@ if __name__ == "__main__":
     cuda_availabe = config.get('DEVICE', 'cuda_availabe')
     if cuda_availabe and torch.cuda.is_available():
         device = 'cuda'
-        cuda_device = config.getint('DEVICE', 'cuda_device')
-        torch.cuda.set_device(cuda_device)
     else:
         device = 'cpu'
 
@@ -79,17 +77,36 @@ if __name__ == "__main__":
     with open(conifg_output, 'w') as configfile:
         config.write(configfile)
 
-    transf = T.ComposeUnary([T.Normalize()])
-    train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, load_flow=False, data_transforms=transf)
-    val_ds = SingleVentricleDataset(config, DatasetMode.VAL, load_flow=False, data_transforms=transf)
+    data_transf = T.ComposeUnary([T.Normalize(),
+                                  T.ToTensor()])
+    mask_transf = T.ComposeUnary([T.ToTensor()])
+
+    train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, load_flow=False, data_transforms=data_transf, mask_transforms=mask_transf)
+    val_ds = SingleVentricleDataset(config, DatasetMode.VAL, load_flow=False, data_transforms=data_transf, mask_transforms=mask_transf)
 
     compute_all_patients = config.get('DATA', 'COMPUTE_ALL_PATIENTS')
     step = config.getint('PARAMETERS', 'step')
 
+    ds_list = []
+    use_indices = config.getboolean('PARAMETERS', 'use_indices')
+    if use_indices:
+        dataset = config.get('PARAMETERS', 'dataset')
+        if dataset == 'train':
+            ds_list.append(train_ds)
+        elif dataset == 'val':
+            ds_list.append(val_ds)
+        from_idx = config.getint('PARAMETERS', 'from_idx')
+        to_idx = config.getint('PARAMETERS', 'to_idx')
+    else:
+        ds_list = [train_ds, val_ds]
+        from_idx = 0
+
     if compute_all_patients:
-        pbar = tqdm(total=len(train_ds) + len(val_ds))
-        for ds in [train_ds, val_ds]:
-            for idx in range(len(ds)):
+        pbar = tqdm(total=to_idx - from_idx if use_indices else len(train_ds) + len(val_ds))
+        for ds in ds_list:
+            to_idx = to_idx if use_indices else len(ds)
+
+            for idx in range(from_idx, to_idx):
                 compute_optical_flow(ds, idx, mode, save_dir, device, step, config)
                 pbar.update(1)
     else:
