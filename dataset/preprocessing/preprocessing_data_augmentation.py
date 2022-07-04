@@ -51,14 +51,15 @@ if __name__ == "__main__":
     rot_range_z = tuple(map(float, config.get('DATA_AUGMENTATION', 'ROT_Z_RANGE').split(',')))
     rot_range_y = tuple(map(float, config.get('DATA_AUGMENTATION', 'ROT_Y_RANGE').split(',')))
     rot_range_x = tuple(map(float, config.get('DATA_AUGMENTATION', 'ROT_X_RANGE').split(',')))
-    rot_bdryMode = config.getfloat('DATA_AUGMENTATION', 'ROT_DEFORM_BDRYMODE')
+    rot_bdryMode = config.get('DATA_AUGMENTATION', 'ROT_DEFORM_BDRYMODE')
 
     ed_prob = config.getfloat('DATA_AUGMENTATION', 'ELASTIC_DEFORM_PROB')
     ed_grid = config.getint('DATA_AUGMENTATION', 'ELASTIC_DEFORM_GRID')
     ed_sigma_min = config.getfloat('DATA_AUGMENTATION', 'ELASTIC_DEFORM_SIGMA_MIN')
     ed_sigma_max = config.getfloat('DATA_AUGMENTATION', 'ELASTIC_DEFORM_SIGMA_MAX')
-    ed_bdryMode = config.getfloat('DATA_AUGMENTATION', 'ELASTIC_DEFORM_BDRYMODE')
-    
+    ed_bdryMode = config.get('DATA_AUGMENTATION', 'ELASTIC_DEFORM_BDRYMODE')
+    ed_usePrefilter = config.getboolean('DATA_AUGMENTATION', 'ELASTIC_DEFORM_USE_PREFILTER')
+
 
     N = config.getint('DATA_AUGMENTATION', 'CREATE_NEW')
 
@@ -67,7 +68,7 @@ if __name__ == "__main__":
         T.RandomFlipY(p=flip_prob_y),
         T.RandomFlipX(p=flip_prob_x),
         T.RandomRotate(p=prob_rot, range_z=rot_range_z, range_y=rot_range_y, range_x=rot_range_x, total=N, boundary=rot_bdryMode),
-        T.ElasticDeformation(p=ed_prob, sigma_range=(ed_sigma_min, ed_sigma_max), points=ed_grid, boundary=ed_bdryMode)
+        T.ElasticDeformation(p=ed_prob, sigma_range=(ed_sigma_min, ed_sigma_max), points=ed_grid, boundaryMode=ed_bdryMode,usePrefilter=ed_usePrefilter)
     ])
 
     train_ds = SingleVentricleDataset(config, mode='train')
