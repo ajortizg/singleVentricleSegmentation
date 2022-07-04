@@ -52,7 +52,6 @@ for ds in [ds_train, ds_val]:
         init_ts = min(patient.tDiastole, patient.tSystole)
         final_ts = max(patient.tDiastole, patient.tSystole)
 
-        # data = transf(patient.nii_data_zyxt)
         data = patient.nii_data_zyxt[:, :, :, init_ts:final_ts + 1]
 
         maxv = np.max(data)

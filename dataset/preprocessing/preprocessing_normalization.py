@@ -4,7 +4,7 @@ import numpy as np
 import nibabel as nib
 from tqdm import tqdm
 import os
-import pandas
+import pandas as pd
 import configparser
 import time
 import os.path as osp
