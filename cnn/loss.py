@@ -56,98 +56,111 @@ def loss_func_batch(mts, mtts, offsets, lambda_):
     # {m0_b0, m0_b1}    mtts[6]     |   {m4_b0, m6_b1}    mtts[6]
 
     mse_loss = nn.MSELoss(reduction='sum')
-    BS = mts[0].shape[0]
-    device = mts[0].device
-    dtype = mts[0].dtype
+    # BS = mts[0].shape[0]
+    BS = mts.shape[1]
+    # device = mts[0].device
+    # dtype = mts[0].dtype
     # if BS == 1:
     #     return loss_func_three(mts, mtts, lambda_)[0]
 
     # compute l1
-    l1 = torch.zeros(BS, dtype=dtype, device=device)
+    # l1 = torch.zeros(BS, dtype=dtype, device=device)
     m0 = mts[0]
-    for b in range(BS):
-        idx = offsets[b]
-        m0_b = m0[b, :, :, :, :].unsqueeze(0)
-        m0tt_b = mtts[idx][b, :, :, :, :].unsqueeze(0)
-        l1[b] = mse_loss(m0tt_b, m0_b)
+    m0tt = mtts[0]
+    l1 = mse_loss(m0tt, m0)
+    # for b in range(BS):
+    #     idx = offsets[b]
+    #     m0_b = m0[b, :, :, :, :].unsqueeze(0)
+    #     m0tt_b = mtts[idx][b, :, :, :, :].unsqueeze(0)
+    #     l1[b] = mse_loss(m0tt_b, m0_b)
 
     # compute l2
-    l2 = torch.zeros(BS, dtype=dtype, device=device)
+    # l2 = torch.zeros(BS, dtype=dtype, device=device)
     mk = mtts[-1]
-    for b in range(BS):
-        mk_b = mk[b, :, :, :, :].unsqueeze(0)
-        mkt_b = mts[-offsets[b] - 1][b, :, :, :, :].unsqueeze(0)
-        l2[b] = mse_loss(mkt_b, mk_b)
+    mkt = mts[-1]
+    l2 = mse_loss(mkt, mk)
+    # for b in range(BS):
+    #     mk_b = mk[b, :, :, :, :].unsqueeze(0)
+    #     mkt_b = mts[-offsets[b] - 1][b, :, :, :, :].unsqueeze(0)
+    #     l2[b] = mse_loss(mkt_b, mk_b)
 
     # compute l3
-    timesteps = len(mts)
-    l3 = torch.zeros(BS, dtype=dtype, device=device)
-    ts_per_batch = torch.zeros(BS, dtype=dtype, device=device)
-    for k in range(1, timesteps - 1):
-        mt = mts[k]
-        for b in range(BS):
-            idx = k + offsets[b]
-            if idx < timesteps - 1:
-                mt_b = mt[b, :, :, :, :].unsqueeze(0)
-                mtt_b = mtts[idx][b, :, :, :, :].unsqueeze(0)
-                l3[b] += mse_loss(mt_b, mtt_b)
-                ts_per_batch[b] += 1.0
-    l3 = l3 / ts_per_batch
-    loss = l1 + l2 + lambda_ * l3
-    return loss.mean()
-    # # loss = loss / (BS * N)
-    # loss = loss / N
-    # return loss
+    timesteps = mts.shape[0]
+    # print(timesteps)
+    l3 = 0
+    for b in range(BS):
+        mt = mts[1:timesteps - offsets[b] - 1, b, :, :, :, :]
+        mtt = mtts[1 + offsets[b]:-1, b, :, :, :, :]
+        l3 += mse_loss(mt, mtt) / mt.shape[0]
+
+    # compute l3
+    # timesteps = len(mts)
+    # timesteps = mts.shape[0]
+    # l3 = torch.zeros(BS, dtype=dtype, device=device)
+    # ts_per_batch = torch.zeros(BS, dtype=dtype, device=device)
+    # for k in range(1, timesteps - 1):
+    #     mt = mts[k]
+    #     for b in range(BS):
+    #         idx = k + offsets[b]
+    #         if idx < timesteps - 1:
+    #             mt_b = mt[b, :, :, :, :].unsqueeze(0)
+    #             # mtt_b = mtts[idx][b, :, :, :, :].unsqueeze(0)
+    #             mtt_b = mtts[idx, b, :, :, :, :].unsqueeze(0)
+    #             l3[b] += mse_loss(mt_b, mtt_b)
+    #             ts_per_batch[b] += 1.0
+    # l3 = l3 / ts_per_batch
+    loss = l1 + l2 + (lambda_ * l3)
+    return loss / BS
 
 
-class L2LossReduced(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, m0tt, mtk, m0, mk):
-        # total_loss = 0
-        # ctx.save_for_backward(mts, mtts)
-        # for k in range(len(mtts)):
-        #     loss = 0.5 * (mts[k] - mtts[k]).pow(2).sum()
-        #     total_loss += loss
-        R0 = m0tt - m0
-        RK = mtk - mk
-        ctx.save_for_backward(R0, RK)
-        return (0.5 * R0.pow(2).sum()) + (0.5 * RK.pow(2).sum())
+# class L2LossReduced(torch.autograd.Function):
+#     @staticmethod
+#     def forward(ctx, m0tt, mtk, m0, mk):
+#         # total_loss = 0
+#         # ctx.save_for_backward(mts, mtts)
+#         # for k in range(len(mtts)):
+#         #     loss = 0.5 * (mts[k] - mtts[k]).pow(2).sum()
+#         #     total_loss += loss
+#         R0 = m0tt - m0
+#         RK = mtk - mk
+#         ctx.save_for_backward(R0, RK)
+#         return (0.5 * R0.pow(2).sum()) + (0.5 * RK.pow(2).sum())
 
-    @staticmethod
-    def backward(ctx, grad_out):
-        R0, RK = ctx.saved_tensors
-        return grad_out * R0, grad_out * RK, None, None
+#     @staticmethod
+#     def backward(ctx, grad_out):
+#         R0, RK = ctx.saved_tensors
+#         return grad_out * R0, grad_out * RK, None, None
 
 
-class L2LossComplete(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, mts, mtts):
-        total_loss = 0
-        # ctx.save_for_backward(mts, mtts)
+# class L2LossComplete(torch.autograd.Function):
+#     @staticmethod
+#     def forward(ctx, mts, mtts):
+#         total_loss = 0
+#         # ctx.save_for_backward(mts, mtts)
 
-        R0 = mtts[0] - mts[0]
-        RK = mts[-1] - mtts[-1]
-        R02 = 0.5 * R0.pow(2).sum()
-        RK2 = 0.5 * RK.pow(2).sum()
-        # ctx.save_for_backward(mts, mtts)
-        ctx.mts = mts
-        ctx.mtts = mtts
+#         R0 = mtts[0] - mts[0]
+#         RK = mts[-1] - mtts[-1]
+#         R02 = 0.5 * R0.pow(2).sum()
+#         RK2 = 0.5 * RK.pow(2).sum()
+#         # ctx.save_for_backward(mts, mtts)
+#         ctx.mts = mts
+#         ctx.mtts = mtts
 
-        total_loss = R02 + RK2
-        for j in range(1, len(mtts) - 1):
-            total_loss += 0.5 * (mts[j] - mtts[j]).pow(2).sum()
-        return total_loss
+#         total_loss = R02 + RK2
+#         for j in range(1, len(mtts) - 1):
+#             total_loss += 0.5 * (mts[j] - mtts[j]).pow(2).sum()
+#         return total_loss
 
-    @staticmethod
-    def backward(ctx, grad_out):
-        # mts, mtts = ctx.saved_tensors
-        mts = ctx.mts
-        mtts = ctx.mtts
-        R0 = mtts[0] - mts[0]
-        RK = mts[-1] - mtts[-1]
-        RJ = 0
-        for j in range(1, len(mtts) - 1):
-            RJ += mts[j] - mtts[j]
-        dmt = RK + RJ
-        dmtt = R0 - RJ
-        return grad_out * dmt, grad_out * dmtt
+#     @staticmethod
+#     def backward(ctx, grad_out):
+#         # mts, mtts = ctx.saved_tensors
+#         mts = ctx.mts
+#         mtts = ctx.mtts
+#         R0 = mtts[0] - mts[0]
+#         RK = mts[-1] - mtts[-1]
+#         RJ = 0
+#         for j in range(1, len(mtts) - 1):
+#             RJ += mts[j] - mtts[j]
+#         dmt = RK + RJ
+#         dmtt = R0 - RJ
+#         return grad_out * dmt, grad_out * dmtt

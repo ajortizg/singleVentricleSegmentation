@@ -72,7 +72,8 @@ class Trainer:
             mtts.append(x)
 
         mtts.reverse()
-        return (mts, mtts)
+        to_tensor = T.ListToTensor()
+        return (to_tensor(mts), to_tensor(mtts))
 
     def select_volume_fwd(self, vols: torch.Tensor, init_ts: torch.Tensor, final_ts: torch.Tensor, cur_t: int, diff_t: torch.Tensor) -> torch.Tensor:
         ts = init_ts + cur_t + 1

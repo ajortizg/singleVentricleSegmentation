@@ -104,7 +104,7 @@ if __name__ == "__main__":
         logger.info("===========================================================")
         logger.info("\n")
 
-    net = torch.nn.DataParallel(net, device_ids=[0])
+    net = torch.nn.DataParallel(net, device_ids=[0, 1])
     opt = Adam(net.parameters(), lr=LR, weight_decay=WEIGHT_DECAY, betas=(BETA1, BETA2))
     schedule_lr = StepLR(opt, step_size=STEP_SIZE, gamma=GAMMA)
 
