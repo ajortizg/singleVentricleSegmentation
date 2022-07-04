@@ -51,10 +51,14 @@ if __name__ == "__main__":
     rot_range_z = tuple(map(float, config.get('DATA_AUGMENTATION', 'ROT_Z_RANGE').split(',')))
     rot_range_y = tuple(map(float, config.get('DATA_AUGMENTATION', 'ROT_Y_RANGE').split(',')))
     rot_range_x = tuple(map(float, config.get('DATA_AUGMENTATION', 'ROT_X_RANGE').split(',')))
+    rot_bdryMode = config.getfloat('DATA_AUGMENTATION', 'ROT_DEFORM_BDRYMODE')
 
     ed_prob = config.getfloat('DATA_AUGMENTATION', 'ELASTIC_DEFORM_PROB')
     ed_grid = config.getint('DATA_AUGMENTATION', 'ELASTIC_DEFORM_GRID')
-    ed_sigma = config.getfloat('DATA_AUGMENTATION', 'ELASTIC_DEFORM_SIGMA')
+    ed_sigma_min = config.getfloat('DATA_AUGMENTATION', 'ELASTIC_DEFORM_SIGMA_MIN')
+    ed_sigma_max = config.getfloat('DATA_AUGMENTATION', 'ELASTIC_DEFORM_SIGMA_MAX')
+    ed_bdryMode = config.getfloat('DATA_AUGMENTATION', 'ELASTIC_DEFORM_BDRYMODE')
+    
 
     N = config.getint('DATA_AUGMENTATION', 'CREATE_NEW')
 
@@ -62,8 +66,8 @@ if __name__ == "__main__":
         T.RandomFlipZ(p=flip_prob_z),
         T.RandomFlipY(p=flip_prob_y),
         T.RandomFlipX(p=flip_prob_x),
-        T.RandomRotate(p=prob_rot, range_z=rot_range_z, range_y=rot_range_y, range_x=rot_range_x, total=N, boundary='nearest'),
-        T.ElasticDeformation(p=ed_prob, sigma_range=(ed_sigma, ed_sigma), points_range=(ed_grid, ed_grid))
+        T.RandomRotate(p=prob_rot, range_z=rot_range_z, range_y=rot_range_y, range_x=rot_range_x, total=N, boundary=rot_bdryMode),
+        T.ElasticDeformation(p=ed_prob, sigma_range=(ed_sigma_min, ed_sigma_max), points=ed_grid, boundary=ed_bdryMode)
     ])
 
     train_ds = SingleVentricleDataset(config, mode='train')
@@ -78,7 +82,7 @@ if __name__ == "__main__":
     logger.info(f'\t* Create: {N} new patients')
     logger.info(f'\t* Flip probs: {flip_prob_x}, {flip_prob_y}, {flip_prob_z}')
     logger.info(f'\t* Rot prob: {prob_rot}, with ranges: {rot_range_x}, {rot_range_y}, {rot_range_z}')
-    logger.info(f'\t* Elastic def prob: {ed_prob}, grid: {ed_grid}, sigma: {ed_sigma}')
+    logger.info(f'\t* Elastic def prob: {ed_prob}, grid: {ed_grid}, sigma: {ed_sigma_min,ed_sigma_max}')
     logger.info('save directory: ' + saveDir)
 
     # train paths
