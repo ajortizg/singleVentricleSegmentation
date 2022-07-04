@@ -189,10 +189,10 @@ class SingleVentricleDataset(Dataset):
 
 def read_stats(config, filename):
     base_path = config.get('DATA', 'BASE_PATH_3D')
-    with open(osp.join(base_path, filename), 'r') as stast_file:
-        stats = yaml.load(stast_file, Loader=yaml.FullLoader)
-        mean = stats['mean']
-        std = stats['std']
-        min_obs = stats['min']
-        max_obs = stats['max']
+    with open(osp.sep.join([base_path, 'statistics', filename]), 'r') as f:
+        stats_yaml = yaml.load(f, Loader=yaml.FullLoader)
+        mean = stats_yaml['mean']
+        std = stats_yaml['std']
+        min_obs = stats_yaml['min']
+        max_obs = stats_yaml['max']
         return (mean, std, min_obs, max_obs)

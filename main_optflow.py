@@ -60,15 +60,10 @@ if __name__ == "__main__":
     # load config parser
     config = configparser.ConfigParser()
     config.read('parser/configTVL1OF3D.ini')
-    cuda_availabe = config.get('DEVICE', 'cuda_availabe')
-    if cuda_availabe and torch.cuda.is_available():
-        device = 'cuda'
-    else:
-        device = 'cpu'
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     mode_str = config.get('PARAMETERS', 'mode')
     mode = OpticalFlowMode.FORWARD if mode_str == 'Forward' else OpticalFlowMode.BACKWARD
-    # plots.printConsoleOutput_Header(f'Compute TV-L1 optical flow ({mode_str})')
 
     # create save directory
     save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), f'TVL1OF3D{mode_str}')
@@ -81,12 +76,11 @@ if __name__ == "__main__":
     with open(conifg_output, 'w') as configfile:
         config.write(configfile)
 
-    data_transf = T.ComposeUnary([T.Normalize(),
-                                  T.ToTensor()])
-    mask_transf = T.ComposeUnary([T.ToTensor()])
+    data_transf = T.ComposeUnary([T.Normalize(), T.ToTensor()])
+    # mask_transf = T.ComposeUnary([T.ToTensor()])
 
-    train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, load_flow=False, data_transforms=data_transf, mask_transforms=mask_transf)
-    val_ds = SingleVentricleDataset(config, DatasetMode.VAL, load_flow=False, data_transforms=data_transf, mask_transforms=mask_transf)
+    train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, load_flow=False, data_transforms=data_transf)
+    val_ds = SingleVentricleDataset(config, DatasetMode.VAL, load_flow=False, data_transforms=data_transf)
 
     compute_all_patients = config.get('DATA', 'COMPUTE_ALL_PATIENTS')
     step = config.getint('PARAMETERS', 'step')

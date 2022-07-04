@@ -66,6 +66,28 @@ class ToTensor:
         return f"{self.__class__.__name__}()"
 
 
+class NormalizeTensor:
+    def __init__(self, min=None, max=None):
+        self.min = min
+        self.max = max
+        if self.min is None or self.max is None:
+            self.local_norm = True
+        else:
+            self.local_norm = False
+
+    def __call__(self, x: torch.Tensor) -> torch.Tensor:
+        # Normalize between 0 and 1
+        if self.local_norm:
+            self.min = torch.amin(x)
+            self.max = torch.amax(x)
+
+        # print(self.minv, self.maxv)
+        return (x - self.min) / (self.max - self.min)
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}()"
+
+
 class Normalize:
     def __init__(self, min=None, max=None):
         self.min = min
@@ -105,7 +127,7 @@ class BinaryOpening:
 
     def __call__(self, x: np.array) -> np.array:
         return ndimage.binary_opening(x)
-    
+
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}()"
 
@@ -311,7 +333,7 @@ class Erode:
         self.th = th
 
     def __call__(self, x: np.array) -> np.array:
-        x = np.where(x > self.th, 1.0, 0.0)
+        # x = np.where(x > self.th, 1.0, 0.0)
         NZ = x.shape[0]
         borders = np.zeros(x.shape)
         for z in range(NZ):
