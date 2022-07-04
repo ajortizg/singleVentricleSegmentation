@@ -13,7 +13,7 @@ ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 from utils import plots
 import utils.transforms as T
-from cnn.dataset import SingleVentricleDataset, DatasetMode
+from cnn.dataset import SingleVentricleDataset, DatasetMode, read_stats
 
 
 if __name__ == "__main__":
@@ -29,8 +29,27 @@ if __name__ == "__main__":
     config_train.read(osp.join(TRAINED_MODEL_DIR, 'config.ini'))
 
     DATASET = config_eval.get('DATA', 'DATASET')
+
     data_transf = T.ComposeUnary([T.Normalize(), T.ToTensor()])
     mask_transf = T.ComposeUnary([T.Normalize(), T.ToTensor()])
+
+    # DATA_NORM = config_train.get('PARAMETERS', 'DATA_NORM')
+
+    # # Create train and validation datasets
+    # mean, std, min_obs, max_obs = read_stats(config_train, 'stats.yaml')
+
+    # mask_transforms = T.ComposeUnary([T.Normalize(), T.ToTensor()])
+    # if DATA_NORM == 'MIN_MAX_LOCAL':
+    #     data_transforms = T.ComposeUnary([T.Normalize(), T.ToTensor()])
+    # elif DATA_NORM == 'MIN_MAX_GLOBAL':
+    #     data_transforms = T.ComposeUnary([T.Normalize(min=min_obs, max=max_obs), T.ToTensor()])
+    # elif DATA_NORM == 'STANDARIZATION':
+    #     data_transforms = T.ComposeUnary([T.Standarize(mean=mean, std=std), T.ToTensor()])
+    # else:
+    #     data_transforms = None
+    #     print(f'[ERROR]: invaldia DATA_NORM: {DATA_NORM}')
+    #     sys.exit()
+
     if DATASET == 'train':
         ds = SingleVentricleDataset(config_train, DatasetMode.TRAIN, load_flow=True, data_transforms=data_transf, mask_transforms=mask_transf)
     else:

@@ -15,6 +15,7 @@ import cnn_utils
 import os
 # import torch.multiprocessing
 import logging
+from cnn_utils import seeding
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
@@ -26,6 +27,7 @@ from cnn.trainer import Trainer
 
 if __name__ == "__main__":
     # torch.multiprocessing.set_sharing_strategy('file_system')
+    seeding(42)
 
     config = configparser.ConfigParser()
     config.read('parser/configCNNTrain.ini')
@@ -55,6 +57,8 @@ if __name__ == "__main__":
         data_transforms = T.ComposeUnary([T.Normalize(min=min_obs, max=max_obs), T.ToTensor()])
     elif DATA_NORM == 'STANDARIZATION':
         data_transforms = T.ComposeUnary([T.Standarize(mean=mean, std=std), T.ToTensor()])
+    elif DATA_NORM == 'NONE':
+        data_transforms = T.ComposeUnary([T.ToTensor()])
     else:
         data_transforms = None
         print(f'[ERROR]: invaldia DATA_NORM: {DATA_NORM}')
@@ -100,7 +104,7 @@ if __name__ == "__main__":
         logger.info("===========================================================")
         logger.info("\n")
 
-    net = torch.nn.DataParallel(net, device_ids=[0, 1])
+    net = torch.nn.DataParallel(net, device_ids=[0])
     opt = Adam(net.parameters(), lr=LR, weight_decay=WEIGHT_DECAY, betas=(BETA1, BETA2))
     schedule_lr = StepLR(opt, step_size=STEP_SIZE, gamma=GAMMA)
 

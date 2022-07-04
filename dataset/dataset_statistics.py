@@ -5,13 +5,24 @@ import torch
 import os.path as osp
 import numpy as np
 from singleVentricleDataset import SingleVentricleDataset
+import matplotlib.pyplot as plt
+import yaml
+from scipy import ndimage
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 import utils.transforms as T
+from utils import plots
 
 config = configparser.ConfigParser()
 config.read('parser/configPreprocessing.ini')
+
+save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'Statistics')
+hists_dir = plots.createSubDirectory(save_dir, 'histograms')
+# save config file to save directory
+conifg_output = osp.join(save_dir, 'config.ini')
+with open(conifg_output, 'w') as config_file:
+    config.write(config_file)
 
 # transf = T.ComposeUnary([T.Standarize(mean=4167.181616023748, std=7324.106522252932)])
 # transf = T.ComposeUnary([T.Normalize()])
@@ -27,21 +38,45 @@ squared_sum = 0
 K = 0
 maximum = 0
 minimum = 1e10
+
+max_list = []
+min_list = []
+mean_list = []
+std_list = []
+
 for ds in [ds_train, ds_val]:
     for idx in range(len(ds)):
         patient = ds[idx]
         pbar.set_postfix_str(f'P: {patient.name}')
 
-        # data = transf(patient.nii_data_xyzt)
-        data = patient.nii_data_xyzt
+        init_ts = min(patient.tDiastole, patient.tSystole)
+        final_ts = max(patient.tDiastole, patient.tSystole)
 
-        max = np.max(data)
-        if max > maximum:
-            maximum = max
+        # data = transf(patient.nii_data_zyxt)
+        data = patient.nii_data_zyxt[:, :, :, init_ts:final_ts + 1]
 
-        min = np.min(data)
-        if min < minimum:
-            minimum = min
+        maxv = np.max(data)
+        if maxv > maximum:
+            maximum = maxv
+
+        minv = np.min(data)
+        if minv < minimum:
+            minimum = minv
+
+        mean = np.mean(data)
+        std = np.std(data)
+
+        max_list.append(maxv)
+        min_list.append(minv)
+        mean_list.append(mean)
+        std_list.append(std)
+
+        hist = ndimage.histogram(data, minv, maxv, 100)
+
+        plt.bar(np.arange(len(hist)), hist)
+        plt.title(f'min: {float(minv):,.2f}, max: {float(maxv):,.2f}, \nmean: {float(mean):,.2f}, std: {float(std):,.2f}')
+        plt.savefig(osp.join(hists_dir, patient.name + '.png'), dpi=100)
+        plt.close('all')
 
         K += abs(patient.tDiastole - patient.tSystole)
         sum += np.mean(data)
@@ -53,3 +88,25 @@ mean = sum / N
 std = (squared_sum / N - mean**2)**0.5
 l = (K / N) - 1
 print(f'mean: {mean}\nstd: {std}\nlambda: {l}\nmin: {minimum}\nmax: {maximum}')
+
+x = np.arange(N)
+mean_array = np.asarray(mean_list)
+std_array = np.asarray(std_list)
+min_array = np.asarray(min_list)
+max_array = np.asarray(max_list)
+
+plt.errorbar(x, mean_array, std_array, fmt='ok', lw=3)
+plt.errorbar(x, mean_array, [mean_array - min_array, max_array - mean_array],
+             fmt='.k', ecolor='gray', lw=1)
+plt.xlim(-1, N)
+plt.savefig(osp.join(save_dir, 'data_dist.png'), dpi=100)
+plt.close('all')
+
+data = {}
+data['mean'] = float(mean)
+data['std'] = float(std)
+data['lambda'] = float(l)
+data['min'] = float(minimum)
+data['max'] = float(maximum)
+with open(osp.join(save_dir, 'stats.yaml'), 'w') as f:
+    yaml.dump(data, f)

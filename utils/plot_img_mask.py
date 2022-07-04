@@ -15,7 +15,7 @@ if __name__ == "__main__":
     config.read('parser/configPreprocessing.ini')
 
     data_transf = T.ComposeUnary([T.Normalize(), T.ToTensor()])
-    mask_transf = T.ComposeUnary([T.Normalize(), T.ToTensor()])
+    mask_transf = T.ComposeUnary([T.Normalize(), T.Round(th=0.5), T.ToTensor()])
     train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, load_flow=False, data_transforms=data_transf, mask_transforms=mask_transf)
     val_ds = SingleVentricleDataset(config, DatasetMode.VAL, load_flow=False, data_transforms=data_transf, mask_transforms=mask_transf)
 
@@ -34,11 +34,11 @@ if __name__ == "__main__":
             u0 = data[:, :, :, init_ts]
             uk = data[:, :, :, final_ts]
 
-            # patient_dir = plots.createSubDirectory(save_dir, pname)
-            plots.save_img_masks(u0, [m0, erode(m0)], f'{pname}_u0_m0.png', save_dir, th=0.5, alphas=[0.2, 1.0], colors=[[1, 0.75, 0], [0, 1, 0]])
-            plots.save_img_masks(uk, [mk, erode(mk)], f'{pname}_uk_mk.png', save_dir, th=0.5, alphas=[0.2, 1.0], colors=[[0, 0.75, 1], [1, 0, 0]])
+            patient_dir = plots.createSubDirectory(save_dir, pname)
+            plots.save_img_masks(u0, [m0, erode(m0)], f'{pname}_u0_m0.png', patient_dir, th=0.5, alphas=[0.2, 1.0], colors=[[1, 0.75, 0], [0, 1, 0]])
+            plots.save_img_masks(uk, [mk, erode(mk)], f'{pname}_uk_mk.png', patient_dir, th=0.5, alphas=[0.2, 1.0], colors=[[0, 0.75, 1], [1, 0, 0]])
 
-            # plots.save_img_masks_slices(u0, [m0, erode(m0)], patient_dir, 'm0', 0.5, alphas=[0.2, 1.0], colors=[[1, 0.75, 0], [0, 1, 0]])
-            # plots.save_img_masks_slices(uk, [mk, erode(mk)], patient_dir, 'mk', 0.5, alphas=[0.2, 1.0], colors=[[0, 0.75, 1], [1, 0, 0]])
+            plots.save_img_masks_slices(u0, [m0, erode(m0)], patient_dir, 'm0', 0.5, alphas=[0.2, 1.0], colors=[[1, 0.75, 0], [0, 1, 0]])
+            plots.save_img_masks_slices(uk, [mk, erode(mk)], patient_dir, 'mk', 0.5, alphas=[0.2, 1.0], colors=[[0, 0.75, 1], [1, 0, 0]])
 
             pbar.update(1)

@@ -19,24 +19,20 @@ if __name__ == "__main__":
     config = configparser.ConfigParser()
     config.read('parser/configCNNTrain.ini')
     cuda_availabe = config.get('DEVICE', 'CUDA_AVAILABLE')
-    if cuda_availabe and torch.cuda.is_available():
-        DEVICE = 'cuda'
-        CUDA_DEVICE = config.getint('DEVICE', 'CUDA_DEVICE')
-        torch.cuda.set_device(CUDA_DEVICE)
-    else:
-        DEVICE = 'cpu'
+    DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-    data_transforms = T.ComposeUnary([T.Normalize()])
+    data_transforms = T.ComposeUnary([T.Normalize(), T.ToTensor()])
+    mask_transforms = T.ComposeUnary([T.Normalize(), T.Round(th=0.5), T.ToTensor()])
 
     train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, load_flow=True,
                                       data_transforms=data_transforms,
-                                      mask_transforms=None,
+                                      mask_transforms=mask_transforms,
                                       data_mask_transforms=None,
                                       flow_transforms=None)
 
     val_ds = SingleVentricleDataset(config, DatasetMode.VAL, load_flow=True,
                                     data_transforms=data_transforms,
-                                    mask_transforms=None,
+                                    mask_transforms=mask_transforms,
                                     data_mask_transforms=None,
                                     flow_transforms=None)
 
@@ -47,56 +43,32 @@ if __name__ == "__main__":
     with open(conifg_output, 'w') as config_file:
         config.write(config_file)
 
-    # PATIENT_NAME = config.get('DATA', 'PATIENT_NAME')
-    # idx, found = train_ds.index_for_patient(PATIENT_NAME)
-    # if not found:
-    #     print(PATIENT_NAME + " not found!")
-    #     sys.exit()
-
     csv_file = open(osp.join(save_dir, 'diff.csv'), 'w')
     writer = csv.writer(csv_file)
     pbar = tqdm(total=len(train_ds) + len(val_ds))
-    posp_masks = T.ComposeUnary([T.Normalize(), T.Erode()])
+    mask_posp = T.ComposeUnary([T.ToArray(), T.Normalize(), T.Round(th=0.5), T.Erode(), T.ToTensor()])
+
     for ds in [train_ds, val_ds]:
         for (pname, vol, m0, mk, init_ts, final_ts, ff, bf) in ds:
             NZ, NY, NX, NT = vol.shape
-
-            # patient_dir = plots.createSubDirectory(save_dir, pname)
-            # plots.save_slices(m0, 'm0.png', patient_dir)
-            # plots.save_slices(mk, 'mk.png', patient_dir)
-
             warp = Warp(config, NZ, NY, NX)
             mts = [m0.to(DEVICE)]
             mtts = [mk.to(DEVICE)]
             ts = ff.shape[0]
             for t in range(ts):
-                pbar.set_postfix_str(f'P: {pname}, S: {t}')
+                pbar.set_postfix_str(f'P: {pname}, S: {t+1}/{ts}')
 
                 # Forward mask propagation m0 -> mk
-                # data_t = vol[:, :, :, init_ts + t].to(DEVICE)
-                # plots.save_img_mask_slices(data_t,
-                #                            posp_masks(mts[-1].cpu().detach()),
-                #                            f'img_mask_t{init_ts + t}',
-                #                            patient_dir,
-                #                            color=[0, 0, 1],
-                #                            alpha=0.5)
-
                 u = ff[t, :, :, :, :].to(DEVICE)
                 mt = warp(mts[-1], u)
                 mts.append(mt)
 
                 # Backward mask propagation mk -> m0
-                data_t = vol[:, :, :, final_ts - t].to(DEVICE)
-                # plots.save_img_mask_slices(data_t,
-                #                            posp_masks(mtts[-1].cpu().detach()),
-                #                            f'img_mask_tt{init_ts + t}',
-                #                            patient_dir,
-                #                            color=[0, 1, 0],
-                #                            alpha=0.5)
-
                 u = bf[t, :, :, :, :].to(DEVICE)
                 mtt = warp(mtts[-1], u)
                 mtts.append(mtt)
+
+            assert(len(mts) == len(mtts))
 
             mtts.reverse()
             loss, l1, l2, l3 = loss_func_three(mts, mtts)
@@ -106,8 +78,32 @@ if __name__ == "__main__":
             row.append('{:.2f}'.format(l2.item()))
             row.append('{:.2f}'.format(l3.item()))
             row.append('{:.2f}'.format(loss.item()))
-
-            pbar.update(1)
             writer.writerow(row)
 
+            if True:
+                patient_dir = plots.createSubDirectory(save_dir, pname)
+                fwd_dir = plots.createSubDirectory(patient_dir, 'fwd')
+                bwd_dir = plots.createSubDirectory(patient_dir, 'bwd')
+
+                for i in range(len(mts)):
+                    data_t = vol[:, :, :, init_ts + i]
+                    mt = mask_posp(mts[i])
+                    mtt = mask_posp(mtts[i])
+
+                    if i == 0:
+                        plots.save_img_masks(data_t, [m0, mtt], 'im_m0_m0tt', fwd_dir, th=0.5, alphas=[0.3, 1.0], colors=[[1, 0.7, 0], [0, 1, 0]])
+                        plots.save_img_masks_slices(data_t, [m0, mtt], fwd_dir, 'im_m0_m0tt_slices', th=0.5,
+                                                    alphas=[0.3, 1.0], colors=[[1, 0.7, 0], [0, 1, 0]])
+                    elif i == len(mtts) - 1:
+                        plots.save_img_masks(data_t, [mk, mt], 'mk_mkt', bwd_dir, th=0.5, alphas=[0.3, 1.0], colors=[[1, 0.7, 0], [0, 1, 0]])
+                        plots.save_img_masks_slices(data_t, [mk, mt], bwd_dir, 'mk_mkt_slices', th=0.5,
+                                                    alphas=[0.3, 1.0], colors=[[1, 0.7, 0], [0, 1, 0]])
+
+                    plots.save_img_masks(data_t, [mt], f'im_t_{init_ts + i}', fwd_dir, th=0.5, alphas=[1.0], colors=[[0, 1, 0]])
+                    plots.save_img_masks_slices(data_t, [mt], fwd_dir, f'im_t_{init_ts + i}', th=0.5, alphas=[1.0], colors=[[0, 1, 0]])
+
+                    plots.save_img_masks(data_t, [mtt], f'im_tt_{init_ts + i}', bwd_dir, th=0.5, alphas=[1.0], colors=[[0, 1, 0]])
+                    plots.save_img_masks_slices(data_t, [mtt], bwd_dir, f'im_tt_{init_ts + i}', th=0.5, alphas=[1.0], colors=[[0, 1, 0]])
+
+            pbar.update(1)
     csv_file.close()

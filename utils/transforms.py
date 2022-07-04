@@ -66,6 +66,28 @@ class ToTensor:
         return f"{self.__class__.__name__}()"
 
 
+class NormalizeTensor:
+    def __init__(self, min=None, max=None):
+        self.min = min
+        self.max = max
+        if self.min is None or self.max is None:
+            self.local_norm = True
+        else:
+            self.local_norm = False
+
+    def __call__(self, x: torch.Tensor) -> torch.Tensor:
+        # Normalize between 0 and 1
+        if self.local_norm:
+            self.min = torch.amin(x)
+            self.max = torch.amax(x)
+
+        # print(self.minv, self.maxv)
+        return (x - self.min) / (self.max - self.min)
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}()"
+
+
 class Normalize:
     def __init__(self, min=None, max=None):
         self.min = min
@@ -105,7 +127,7 @@ class BinaryOpening:
 
     def __call__(self, x: np.array) -> np.array:
         return ndimage.binary_opening(x)
-    
+
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}()"
 
@@ -271,7 +293,7 @@ class RandomRotate:
 
 
 class ElasticDeformation:
-    def __init__(self, p=0.5, sigma_range: tuple = (1, 4), points_range: tuple = (3, 9), boundary='reflect'):
+    def __init__(self, p=0.5, sigma_range: tuple = (1, 4), points_range: tuple = (3, 9), boundary='constant'):
         self.p = p
         self.sigma_range = sigma_range
         self.points_range = points_range
@@ -281,8 +303,8 @@ class ElasticDeformation:
         if np.random.rand() < self.p:
             sigma = np.random.uniform(self.sigma_range[0], self.sigma_range[1])
             points = np.random.uniform(self.points_range[0], self.points_range[1])
-            [vol_d, ms_d, md_d] = (ed.deform_random_grid([vol, ms, md], sigma=round(sigma),
-                                   points=round(points), mode=self.boundary, axis=[(1, 2), (1, 2), (1, 2)]))
+            [vol_d, ms_d, md_d] = (ed.deform_random_grid([vol, ms, md], sigma=sigma,
+                                   points=points, mode=self.boundary, axis=[(0, 1, 2), (0, 1, 2), (0, 1, 2)]))
             return (vol_d, ms_d, md_d)
         else:
             return (vol, ms, md)
@@ -308,7 +330,7 @@ class Erode:
         self.th = th
 
     def __call__(self, x: np.array) -> np.array:
-        x = np.where(x > self.th, 1.0, 0.0)
+        # x = np.where(x > self.th, 1.0, 0.0)
         NZ = x.shape[0]
         borders = np.zeros(x.shape)
         for z in range(NZ):
