@@ -78,12 +78,12 @@ class DoubleConv3D(nn.Module):
         super().__init__()
         layers = [
             nn.Conv3d(in_ch, out_ch, kernel_size=kernel_size, padding=padding),
-            nn.InstanceNorm3d(out_ch, affine=True) if norm == 'IN' else nn.BatchNorm3d(out_ch),
+            nn.InstanceNorm3d(out_ch) if norm == 'IN' else nn.BatchNorm3d(out_ch),
             # nn.InstanceNorm3d(out_ch, affine=True),
             nn.ReLU(inplace=True),
             nn.Conv3d(out_ch, out_ch, kernel_size=kernel_size,
                       padding=padding),
-            nn.InstanceNorm3d(out_ch, affine=True) if norm == 'IN' else nn.BatchNorm3d(out_ch),
+            nn.InstanceNorm3d(out_ch) if norm == 'IN' else nn.BatchNorm3d(out_ch),
             # nn.InstanceNorm3d(out_ch, affine=True),
             nn.ReLU(inplace=True),
         ]

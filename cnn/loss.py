@@ -33,17 +33,16 @@ def loss_func_three(mts, mtts, lambda_=1.0):
 
 
 def loss_func_batch(mts, mtts, offsets, lambda_):
-    mse_loss = nn.MSELoss(reduction='sum')
     # hubber_loss = nn.HuberLoss(reduction='sum', delta=1.35)
     # {m0, m1, m2, m3, m4, m4, m4}, {m0, m1, m2, m3, m4, m5, m6}
     # offsets = [2, 0]
 
     # {m0_b0, m0_b1}    mts[0]
-    # {m1_b0, m1_b1}    mts[1]
-    # {m2_b0, m2_b1}    mts[2]
-    # {m3_b0, m3_b1}    mts[3]
-    # {m4_b0, m4_b1}    mts[4]
-    # {m4_b0, m5_b1}    mts[5]
+    # {m1_b0, m1_b1}    mts[1]  k=1
+    # {m2_b0, m2_b1}    mts[2]  k=2
+    # {m3_b0, m3_b1}    mts[3]  k=3
+    # {m4_b0, m4_b1}    mts[4]  k=4
+    # {m4_b0, m5_b1}    mts[5]  k=5
     # {m4_b0, m6_b1}    mts[6]
 
     # {m4, m3, m2, m1, m0, m0, m0}, {m6, m5, m4, m3, m2, m1, m0}
@@ -56,27 +55,49 @@ def loss_func_batch(mts, mtts, offsets, lambda_):
     # {m0_b0, m1_b1}    mtts[5]     |   {m3_b0, m5_b1}    mtts[5]
     # {m0_b0, m0_b1}    mtts[6]     |   {m4_b0, m6_b1}    mtts[6]
 
+    mse_loss = nn.MSELoss(reduction='sum')
     BS = mts[0].shape[0]
-    if BS == 1:
-        return loss_func_three(mts, mtts, lambda_)[0]
+    device = mts[0].device
+    dtype = mts[0].dtype
+    # if BS == 1:
+    #     return loss_func_three(mts, mtts, lambda_)[0]
 
+    # compute l1
+    l1 = torch.zeros(BS, dtype=dtype, device=device)
+    m0 = mts[0]
+    for b in range(BS):
+        idx = offsets[b]
+        m0_b = m0[b, :, :, :, :].unsqueeze(0)
+        m0tt_b = mtts[idx][b, :, :, :, :].unsqueeze(0)
+        l1[b] = mse_loss(m0tt_b, m0_b)
+
+    # compute l2
+    l2 = torch.zeros(BS, dtype=dtype, device=device)
+    mk = mtts[-1]
+    for b in range(BS):
+        mk_b = mk[b, :, :, :, :].unsqueeze(0)
+        mkt_b = mts[-offsets[b] - 1][b, :, :, :, :].unsqueeze(0)
+        l2[b] = mse_loss(mkt_b, mk_b)
+
+    # compute l3
     timesteps = len(mts)
-    loss = 0
-    N = 0
-
-    for k in range(timesteps):
+    l3 = torch.zeros(BS, dtype=dtype, device=device)
+    ts_per_batch = torch.zeros(BS, dtype=dtype, device=device)
+    for k in range(1, timesteps - 1):
         mt = mts[k]
-
         for b in range(BS):
             idx = k + offsets[b]
-            if idx < timesteps:
+            if idx < timesteps - 1:
                 mt_b = mt[b, :, :, :, :].unsqueeze(0)
                 mtt_b = mtts[idx][b, :, :, :, :].unsqueeze(0)
-                loss += mse_loss(mt_b, mtt_b)
-                N += 1
-    # loss = loss / (BS * N)
-    loss = loss / N
-    return loss
+                l3[b] += mse_loss(mt_b, mtt_b)
+                ts_per_batch[b] += 1.0
+    l3 = l3 / ts_per_batch
+    loss = l1 + l2 + lambda_ * l3
+    return loss.mean()
+    # # loss = loss / (BS * N)
+    # loss = loss / N
+    # return loss
 
 
 class L2LossReduced(torch.autograd.Function):
