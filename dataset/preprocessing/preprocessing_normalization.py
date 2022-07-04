@@ -1,13 +1,15 @@
-import configparser
-import os.path as osp
-import sys
-from tqdm import tqdm
-import pandas as pd
-import torch
-import nibabel as nib
-import numpy as np
 
-ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../..'))
+import sys
+import numpy as np
+import nibabel as nib
+from tqdm import tqdm
+import os
+import pandas
+import configparser
+import time
+import os.path as osp
+
+ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../../'))
 sys.path.append(ROOT_DIR)
 from utils import plots
 import utils.transforms as T
@@ -43,47 +45,17 @@ if __name__ == "__main__":
     config = configparser.ConfigParser()
     config.read('parser/configPreprocessing.ini')
 
-    flip_prob_z = config.getfloat('DATA_AUGMENTATION', 'FLIP_Z_PROB')
-    flip_prob_y = config.getfloat('DATA_AUGMENTATION', 'FLIP_Y_PROB')
-    flip_prob_x = config.getfloat('DATA_AUGMENTATION', 'FLIP_X_PROB')
-
-    prob_rot = config.getfloat('DATA_AUGMENTATION', 'ROT_PROB')
-    rot_range_z = tuple(map(float, config.get('DATA_AUGMENTATION', 'ROT_Z_RANGE').split(',')))
-    rot_range_y = tuple(map(float, config.get('DATA_AUGMENTATION', 'ROT_Y_RANGE').split(',')))
-    rot_range_x = tuple(map(float, config.get('DATA_AUGMENTATION', 'ROT_X_RANGE').split(',')))
-    rot_bdryMode = config.get('DATA_AUGMENTATION', 'ROT_DEFORM_BDRYMODE')
-
-    ed_prob = config.getfloat('DATA_AUGMENTATION', 'ELASTIC_DEFORM_PROB')
-    ed_grid = config.getint('DATA_AUGMENTATION', 'ELASTIC_DEFORM_GRID')
-    ed_sigma_min = config.getfloat('DATA_AUGMENTATION', 'ELASTIC_DEFORM_SIGMA_MIN')
-    ed_sigma_max = config.getfloat('DATA_AUGMENTATION', 'ELASTIC_DEFORM_SIGMA_MAX')
-    ed_bdryMode = config.get('DATA_AUGMENTATION', 'ELASTIC_DEFORM_BDRYMODE')
-    ed_usePrefilter = config.getboolean('DATA_AUGMENTATION', 'ELASTIC_DEFORM_USE_PREFILTER')
-
-
-    N = config.getint('DATA_AUGMENTATION', 'CREATE_NEW')
-
-    transf_tern = T.ComposeTernary([
-        T.RandomFlipZ(p=flip_prob_z),
-        T.RandomFlipY(p=flip_prob_y),
-        T.RandomFlipX(p=flip_prob_x),
-        T.RandomRotate(p=prob_rot, range_z=rot_range_z, range_y=rot_range_y, range_x=rot_range_x, total=N, boundary=rot_bdryMode),
-        T.ElasticDeformation(p=ed_prob, sigma_range=(ed_sigma_min, ed_sigma_max), points=ed_grid, boundaryMode=ed_bdryMode,usePrefilter=ed_usePrefilter)
-    ])
+    transf_tern = T.ComposeUnary([T.Normalize()])
 
     train_ds = SingleVentricleDataset(config, mode='train')
     val_ds = SingleVentricleDataset(config, mode='val')
 
-    saveDir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'preprocessing_da')
+    saveDir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'preprocessing_normalization')
     logger = plots.create_logger(saveDir)
 
     logger.info("===========================================================")
-    logger.info("Data augmentation")
+    logger.info("Data normalization")
     logger.info("===========================================================")
-    logger.info(f'\t* Create: {N} new patients')
-    logger.info(f'\t* Flip probs: {flip_prob_x}, {flip_prob_y}, {flip_prob_z}')
-    logger.info(f'\t* Rot prob: {prob_rot}, with ranges: {rot_range_x}, {rot_range_y}, {rot_range_z}')
-    logger.info(f'\t* Elastic def prob: {ed_prob}, grid: {ed_grid}, sigma: {ed_sigma_min,ed_sigma_max}')
     logger.info('save directory: ' + saveDir)
 
     # train paths
@@ -113,33 +85,26 @@ if __name__ == "__main__":
         pbar.set_postfix_str(f'P: {patient.name}')
         logger.info(f'[Train]: {index} -> {patient.name}')
 
-        # Save original data
-        df = save_data(patient, saveDir4D_train, saveDirSegmentations_train)
-        df_train = pd.concat([df_train, df])
-
         # Generate new data
-        for i in range(N):
-            vol_t, ms_t, md_t = transf_tern(patient.nii_data_zyxt,
-                                            patient.nii_mask_systole,
-                                            patient.nii_mask_diastole)
+        vol_t = transf_tern(patient.nii_data_zyxt)
 
-            newPatient = SingleVentriclePatient()
-            newPatient.name = patient.name + f'_A_{i}'
-            newPatient.tSystole = patient.tSystole
-            newPatient.tDiastole = patient.tDiastole
+        newPatient = SingleVentriclePatient()
+        newPatient.name = patient.name
+        newPatient.tSystole = patient.tSystole
+        newPatient.tDiastole = patient.tDiastole
 
-            # save new images with header
-            newPatient.nii_data_xyzt = np.swapaxes(vol_t, 0, 2)
-            newPatient.nii_header_xyzt = patient.nii_header_xyzt
+        # save new images with header
+        newPatient.nii_data_xyzt = np.swapaxes(vol_t, 0, 2)
+        newPatient.nii_header_xyzt = patient.nii_header_xyzt
 
-            # save new masks with header
-            newPatient.nii_mask_systole_xyz = np.swapaxes(ms_t, 0, 2)
-            newPatient.hdr_mask_systole = patient.hdr_mask_systole
-            newPatient.nii_mask_diastole_xyz = np.swapaxes(md_t, 0, 2)
-            newPatient.hdr_mask_diastole = patient.hdr_mask_diastole
+        # save new masks with header
+        newPatient.nii_mask_systole_xyz = np.swapaxes(patient.nii_mask_systole, 0, 2)
+        newPatient.hdr_mask_systole = patient.hdr_mask_systole
+        newPatient.nii_mask_diastole_xyz = np.swapaxes(patient.nii_mask_diastole, 0, 2)
+        newPatient.hdr_mask_diastole = patient.hdr_mask_diastole
 
-            df = save_data(newPatient, saveDir4D_train, saveDirSegmentations_train)
-            df_train = pd.concat([df_train, df])
+        df = save_data(newPatient, saveDir4D_train, saveDirSegmentations_train)
+        df_train = pd.concat([df_train, df])
         pbar.update(1)
 
     # Save validation data

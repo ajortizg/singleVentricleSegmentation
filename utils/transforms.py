@@ -293,18 +293,21 @@ class RandomRotate:
 
 
 class ElasticDeformation:
-    def __init__(self, p=0.5, sigma_range: tuple = (1, 4), points_range: tuple = (3, 9), boundary='constant'):
+    def __init__(self, p, sigma_range, points, boundaryMode, usePrefilter):
         self.p = p
         self.sigma_range = sigma_range
-        self.points_range = points_range
-        self.boundary = boundary
+        self.points = points
+        self.boundaryMode = boundaryMode
+        self.usePrefilter = usePrefilter
 
     def __call__(self, vol: np.array, ms: np.array, md: np.array):
         if np.random.rand() < self.p:
             sigma = np.random.uniform(self.sigma_range[0], self.sigma_range[1])
-            points = np.random.uniform(self.points_range[0], self.points_range[1])
-            [vol_d, ms_d, md_d] = (ed.deform_random_grid([vol, ms, md], sigma=sigma,
-                                   points=points, mode=self.boundary, axis=[(0, 1, 2), (0, 1, 2), (0, 1, 2)]))
+            #points = np.random.uniform(self.points_range[0], self.points_range[1])
+            [vol_d, ms_d, md_d] = (ed.deform_random_grid([vol, ms, md], sigma,
+                                   points=self.points, mode=self.boundaryMode,
+                                   prefilter=self.usePrefilter,
+                                   axis=[(0, 1, 2), (0, 1, 2), (0, 1, 2)]))
             return (vol_d, ms_d, md_d)
         else:
             return (vol, ms, md)

@@ -71,6 +71,13 @@ always use /parser/configPreprocessing.ini
     Save resulting folder to /data/singleVentricleData_prolongLinear_split_xN,
     where N is the number of new patients created per patient.
 
+6. Data normalization
+    in parset set BASE_PATH_3D to /data/singleVentricleData_prolongLinear_split_xN
+    ```
+    python ./dataset/preprocessing/preprocessing_normalization.py
+    ```
+    Save resulting folder to /data/singleVentricleData_prolongLinear_split_xN_normalized
+
 ## TODOs
 
 ### saving
