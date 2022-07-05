@@ -61,6 +61,7 @@ if __name__ == "__main__":
                 # Forward mask propagation m0 -> mk
                 u = ff[t, :, :, :, :].to(DEVICE)
                 mt = warp(mts[-1], u)
+                # print(torch.allclose(mts[-1], mt))
                 mts.append(mt)
 
                 # Backward mask propagation mk -> m0
