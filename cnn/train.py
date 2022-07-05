@@ -9,6 +9,7 @@ from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
 from torch.utils.tensorboard import SummaryWriter
 import time
+import numpy as np
 import os.path as osp
 from torchsummary import summary
 import cnn_utils
@@ -104,7 +105,7 @@ if __name__ == "__main__":
         logger.info("===========================================================")
         logger.info("\n")
 
-    net = torch.nn.DataParallel(net, device_ids=[0, 1])
+    net = torch.nn.DataParallel(net, device_ids=np.arange(BATCH_SIZE).tolist())
     opt = Adam(net.parameters(), lr=LR, weight_decay=WEIGHT_DECAY, betas=(BETA1, BETA2))
     schedule_lr = StepLR(opt, step_size=STEP_SIZE, gamma=GAMMA)
 

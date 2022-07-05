@@ -1,12 +1,12 @@
 import os.path as osp
 import sys
 import torch
+from torch import nn
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 import utils.transforms as T
-from cnn.warp import WarpCNN, Warp
-from cnn.loss import loss_func_batch
+from cnn.warp import WarpCNN
 
 
 class Trainer:
@@ -15,8 +15,18 @@ class Trainer:
         self.pbar = pbar
         self.config = config
         self.device = device
-
         self.loss_lambda = config.getfloat('PARAMETERS', 'LOSS_LAMBDA')
+        loss_fn_type = config.get('PARAMETERS', 'LOSS_FN')
+
+        self.loss_fn = None
+        if loss_fn_type == 'mse':
+            self.loss_fn = nn.MSELoss(reduction='sum')
+        elif loss_fn_type == 'huber':
+            huber_delta = config.getfloat('PARAMETERS', 'HUBER_DELTA')
+            self.loss_fn = nn.HuberLoss(reduction='sum', delta=huber_delta)
+        else:
+            print('Unknown loss function: ' + loss_fn_type)
+            sys.exit()
 
     def train_epoch(self, train_loader, opt):
         self.net.train()
@@ -24,9 +34,9 @@ class Trainer:
 
         for i, (pnames, vols, m0s, mks, init_ts, final_ts, ff, bf, offsets) in enumerate(train_loader):
             self.pbar.set_postfix_str(f'Train I: {i+1}')
-            mts, mtts = self.time_popagation_batch(vols, m0s, mks, init_ts, final_ts, ff, bf, offsets)
+            mts, mtts = self.time_popagation(vols, m0s, mks, init_ts, final_ts, ff, bf, offsets)
 
-            train_loss = loss_func_batch(mts, mtts, offsets, self.loss_lambda)
+            train_loss = self.compute_loss(mts, mtts, offsets)
             opt.zero_grad()
             train_loss.backward()
             opt.step()
@@ -42,13 +52,13 @@ class Trainer:
         with torch.no_grad():
             for i, (pnames, vols, m0s, mks, init_ts, final_ts, ff, bf, offsets) in enumerate(val_loader):
                 self.pbar.set_postfix_str(f'Val I: {i+1}')
-                mts, mtts = self.time_popagation_batch(vols, m0s, mks, init_ts, final_ts, ff, bf, offsets)
+                mts, mtts = self.time_popagation(vols, m0s, mks, init_ts, final_ts, ff, bf, offsets)
 
-                val_loss = loss_func_batch(mts, mtts, offsets, self.loss_lambda)
+                val_loss = self.compute_loss(mts, mtts, offsets)
                 total_val_loss += val_loss.item()
         return total_val_loss
 
-    def time_popagation_batch(self, vols, m0s, mks, init_ts, final_ts, ff, bf, offsets):
+    def time_popagation(self, vols, m0s, mks, init_ts, final_ts, ff, bf, offsets):
         mts = [m0s.to(self.device)]
         mtts = [mks.to(self.device)]
         flow_times = ff.shape[1]
@@ -108,3 +118,27 @@ class Trainer:
                 # print(f'normal: b: {b} - {cur_t} - {ts[b]}')
 
         return vols_t
+
+    def compute_loss(self, mts: torch.Tensor, mtts: torch.Tensor, offsets: torch.Tensor):
+        BS = mts.shape[1]
+
+        # compute l1
+        m0 = mts[0]
+        m0tt = mtts[0]
+        l1 = self.loss_fn(m0tt, m0)
+
+        # compute l2
+        mk = mtts[-1]
+        mkt = mts[-1]
+        l2 = self.loss_fn(mkt, mk)
+
+        # compute l3
+        timesteps = mts.shape[0]
+        l3 = 0
+        for b in range(BS):
+            mt = mts[1:timesteps - offsets[b] - 1, b, :, :, :, :]
+            mtt = mtts[1 + offsets[b]:-1, b, :, :, :, :]
+            l3 += self.loss_fn(mt, mtt) / mt.shape[0]
+
+        total_loss = l1 + l2 + self.loss_lambda * l3
+        return total_loss / BS
