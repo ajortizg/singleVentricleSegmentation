@@ -270,7 +270,10 @@ def save_img_mask_single_zslices(image3D, mask3D, saveDir, subdir, th=0.5, alpha
         cv2.imwrite(pathNameColor, factor_gray_value * img)
 
 
-def save_img_masks(img3d: torch.Tensor, masks3d: list[torch.Tensor], filename: str, save_dir: str, th: float, alphas: list, colors: list):
+def save_img_masks(img3d: torch.Tensor, masks3d: list[torch.Tensor], filename: str, save_dir: str, th: float, alphas: list, colors: list, max_gray_value=1.):
+
+    factor_gray_value = 255. / max_gray_value
+
     NZ = img3d.shape[0]
     aspect_ratio = 16. / 9.
     cols = int(NZ / aspect_ratio)
@@ -282,7 +285,7 @@ def save_img_masks(img3d: torch.Tensor, masks3d: list[torch.Tensor], filename: s
     fig.suptitle('file: {}'.format(os.path.basename(filename)), fontsize=16)
     for z, ax in enumerate(axs.flat):
         if z < NZ:
-            img = cv2.cvtColor(img3d[z, :, :].cpu().detach().numpy(), cv2.COLOR_GRAY2BGR)
+            img = cv2.cvtColor( factor_gray_value * img3d[z, :, :].cpu().detach().numpy(), cv2.COLOR_GRAY2BGR)
             for i, mask3d in enumerate(masks3d):
                 mask = mask3d[z, :, :].cpu().detach().numpy()
                 img = merge_img_mask(img, mask, th, alphas[i], colors[i])

@@ -1,6 +1,7 @@
 import configparser
 import os
 import os.path as osp
+import torch
 from tqdm import tqdm
 import sys
 
@@ -14,10 +15,10 @@ if __name__ == "__main__":
     config = configparser.ConfigParser()
     config.read('parser/configPreprocessing.ini')
 
-    data_transf = T.ComposeUnary([T.Normalize(), T.ToTensor()])
-    mask_transf = T.ComposeUnary([T.Normalize(), T.Round(th=0.5), T.ToTensor()])
-    train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, load_flow=False, img4d_transforms=data_transf, mask_transforms=mask_transf)
-    val_ds = SingleVentricleDataset(config, DatasetMode.VAL, load_flow=False, img4d_transforms=data_transf, mask_transforms=mask_transf)
+    data_transf = T.ComposeUnary([T.ToTensor()])
+    mask_transf = T.ComposeUnary([T.ToTensor()])
+    train_ds = SingleVentricleDataset(config, DatasetMode.FULL, load_flow=False, data_transforms=data_transf, mask_transforms=mask_transf)
+    # val_ds = SingleVentricleDataset(config, DatasetMode.VAL, load_flow=False, data_transforms=data_transf, mask_transforms=mask_transf)
 
     save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'ImageMask')
 
@@ -25,20 +26,24 @@ if __name__ == "__main__":
     with open(conifg_output, 'w') as configfile:
         config.write(configfile)
 
+    
     erode = T.ComposeUnary([T.ToArray(), T.Erode(th=0.5), T.ToTensor()])
-    pbar = tqdm(total=len(train_ds) + len(val_ds))
-    for ds in [train_ds, val_ds]:
-        for (pname, data, m0, mk, init_ts, final_ts, _, _) in ds:
-            pbar.set_postfix_str(f'P: {pname}')
+    pbar = tqdm(total=len(train_ds))
+    # for ds in [train_ds]:
+    print("num data files = ", len(train_ds))
+    for (pname, data, m0, mk, init_ts, final_ts, _, _) in train_ds:
+        pbar.set_postfix_str(f'P: {pname}')
 
-            u0 = data[:, :, :, init_ts]
-            uk = data[:, :, :, final_ts]
+        u0 = data[:, :, :, init_ts]
+        uk = data[:, :, :, final_ts]
 
-            patient_dir = plots.createSubDirectory(save_dir, pname)
-            plots.save_img_masks(u0, [m0, erode(m0)], f'{pname}_u0_m0.png', patient_dir, th=0.5, alphas=[0.2, 1.0], colors=[[1, 0.75, 0], [0, 1, 0]])
-            plots.save_img_masks(uk, [mk, erode(mk)], f'{pname}_uk_mk.png', patient_dir, th=0.5, alphas=[0.2, 1.0], colors=[[0, 0.75, 1], [1, 0, 0]])
+        print(torch.max(u0), torch.max(uk))
 
-            plots.save_img_masks_slices(u0, [m0, erode(m0)], patient_dir, 'm0', 0.5, alphas=[0.2, 1.0], colors=[[1, 0.75, 0], [0, 1, 0]])
-            plots.save_img_masks_slices(uk, [mk, erode(mk)], patient_dir, 'mk', 0.5, alphas=[0.2, 1.0], colors=[[0, 0.75, 1], [1, 0, 0]])
+        patient_dir = plots.createSubDirectory(save_dir, pname)
+        plots.save_img_masks(u0, [m0, erode(m0)], f'{pname}_u0_m0.png', patient_dir, th=0.5, alphas=[0.2, 1.0], colors=[[1, 0.75, 0], [0, 1, 0]])
+        plots.save_img_masks(uk, [mk, erode(mk)], f'{pname}_uk_mk.png', patient_dir, th=0.5, alphas=[0.2, 1.0], colors=[[0, 0.75, 1], [1, 0, 0]])
 
-            pbar.update(1)
+        plots.save_img_masks_slices(u0, [m0, erode(m0)], patient_dir, 'm0', 0.5, alphas=[0.2, 1.0], colors=[[1, 0.75, 0], [0, 1, 0]])
+        plots.save_img_masks_slices(uk, [mk, erode(mk)], patient_dir, 'mk', 0.5, alphas=[0.2, 1.0], colors=[[0, 0.75, 1], [1, 0, 0]])
+
+        pbar.update(1)

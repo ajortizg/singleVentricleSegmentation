@@ -8,11 +8,16 @@ import pandas as pd
 import configparser
 import time
 import os.path as osp
+import torch
+
+# from intensity_normalization.typing import Modality, TissueType
+# from intensity_normalization.normalize.fcm import FCMNormalize
+
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../../'))
 sys.path.append(ROOT_DIR)
 from utils import plots
-import utils.transforms as T
+# import utils.transforms as T
 from dataset.singleVentricleDataset import SingleVentricleDataset, SingleVentriclePatient
 
 
@@ -45,10 +50,10 @@ if __name__ == "__main__":
     config = configparser.ConfigParser()
     config.read('parser/configPreprocessing.ini')
 
-    transf_tern = T.ComposeUnary([T.Normalize()])
+    # old: normalize to [0,1]
+    #transf_tern = T.ComposeUnary([T.Normalize()])
 
-    train_ds = SingleVentricleDataset(config, mode='train')
-    val_ds = SingleVentricleDataset(config, mode='val')
+    ds = SingleVentricleDataset(config, mode='full')
 
     saveDir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'preprocessing_normalization')
     logger = plots.create_logger(saveDir)
@@ -58,64 +63,77 @@ if __name__ == "__main__":
     logger.info("===========================================================")
     logger.info('save directory: ' + saveDir)
 
-    # train paths
-    saveDir_train = plots.createSubDirectory(saveDir, 'train')
-    saveDir4D_train = plots.createSubDirectory(saveDir_train, train_ds.volumes_subdir_path)
-    saveDirSegmentations_train = plots.createSubDirectory(saveDir_train, train_ds.segmentations_subdir_path)
-
-    # validation paths
-    saveDir_val = plots.createSubDirectory(saveDir, 'val')
-    saveDir4D_val = plots.createSubDirectory(saveDir_val, val_ds.volumes_subdir_path)
-    saveDirSegmentations_val = plots.createSubDirectory(saveDir_val, val_ds.segmentations_subdir_path)
+    # paths
+    saveDir4D = plots.createSubDirectory(saveDir, ds.volumes_subdir_path)
+    saveDirSegmentations = plots.createSubDirectory(saveDir, ds.segmentations_subdir_path)
 
     # save config file to save directory
     conifg_output = osp.sep.join([saveDir, "config.ini"])
     with open(conifg_output, 'w') as configfile:
         config.write(configfile)
 
-    df_train = pd.DataFrame(columns=['Name', 'Systole', 'Diastole'])
-    df_val = pd.DataFrame(columns=['Name', 'Systole', 'Diastole'])
-    pbar = tqdm(total=len(train_ds) + (len(val_ds)))
-    logger.info(f'Found {len(train_ds)} training patientes')
-    logger.info(f'Found {len(val_ds)} validation patients')
+    pbar = tqdm(total=len(ds))
+    logger.info(f'Found {len(ds)} patientes')
     
-    # Generate augmented training dataset
-    for index in range(0, len(train_ds)):
-        patient = train_ds[index]
+    # Generate augmented dataset
+    for index in range(0, len(ds)):
+        patient = ds[index]
         pbar.set_postfix_str(f'P: {patient.name}')
-        logger.info(f'[Train]: {index} -> {patient.name}')
+        logger.info(f'[Patient]: {index} -> {patient.name}')
 
         # Generate new data
-        vol_t = transf_tern(patient.nii_data_zyxt)
+        
+        #old: normalize to [0,1]
+        #vol_t = transf_tern(patient.nii_data_zyxt)
+        #new: use better normalization
+        # vol_t = fcm_norm(patient.nii_data_zyxt, patient.nii_mask_diastole)
+
+        #normalize data for newPatient 
+        per95 = np.percentile(patient.nii_data_zyxt,95)
+        new_nii_data_zyxt = np.clip(patient.nii_data_zyxt, 0, per95)
+
+        print("old min, max :", np.min(patient.nii_data_zyxt), np.max(patient.nii_data_zyxt) )
+        print("clip min, max :", np.min(new_nii_data_zyxt), np.max(new_nii_data_zyxt) )
+
+        avg_diastole = np.mean(new_nii_data_zyxt[:,:,:,patient.tDiastole],where=patient.nii_mask_diastole.astype('bool'))
+        avg_systole = np.mean(new_nii_data_zyxt[:,:,:,patient.tSystole],where=patient.nii_mask_systole.astype('bool'))
+        avg = 0.5 * (avg_diastole + avg_systole)
+
+        # print("avg = ", avg, "per95 = ", per95)
+        # print("denom= ", (per95*avg*(per95-avg)))
+
+        norm_a = (per95 - 2.*avg)/(2.*per95*avg*(avg - per95))
+        norm_b = (2*avg*avg - per95*per95)/(2.*per95*avg*(avg - per95))
+        new_nii_data_zyxt = norm_a * (new_nii_data_zyxt**2) + norm_b * new_nii_data_zyxt
+
+        print("norm(per95) = ", norm_a*per95*per95+norm_b*per95)
+        print("norm(avg) = ", norm_a*avg*avg+norm_b*avg)
+        print("norm(0) = ", norm_a*0.+norm_b*0.)
+
+        print(np.min(new_nii_data_zyxt), np.max(new_nii_data_zyxt) )
 
         newPatient = SingleVentriclePatient()
         newPatient.name = patient.name
         newPatient.tSystole = patient.tSystole
         newPatient.tDiastole = patient.tDiastole
 
+
         # save new images with header
-        newPatient.nii_data_xyzt = np.swapaxes(vol_t, 0, 2)
+        newPatient.nii_data_xyzt = np.swapaxes(new_nii_data_zyxt, 0, 2)
         newPatient.nii_header_xyzt = patient.nii_header_xyzt
 
         # save new masks with header
-        newPatient.nii_mask_systole_xyz = np.swapaxes(patient.nii_mask_systole, 0, 2)
+        newPatient.nii_mask_systole_xyz = patient.nii_mask_systole_xyz
         newPatient.hdr_mask_systole = patient.hdr_mask_systole
-        newPatient.nii_mask_diastole_xyz = np.swapaxes(patient.nii_mask_diastole, 0, 2)
+        newPatient.nii_mask_diastole_xyz = patient.nii_mask_diastole_xyz
         newPatient.hdr_mask_diastole = patient.hdr_mask_diastole
 
-        df = save_data(newPatient, saveDir4D_train, saveDirSegmentations_train)
-        df_train = pd.concat([df_train, df])
+        save_data(newPatient, saveDir4D, saveDirSegmentations)
         pbar.update(1)
 
-    # Save validation data
-    for index in range(0, len(val_ds)):
-        patient = val_ds[index]
-        pbar.set_postfix_str(f'P: {patient.name}')
-        logger.info(f'[Val]: {index} -> {patient.name}')
-
-        df = save_data(patient, saveDir4D_val, saveDirSegmentations_val)
-        df_val = pd.concat([df_val, df])
-        pbar.update(1)
-
-    df_train.to_excel(osp.join(saveDir_train, train_ds.segmentations_filename), index=False)
-    df_val.to_excel(osp.join(saveDir_val, val_ds.segmentations_filename), index=False)
+    print("\n")
+    print("==================================")
+    print("save database to excel file")
+    output_df = ds.df.copy()
+    output_df_file = os.path.sep.join([saveDir, ds.segmentations_filename])
+    output_df.to_excel(output_df_file, index=False)
