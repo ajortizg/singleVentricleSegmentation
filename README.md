@@ -37,19 +37,27 @@ on windows:
 always use /parser/configPreprocessing.ini
 
 1. possibly flip the original data
+   in parser set BASE_PATH_3D to data/singleVentricleData
     ```
     python ./dataset/preprocessing/preprocessing_flipping.py
     ```
     save resulting folder to /data/singleVentricleData_flip
 
-2. cut the (possibly flipped) original data
-    in parser set BASE_PATH_3D to data/singleVentricleData_flip
+2. Data normalization
+    in parset set BASE_PATH_3D to /data/singleVentricleData_flip
+    ```
+    python ./dataset/preprocessing/preprocessing_normalization.py
+    ```
+    Save resulting folder to /data/singleVentricleData_norm
+
+3. cut the (possibly flipped) original data
+    in parser set BASE_PATH_3D to data/singleVentricleData_norm
     ```
     python ./dataset/preprocessing/preprocessing_cutting.py
     ```
     save resulting folder to /data/singleVentricleData_cut
 
-3. resize the (flipped and cutted) data
+4. resize the (flipped and cutted) data
     in parser set BASE_PATH_3D to data/singleVentricleData_cut
     ```
     python ./dataset/preprocessing/preprocessing_prolongation.py
@@ -57,14 +65,14 @@ always use /parser/configPreprocessing.ini
     Save resulting folder to /data/singleVentricleData_prolong.
     Note that this depends on the Interpolationtype and Bondarytype.
 
-4. split the dataset for training the CNN in validation and training sets, 
+5. split the dataset for training the CNN in validation and training sets, 
     in parser set BASE_PATH_3D to data/singleVentricleData_prolongLinear
     ```
     python ./dataset/preprocessing/preprocessing_split.py
     ```
     Save resulting folder to /data/singleVentricleData_prolongLinear_split.
 
-5. Data augmentation only for training the CNN.
+6. Data augmentation only for training the CNN.
     in parset set BASE_PATH_3D to /data/singleVentricleData_prolongLinear_split
     ```
     python ./dataset/preprocessing/preprocessing_data_augmentation.py
@@ -72,12 +80,7 @@ always use /parser/configPreprocessing.ini
     Save resulting folder to /data/singleVentricleData_prolongLinear_split_xN,
     where N is the number of new patients created per patient.
 
-6. Data normalization
-    in parset set BASE_PATH_3D to /data/singleVentricleData_prolongLinear_split_xN
-    ```
-    python ./dataset/preprocessing/preprocessing_normalization.py
-    ```
-    Save resulting folder to /data/singleVentricleData_prolongLinear_split_xN_normalized
+
 
 ## TODOs
 
