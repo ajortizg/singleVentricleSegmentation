@@ -16,7 +16,7 @@ from cnn.warp import Warp
 from cnn.loss import loss_func_complete
 
 
-def create_model(config):
+def create_model(config, logger):
     num_layers = config.getint('PARAMETERS', 'NUM_LAYERS')
     num_classes = config.getint('PARAMETERS', 'NUM_CLASSES')
     input_channels = config.getint('PARAMETERS', 'INPUT_CHANNELS')
@@ -28,6 +28,10 @@ def create_model(config):
     for _ in range(1, num_layers):
         channels.append(channels[-1] * 2)
         strides.append(2)
+
+    logger.info(f'cnn channels: {channels}')
+    logger.info(f'cnn strides: {strides}')
+    logger.info(f'cnn res units: {num_res_units}')
 
     net = UNet(
         spatial_dims=3,

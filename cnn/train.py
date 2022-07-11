@@ -4,21 +4,16 @@ import sys
 from torch.optim import Adam
 from tqdm import tqdm
 from torch.optim.lr_scheduler import StepLR
-from unet_3d import UNet3D
+# from unet_3d import UNet3D
 from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
 from torch.utils.tensorboard import SummaryWriter
 import time
 import numpy as np
 import os.path as osp
-from torchsummary import summary
 import cnn_utils
 import os
-# import torch.multiprocessing
-import logging
-from cnn_utils import seeding
-
-from monai.networks.nets.unet import UNet
+from torchsummary import summary
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
@@ -29,8 +24,7 @@ from cnn.trainer import Trainer
 
 
 if __name__ == "__main__":
-    # torch.multiprocessing.set_sharing_strategy('file_system')
-    seeding(42)
+    cnn_utils.seeding(42)
 
     config = configparser.ConfigParser()
     config.read('parser/configCNNTrain.ini')
@@ -47,27 +41,12 @@ if __name__ == "__main__":
     NUM_EPOCHS = config.getint('PARAMETERS', 'NUM_EPOCHS')
     SHUFFLE = config.getboolean('PARAMETERS', 'SHUFFLE')
     VERBOSE = config.getboolean('DEBUG', 'VERBOSE')
-    DATA_NORM = config.get('PARAMETERS', 'DATA_NORM')
     LOSS_LAMBDA = config.getfloat('PARAMETERS', 'LOSS_LAMBDA')
     NUM_GPUS = config.getint('PARAMETERS', 'NUM_GPUS')
 
     # Create train and validation datasets
-    # mean, std, min_obs, max_obs = ds.read_stats(config, 'stats.yaml')
-
     mask_transforms = T.ComposeUnary([T.ToTensor()])
     img4d_transforms = T.ComposeUnary([T.ToTensor()])
-    # if DATA_NORM == 'MIN_MAX_LOCAL':
-    #     # data_transforms = T.ComposeUnary([T.PercentileClip(1, 99), T.Normalize(), T.ToTensor()])
-    # elif DATA_NORM == 'MIN_MAX_GLOBAL':
-    #     data_transforms = T.ComposeUnary([T.Normalize(min=min_obs, max=max_obs), T.ToTensor()])
-    # elif DATA_NORM == 'STANDARIZATION':
-    #     data_transforms = T.ComposeUnary([T.Standarize(mean=mean, std=std), T.ToTensor()])
-    # elif DATA_NORM == 'NONE':
-    #     data_transforms = T.ComposeUnary([T.ToTensor()])
-    # else:
-    #     data_transforms = None
-    #     print(f'[ERROR]: invaldia DATA_NORM: {DATA_NORM}')
-    #     sys.exit()
 
     train_ds = ds.SingleVentricleDataset(config, ds.DatasetMode.TRAIN, load_flow=True,
                                          img4d_transforms=img4d_transforms,
@@ -91,13 +70,11 @@ if __name__ == "__main__":
 
     # UNet3D model
     # net = UNet3D(config, logger).to(DEVICE)
-
-    net = cnn_utils.create_model(config).to(DEVICE)
+    net = cnn_utils.create_model(config, logger).to(DEVICE)
 
     if VERBOSE:
-        summary(net, input_size=(2, 80, 80, 80), batch_size=-1)
-        logger.info("\n")
         logger.info("===========================================================")
+        summary(net, input_size=(2, 80, 80, 80), batch_size=-1)
         logger.info('CNN parameters')
         logger.info(f"\t* Patients for training: {len(train_ds)}")
         logger.info(f"\t* Patients for validation: {len(val_ds)}")
@@ -107,7 +84,6 @@ if __name__ == "__main__":
         logger.info(f'\t* Learning rate: {LR}')
         logger.info(f'\t* Weight decay: {WEIGHT_DECAY}, betas: {(BETA1, BETA2)}')
         logger.info(f'\t* Step size: {STEP_SIZE}, gamma: {GAMMA}')
-        logger.info(f'\t* Data normalization: {DATA_NORM}')
         logger.info(f'\t* Loss lambda: {LOSS_LAMBDA}')
         logger.info(f'\t* Num workers: {16}')
         logger.info(f'\t* Num GPUs: {NUM_GPUS}')

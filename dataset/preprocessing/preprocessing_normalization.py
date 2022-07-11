@@ -74,7 +74,7 @@ if __name__ == "__main__":
 
     pbar = tqdm(total=len(ds))
     logger.info(f'Found {len(ds)} patientes')
-    
+
     # Generate augmented dataset
     for index in range(0, len(ds)):
         patient = ds[index]
@@ -82,41 +82,40 @@ if __name__ == "__main__":
         logger.info(f'[Patient]: {index} -> {patient.name}')
 
         # Generate new data
-        
-        #old: normalize to [0,1]
+
+        # old: normalize to [0,1]
         #vol_t = transf_tern(patient.nii_data_zyxt)
-        #new: use better normalization
+        # new: use better normalization
         # vol_t = fcm_norm(patient.nii_data_zyxt, patient.nii_mask_diastole)
 
-        #normalize data for newPatient 
-        per95 = np.percentile(patient.nii_data_zyxt,95)
+        # normalize data for newPatient
+        per95 = np.percentile(patient.nii_data_zyxt, 95)
         new_nii_data_zyxt = np.clip(patient.nii_data_zyxt, 0, per95)
 
-        print("old min, max :", np.min(patient.nii_data_zyxt), np.max(patient.nii_data_zyxt) )
-        print("clip min, max :", np.min(new_nii_data_zyxt), np.max(new_nii_data_zyxt) )
+        print("old min, max :", np.min(patient.nii_data_zyxt), np.max(patient.nii_data_zyxt))
+        print("clip min, max :", np.min(new_nii_data_zyxt), np.max(new_nii_data_zyxt))
 
-        avg_diastole = np.mean(new_nii_data_zyxt[:,:,:,patient.tDiastole],where=patient.nii_mask_diastole.astype('bool'))
-        avg_systole = np.mean(new_nii_data_zyxt[:,:,:,patient.tSystole],where=patient.nii_mask_systole.astype('bool'))
+        avg_diastole = np.mean(new_nii_data_zyxt[:, :, :, patient.tDiastole], where=patient.nii_mask_diastole.astype('bool'))
+        avg_systole = np.mean(new_nii_data_zyxt[:, :, :, patient.tSystole], where=patient.nii_mask_systole.astype('bool'))
         avg = 0.5 * (avg_diastole + avg_systole)
 
         # print("avg = ", avg, "per95 = ", per95)
         # print("denom= ", (per95*avg*(per95-avg)))
 
-        norm_a = (per95 - 2.*avg)/(2.*per95*avg*(avg - per95))
-        norm_b = (2*avg*avg - per95*per95)/(2.*per95*avg*(avg - per95))
+        norm_a = (per95 - 2. * avg) / (2. * per95 * avg * (avg - per95))
+        norm_b = (2 * avg * avg - per95 * per95) / (2. * per95 * avg * (avg - per95))
         new_nii_data_zyxt = norm_a * (new_nii_data_zyxt**2) + norm_b * new_nii_data_zyxt
 
-        print("norm(per95) = ", norm_a*per95*per95+norm_b*per95)
-        print("norm(avg) = ", norm_a*avg*avg+norm_b*avg)
-        print("norm(0) = ", norm_a*0.+norm_b*0.)
+        print("norm(per95) = ", norm_a * per95 * per95 + norm_b * per95)
+        print("norm(avg) = ", norm_a * avg * avg + norm_b * avg)
+        print("norm(0) = ", norm_a * 0. + norm_b * 0.)
 
-        print(np.min(new_nii_data_zyxt), np.max(new_nii_data_zyxt) )
+        print(np.min(new_nii_data_zyxt), np.max(new_nii_data_zyxt))
 
         newPatient = SingleVentriclePatient()
         newPatient.name = patient.name
         newPatient.tSystole = patient.tSystole
         newPatient.tDiastole = patient.tDiastole
-
 
         # save new images with header
         newPatient.nii_data_xyzt = np.swapaxes(new_nii_data_zyxt, 0, 2)

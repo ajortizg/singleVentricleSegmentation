@@ -1,7 +1,9 @@
 """Adapted from <https://github.com/annikabrundyn> and <https://github.com/akshaykvnit>"""
 import torch
 import torch.nn as nn
+import os.path as osp
 import torch.nn.functional as F
+from monai.networks.nets.unet import UNet
 
 
 class UNet3D(nn.Module):
@@ -58,7 +60,7 @@ class UNet3D(nn.Module):
 
         layers.append(nn.Conv3d(feats, num_classes, kernel_size=1))
         self.layers = nn.ModuleList(layers)
-        # self.sigmoid = nn.Sigmoid()
+        self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
         identity_mask = x[:, 1:2, :, :, :] if self.residual else None
@@ -73,9 +75,9 @@ class UNet3D(nn.Module):
             xi[-1] = layer(xi[-1], xi[-2 - i])
 
         if self.residual:
-            return (self.layers[-1](xi[-1]) + identity_mask)
+            return self.sigmoid(self.layers[-1](xi[-1]) + identity_mask)
         else:
-            return (self.layers[-1](xi[-1]))
+            return self.sigmoid(self.layers[-1](xi[-1]))
 
 
 class DoubleConv3D(nn.Module):
