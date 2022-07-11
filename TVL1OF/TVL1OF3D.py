@@ -70,6 +70,10 @@ class TVL1OpticalFlow3D:
         self.tau = config.getfloat('PARAMETERS', 'tau')
         self.theta = config.getfloat('PARAMETERS', 'theta')
         self.gamma = config.getfloat('PARAMETERS', 'gamma')
+
+        self.USE_MEDIAN_FILTER = config.getboolean('PARAMETERS', 'USE_MEDIAN_FILTER')
+        self.KERNEL_MF = config.getint('PARAMETERS', 'KERNEL_MF')
+
         # anisotropic differential op
         self.useAnisotropicDifferentialOp = config.getboolean("PARAMETERS", "useAnisotropicDifferentialOp")
         self.anisotropicDifferentialOp_alpha, self.anisotropicDifferentialOp_beta = None, None
@@ -124,7 +128,6 @@ class TVL1OpticalFlow3D:
             return LZ, LY, LX
 
     def generatePyramid(self, I0, I1, u, p):
-
         # Smooth inputs with a Gaussian filter
         if self.useGaussianBlur:
             I0 = applyGaussianBlur3D(I0, self.GaussianBlurSigma)
@@ -167,14 +170,13 @@ class TVL1OpticalFlow3D:
         return I0s, I1s, us, ps, meshInfos
 
     def computeOnPyramid(self, I0, I1, u, p):
-
         I0s, I1s, us, ps, meshInfos = self.generatePyramid(I0, I1, u, p)
 
-        print("\n")
-        print("============================================")
-        print("start to compute optical flow for pyramid")
-        print("============================================")
-        print("\n")
+        # print("\n")
+        # print("============================================")
+        # print("start to compute optical flow for pyramid")
+        # print("============================================")
+        # print("\n")
 
         for s in range(self.NUM_SCALES - 1, -1, -1):
 
@@ -182,9 +184,10 @@ class TVL1OpticalFlow3D:
             us[s], ps[s] = self.computeOnSingleStep(s, I0s[s], I1s[s], us[s], ps[s], meshInfos[s])
 
             # save step
-            self.saveSingleStepToFile(s, I0s[s], I1s[s], us[s], ps[s], meshInfos[s])
+            # self.saveSingleStepToFile(s, I0s[s], I1s[s], us[s], ps[s], meshInfos[s])
 
             if s == 0:
+                self.saveSingleStepToFile(s, I0s[s], I1s[s], us[s], ps[s], meshInfos[s])
                 break
 
             # Prolongate the optical flow and dual variables to the next pyramid level
@@ -205,18 +208,12 @@ class TVL1OpticalFlow3D:
 
             # TODO prolongation factor for p?
 
-        # TODO! median filter pag 12. paper
-        # u_np = us[0].cpu().detach().numpy()
-        # umf = ndimage.median_filter(u_np, size=(3, 3, 3, 1))
-        # us[0] = torch.from_numpy(umf).to(self.DEVICE)
-
         return us[0], ps[0]
 
     def computeOnSingleStep(self, s, I0, I1, u, p, meshInfo):
-
-        print("\n")
-        print("start to compute optical flow for single step = ", s)
-        progress_bar = tqdm(total=self.MAX_WARPS * self.MAX_OUTER_ITERATIONS)
+        # print("\n")
+        # print("start to compute optical flow for single step = ", s)
+        # progress_bar = tqdm(total=self.MAX_WARPS * self.MAX_OUTER_ITERATIONS)
 
         # Compute target image gradients
         # nablaOp = Nabla3D_Central(meshInfo)
@@ -255,7 +252,6 @@ class TVL1OpticalFlow3D:
             gamma = self.gamma
 
             for n in range(self.MAX_OUTER_ITERATIONS):
-
                 # update of dual variable
                 pold = p
                 z_grad = nablaOp.forwardVectorField(z)
@@ -307,7 +303,7 @@ class TVL1OpticalFlow3D:
                 z = u
                 breakConditionVecUpdate[n] = torch.norm(z - zold).item()
 
-                progress_bar.update(1)
+                # progress_bar.update(1)
 
             if self.useDebugOutput:
                 # saveCurve1D(primalFctVec, MAX_OUTER_ITERATIONS, self.saveDirDebug, f"PrimalFct_it{s}_warp{w}")
@@ -321,61 +317,51 @@ class TVL1OpticalFlow3D:
         return u, p
 
     def saveSingleStepToFile(self, step, I0, I1, u, p, meshInfo):
-
         saveDirStep = os.path.sep.join([self.saveDir, f"it{step}"])
         if not os.path.exists(saveDirStep):
             os.makedirs(saveDirStep)
 
-        plotOpticalFlow3D(u.cpu().detach().numpy(), "u", saveDirStep, step)
+        # plotOpticalFlow3D(u.cpu().detach().numpy(), "u", saveDirStep, step)
 
-        # u_np = u.cpu().detach().numpy()
+        # Median filter pag 12. paper
+        if self.USE_MEDIAN_FILTER:
+            ks = self.KERNEL_MF
+            uf = ndimage.median_filter(u.cpu().detach().numpy(), size=(ks, ks, ks, 1))
+            # plotOpticalFlow3D(uf, "uf", saveDirStep, step)
+            flowName = f"flow_m_it{step}.pt"
+            fileNameFlow = os.path.join(saveDirStep, flowName)
+            torch.save(torch.from_numpy(uf), fileNameFlow)
 
-        # umf_x = ndimage.median_filter(u_np[:, :, :, 0], size=3)
-        # umf_y = ndimage.median_filter(u_np[:, :, :, 1], size=3)
-        # umf_z = ndimage.median_filter(u_np[:, :, :, 2], size=3)
-        # umf = np.stack((umf_x, umf_y, umf_z), axis=3)
-        # umf = ndimage.median_filter(u_np, size=(3, 3, 3, 1))
-        # plotOpticalFlow3D(umf, "umf", saveDirStep, step)
+        # save3D_torch_to_nifty(I0, saveDirStep, f"I0.nii")
+        # save_slices(I0, f"I0_it{step}.png", saveDirStep)
+        # save3D_torch_to_nifty(I1, saveDirStep, f"I1.nii")
+        # save_slices(I1, f"I1_it{step}.png", saveDirStep)
+        # warpingOp = opticalFlow.Warping3D(meshInfo, self.InterpolationTypeCuda, self.BoundaryTypeCuda)
+        # I1_warped = warpingOp.forward(I1, u)
+        # save_slices(I1_warped, f"I1_warped_it{step}.png", saveDirStep)
 
-        # ak = 1 / 27 * np.ones((3, 3, 3, 1))
-        # uaf_x = ndimage.convolve(u_np[:, :, :, 0], weights=ak, mode='constant', cval=0.0)
-        # uaf_y = ndimage.convolve(u_np[:, :, :, 1], weights=ak, mode='constant', cval=0.0)
-        # uaf_z = ndimage.convolve(u_np[:, :, :, 2], weights=ak, mode='constant', cval=0.0)
-        # uaf = np.stack((uaf_x, uaf_y, uaf_z), axis=3)
-        # uaf = ndimage.convolve(u_np, ak, mode='constant', cval=0.0)
-        # plotOpticalFlow3D(uaf, "uaf", saveDirStep, step)
+        # save_single_zslices(I0, saveDirStep, "I0Slices", 1., 0)
+        # save_single_zslices(I1_warped, saveDirStep, "I1WarpedSlices", 1., 0)
 
-        save3D_torch_to_nifty(I0, saveDirStep, f"I0.nii")
-        save_slices(I0, f"I0_it{step}.png", saveDirStep)
-        save3D_torch_to_nifty(I1, saveDirStep, f"I1.nii")
-        save_slices(I1, f"I1_it{step}.png", saveDirStep)
-        warpingOp = opticalFlow.Warping3D(meshInfo, self.InterpolationTypeCuda, self.BoundaryTypeCuda)
-        I1_warped = warpingOp.forward(I1, u)
-        save_slices(I1_warped, f"I1_warped_it{step}.png", saveDirStep)
-
-        save_single_zslices(I0, saveDirStep, "I0Slices", 1., 0)
-        save_single_zslices(I1_warped, saveDirStep, "I1WarpedSlices", 1., 0)
-
-        diff = torch.abs(I1_warped - I0)
-        n_diff = tu.normalize(diff)
+        # diff = torch.abs(I1_warped - I0)
+        # n_diff = tu.normalize(diff)
         # save_slices(diff, f"Diff_I1warped_to_I0_it{step}.png", saveDirStep)
-        save_colorbar_slices(n_diff, f"Diff_I1warped_to_I0_it{step}.png", saveDirStep)
-        save_single_zslices(n_diff, saveDirStep, "Diff_I1warped_to_I0_Slices", 1., 0)
-        print("norm of diff = ", diff.norm().item())
-        numZSlices = diff.shape[0]
-        for z in range(numZSlices):
-            print(" norm of diff(z=", z, ") = ", diff[z, :, :].norm().item())
+        # save_colorbar_slices(n_diff, f"Diff_I1warped_to_I0_it{step}.png", saveDirStep)
+        # save_single_zslices(n_diff, saveDirStep, "Diff_I1warped_to_I0_Slices", 1., 0)
+        # print("norm of diff = ", diff.norm().item())
+        # numZSlices = diff.shape[0]
+        # for z in range(numZSlices):
+            # print(" norm of diff(z=", z, ") = ", diff[z, :, :].norm().item())
 
         flowName = f"flow_it{step}.pt"
         fileNameFlow = os.path.join(saveDirStep, flowName)
-        torch.save(u, fileNameFlow)
+        torch.save(u.cpu().detach(), fileNameFlow)
 
-        dualName = f"dual_it{step}.pt"
-        fileNameDual = os.path.join(saveDirStep, dualName)
-        torch.save(p, fileNameDual)
+        # dualName = f"dual_it{step}.pt"
+        # fileNameDual = os.path.join(saveDirStep, dualName)
+        # torch.save(p, fileNameDual)
 
     def warpMask(self, mask, u, I, t0, saveDir):
-
         print("warp with optical flow for time step: ", t0)
         print("norm of u = ", u.norm().item())
 
@@ -388,10 +374,7 @@ class TVL1OpticalFlow3D:
         meshInfo = opticalFlow.MeshInfo3D(NZ, NY, NX, LZ, LY, LX)
 
         warpingOp = opticalFlow.Warping3D(meshInfo, self.InterpolationTypeCuda, self.BoundaryTypeCuda)
-        # warpingOp = opticalFlow.Warping3D(meshInfo, opticalFlow.InterpolationType.INTERPOLATE_LINEAR, self.BoundaryTypeCuda)
         mask_warped = warpingOp.forward(mask, u)
-        # mask_warped = tu.normalize(mask_warped)
-        # mask_warped = torch.where(mask_warped > 0.1, 1.0, 0.0)
 
         save3D_torch_to_nifty(mask_warped, saveDir, f"mask_warped_time{t0}.nii")
         save_slices(mask_warped, f"mask_warped_time{t0}.png", saveDir)

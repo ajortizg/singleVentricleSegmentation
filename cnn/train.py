@@ -1,192 +1,161 @@
 import torch
 import configparser
 import sys
-from dataset import SingleVentricleDataset
 from torch.optim import Adam
 from tqdm import tqdm
+from torch.optim.lr_scheduler import StepLR
 from unet_3d import UNet3D
+from torch.utils.data import DataLoader
+import matplotlib.pyplot as plt
 from torch.utils.tensorboard import SummaryWriter
 import time
+import numpy as np
 import os.path as osp
 from torchsummary import summary
-from loss import L2LossReduced
-import matplotlib.pyplot as plt
-from warp import Warp
+import cnn_utils
+import os
+# import torch.multiprocessing
+import logging
+from cnn_utils import seeding
 
-sys.path.append(osp.abspath(osp.join(osp.dirname(__file__), '../utils')))
-import plots
-import torch_utils
-
-
-print("\n\n")
-print("===========================================================")
-print("===========================================================")
-print("                      Train CNN:")
-print("===========================================================")
-print("===========================================================")
-print("\n\n")
+ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
+sys.path.append(ROOT_DIR)
+from utils import plots
+import utils.transforms as T
+import cnn.dataset as ds
+from cnn.trainer import Trainer
 
 
-config = configparser.ConfigParser()
-config.read('parser/configCNN.ini')
-cuda_availabe = config.get('DEVICE', 'CUDA_AVAILABLE')
-if cuda_availabe and torch.cuda.is_available():
-    DEVICE = 'cuda'
-    torch.cuda.set_device(3)
-else:
-    DEVICE = 'cpu'
-BATCH_SIZE = config.getint('PARAMETERS', 'BATCH_SIZE')
-LR = config.getfloat('PARAMETERS', 'LR')
-NUM_EPOCHS = config.getint('PARAMETERS', 'NUM_EPOCHS')
-VERBOSE = config.getboolean('DEBUG', 'VERBOSE')
-SHUFFLE = config.getboolean('PARAMETERS', 'SHUFFLE')
+if __name__ == "__main__":
+    # torch.multiprocessing.set_sharing_strategy('file_system')
+    seeding(42)
 
-train_ds = SingleVentricleDataset(config, load_flow=True)
+    config = configparser.ConfigParser()
+    config.read('parser/configCNNTrain.ini')
 
-# UNet3D model
-net = UNet3D(config).to(DEVICE)
-opt = Adam(net.parameters(), lr=LR)
+    DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
+    BATCH_SIZE = config.getint('PARAMETERS', 'BATCH_SIZE')
+    LR = config.getfloat('PARAMETERS', 'LR')
+    STEP_SIZE = config.getfloat('PARAMETERS', 'STEP_SIZE')
+    GAMMA = config.getfloat('PARAMETERS', 'GAMMA')
+    LR = config.getfloat('PARAMETERS', 'LR')
+    WEIGHT_DECAY = config.getfloat('PARAMETERS', 'WEIGHT_DECAY')
+    BETA1 = config.getfloat('PARAMETERS', 'BETA1')
+    BETA2 = config.getfloat('PARAMETERS', 'BETA2')
+    NUM_EPOCHS = config.getint('PARAMETERS', 'NUM_EPOCHS')
+    SHUFFLE = config.getboolean('PARAMETERS', 'SHUFFLE')
+    VERBOSE = config.getboolean('DEBUG', 'VERBOSE')
+    DATA_NORM = config.get('PARAMETERS', 'DATA_NORM')
+    LOSS_LAMBDA = config.getfloat('PARAMETERS', 'LOSS_LAMBDA')
 
-if VERBOSE:
-    summary(net, input_size=(2, 16, 300, 300), batch_size=-1)
-    print("\n")
-    print("===========================================================")
-    print('CNN parameters')
-    print(f"\t* Found {len(train_ds)} examples in the training set")
-    print(f'\t* Device: {DEVICE}')
-    print(f'\t* Learning rate: {LR}')
-    print(f'\t* Num epochs: {NUM_EPOCHS}')
-    print("===========================================================")
-    print("\n")
+    # Create train and validation datasets
+    mean, std, min_obs, max_obs = ds.read_stats(config, 'stats.yaml')
 
-save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'CNN')
-writer = SummaryWriter(log_dir=save_dir)
+    mask_transforms = T.ComposeUnary([T.Normalize(), T.ToTensor()])
+    if DATA_NORM == 'MIN_MAX_LOCAL':
+        data_transforms = T.ComposeUnary([T.Normalize(), T.ToTensor()])
+    elif DATA_NORM == 'MIN_MAX_GLOBAL':
+        data_transforms = T.ComposeUnary([T.Normalize(min=min_obs, max=max_obs), T.ToTensor()])
+    elif DATA_NORM == 'STANDARIZATION':
+        data_transforms = T.ComposeUnary([T.Standarize(mean=mean, std=std), T.ToTensor()])
+    elif DATA_NORM == 'NONE':
+        data_transforms = T.ComposeUnary([T.ToTensor()])
+    else:
+        data_transforms = None
+        print(f'[ERROR]: invaldia DATA_NORM: {DATA_NORM}')
+        sys.exit()
 
-# save config file to save directory
-conifg_output = osp.join(save_dir, 'config.ini')
-with open(conifg_output, 'w') as config_file:
-    config.write(config_file)
+    train_ds = ds.SingleVentricleDataset(config, ds.DatasetMode.TRAIN, load_flow=True,
+                                         data_transforms=data_transforms,
+                                         mask_transforms=mask_transforms,
+                                         data_mask_transforms=None,
+                                         flow_transforms=None)
+    val_ds = ds.SingleVentricleDataset(config, ds.DatasetMode.VAL, load_flow=True,
+                                       data_transforms=data_transforms,
+                                       mask_transforms=mask_transforms,
+                                       data_mask_transforms=None,
+                                       flow_transforms=None)
 
-# Steps per epoch for training set
-train_steps = len(train_ds) // BATCH_SIZE
-H = {"train_loss": [], "test_loss": []}
+    # Create data loaders
+    train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=SHUFFLE, num_workers=os.cpu_count() // 2, collate_fn=cnn_utils.collate_fn)
+    val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=os.cpu_count() // 2, collate_fn=cnn_utils.collate_fn)
 
-print("\n")
-print("===========================================================")
-print("training the network")
-print("===========================================================")
-print("\n")
+    save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'CNN')
+    logger = plots.create_logger(save_dir)
 
-avg_train_loss = 0
-pbar = tqdm(total=NUM_EPOCHS * train_steps)
-tic = time.time()
-for e in range(NUM_EPOCHS):
-    net.train()
-    total_train_loss = 0
+    # UNet3D model
+    net = UNet3D(config, logger).to(DEVICE)
 
-    # Loop over the training set
-    idxs = torch.randperm(len(train_ds)) if SHUFFLE else torch.arange(len(train_ds))
-    for idx in idxs:
-        (pname, vol, mask_syst, mask_diast, tsyst, tdias, ff, bf) = train_ds[idx]
-        pbar.set_postfix_str(f'P: {pname}, E: {e}, L: {avg_train_loss:.2f}')
-        vol = torch_utils.normalize(vol)
-        NZ, NY, NX, NT = vol.shape
+    if VERBOSE:
+        summary(net, input_size=(2, 16, 80, 80), batch_size=-1)
+        logger.info("\n")
+        logger.info("===========================================================")
+        logger.info('CNN parameters')
+        logger.info(f"\t* Patients for training: {len(train_ds)}")
+        logger.info(f"\t* Patients for validation: {len(val_ds)}")
+        logger.info(f'\t* Device: {DEVICE}')
+        logger.info(f'\t* Batch size: {BATCH_SIZE}')
+        logger.info(f'\t* Num epochs: {NUM_EPOCHS}')
+        logger.info(f'\t* Learning rate: {LR}')
+        logger.info(f'\t* Weight decay: {WEIGHT_DECAY}, betas: {(BETA1, BETA2)}')
+        logger.info(f'\t* Step size: {STEP_SIZE}, gamma: {GAMMA}')
+        logger.info(f'\t* Data normalization: {DATA_NORM}')
+        logger.info(f'\t* Loss lambda: {LOSS_LAMBDA}')
+        logger.info(f'\t* Num workers: {os.cpu_count()//2}')
+        logger.info("===========================================================")
+        logger.info("\n")
 
-        # if VERBOSE:
-        #     print("\n")
-        #     print("===========================================================")
-        #     print(f'{e} Load data for patient: {pname}')
-        #     print(f'\t* (NZ, NY, NX, NT) = ({NZ}, {NY}, {NX}, {NT})')
-        #     print(f'\t* masks: {mask_syst.shape}, { mask_diast.shape}')
-        #     print(f'\t* Systole at time: {tsyst}')
-        #     print(f'\t* Diastole at time: {tdias}')
-        #     print(f'\t* Optflows: {len(ff)}, with shape: {ff[0].shape}')
-        #     print("===========================================================")
+    net = torch.nn.DataParallel(net, device_ids=np.arange(BATCH_SIZE).tolist())
+    opt = Adam(net.parameters(), lr=LR, weight_decay=WEIGHT_DECAY, betas=(BETA1, BETA2))
+    schedule_lr = StepLR(opt, step_size=STEP_SIZE, gamma=GAMMA)
 
-        init_ts = min(tdias, tsyst)
-        final_ts = max(tdias, tsyst)
-        steps = abs(init_ts - final_ts)
+    writer = SummaryWriter(log_dir=save_dir)
 
-        # Mask initialization
-        m0, mk = None, None
-        if init_ts == tsyst:
-            m0 = mask_syst.unsqueeze(dim=0).unsqueeze(dim=0).to(DEVICE)
-            mk = mask_diast.unsqueeze(dim=0).unsqueeze(dim=0).to(DEVICE)
-            # print('m0 = mask_systole', '\tmk = mask_diastole')
-        else:
-            m0 = mask_diast.unsqueeze(dim=0).unsqueeze(dim=0).to(DEVICE)
-            mk = mask_syst.unsqueeze(dim=0).unsqueeze(dim=0).to(DEVICE)
-            # print('m0 = mask_diastole', '\tmk = mask_systole')
+    # save config file to save directory
+    conifg_output = osp.join(save_dir, 'config.ini')
+    with open(conifg_output, 'w') as config_file:
+        config.write(config_file)
 
-        patient_dir = plots.createSubDirectory(save_dir, pname)
-        save_m0tt = plots.createSubDirectory(patient_dir, 'm0tt')
-        save_mkt = plots.createSubDirectory(patient_dir, 'mkt')
-        plots.save_slices(m0.squeeze(), 'm0.png', patient_dir)
-        plots.save_slices(mk.squeeze(), 'mk.png', patient_dir)
+    cnn_utils.save_model(net, save_dir, 'net.txt')
+    train_ds.save_patients(save_dir, 'train.txt')
+    val_ds.save_patients(save_dir, 'val.txt')
 
-        warp = Warp(config, NZ, NY, NX)
-        # mts = [m0]
-        # mtts = [mk]
-        mt = m0.clone()
-        mtt = mk.clone()
-        # mts_tensor = torch.zeros((steps + 1,) + m0.shape)
-        # mts_tensor[0, :, :, :, :, :] = m0
-        bf.reverse()
-        for t in range(steps):
-            # Forward mask propagation m0 -> mk
-            fwd_time = init_ts + t + 1
-            data_t = vol[:, :, :, fwd_time].unsqueeze(dim=0).unsqueeze(dim=0).to(DEVICE)
-            u = ff[t].to(DEVICE)
-            mt = warp(mt.squeeze(), u).unsqueeze(dim=0).unsqueeze(dim=0)
-            # mt = warp(mts[-1].squeeze(), u).unsqueeze(dim=0).unsqueeze(dim=0)
-            x = torch.cat((data_t, mt), dim=1)
-            mt = net(x)
-            # mts.append(mt)
+    # Steps per epoch for training and evaluation set
+    train_steps = len(train_ds) // BATCH_SIZE
+    val_steps = len(val_ds) // BATCH_SIZE
+    H = {"train_loss": [], "val_loss": []}
 
-            # Backward mask propagation mk -> m0
-            bwd_time = final_ts - t - 1
-            data_t = vol[:, :, :, bwd_time].unsqueeze(dim=0).unsqueeze(dim=0).to(DEVICE)
-            u = bf[t].to(DEVICE)
-            mtt = warp(mtt.squeeze(), u).unsqueeze(dim=0).unsqueeze(dim=0)
-            # mtt = warp(mtts[-1].squeeze(), u).unsqueeze(dim=0).unsqueeze(dim=0)
-            x = torch.cat((data_t, mtt), dim=1)
-            mtt = net(x)
-            # mtts.append(mtt)
+    logger.info('\n[INFO] Save directory: ' + save_dir)
+    logger.info('\n[INFO]: Trainig CNN')
 
-        # mtts.reverse()
-        # plots.save_slices(mtts[0].squeeze(), f"m0tt_{e}", save_m0tt)
-        # plots.save_slices(mts[-1].squeeze(), f"mtk_{e}", save_mkt)
-        plots.save_slices(mtt.squeeze(), f"m0tt_{e}", save_m0tt)
-        plots.save_slices(mt.squeeze(), f'mkt_{e}', save_mkt)
+    pbar = tqdm(total=NUM_EPOCHS)
+    tic = time.time()
+    trainer = Trainer(net, pbar, config, DEVICE)
+    for e in range(NUM_EPOCHS):
+        total_train_loss = trainer.train_epoch(train_loader, opt)
+        total_val_loss = trainer.val_epoch(val_loader)
 
-        total_loss = (0.5 * (mtt - m0).pow(2).sum()) + (0.5 * (mt - mk).pow(2).sum())
-        # total_loss = 0
-        # for k in range(len(mtts)):
-        #     loss = 0.5 * (mts[k] - mtts[k]).pow(2).sum()
-        #     total_loss += loss
-        # Loss = L2LossReduced.apply
-        # total_loss = Loss(mtt, mt, m0, mk)
+        schedule_lr.step()
+        avg_train_loss = total_train_loss / train_steps
+        avg_val_loss = total_val_loss / val_steps
+        logger.info(f'epoch: {e}\t train_loss: {avg_train_loss}\t val_loss: {avg_val_loss}')
 
-        opt.zero_grad()
-        total_loss.backward()
-        opt.step()
+        H['train_loss'].append(avg_train_loss)
+        H['val_loss'].append(avg_val_loss)
+        writer.add_scalars('loss', {'e_train_loss': avg_train_loss, 'e_val_loss:': avg_val_loss}, e)
+        writer.add_scalar('lr', schedule_lr.get_last_lr()[0], e)
+        cnn_utils.save_weights(net, e, 10, save_dir, 'model_e.pth')
 
-        # with torch.no_grad():
-        total_train_loss += total_loss.item()
         pbar.update(1)
 
-    avg_train_loss = total_train_loss / train_steps
-    H['train_loss'].append(avg_train_loss)
-    # print('EPOCH: {}/{}'.format(e + 1, NUM_EPOCHS))
-    # print('Train loss: {:.6f}'.format(avg_train_loss))
-    writer.add_scalar('train_loss', avg_train_loss, e)
 
 toc = time.time()
-print('\nTotal time taken to train the model: {:.2f}s'.format(toc - tic))
+logger.info('\nTotal time taken to train the model: {:.2f}s'.format(toc - tic))
 
 plt.style.use('ggplot')
 plt.figure()
 plt.plot(H['train_loss'], label='train_loss')
+plt.plot(H['val_loss'], label='val_loss')
 plt.title('Training Loss on Dataset')
 plt.xlabel('Epoch #')
 plt.ylabel('Loss')
@@ -197,3 +166,4 @@ torch.save(net, osp.join(save_dir, 'model.pth'))
 # torch.save(net.state_dict(), osp.join(save_dir, 'model_weights.pth'))
 # net.load_state_dict(torch.load('model_weights.pth'))
 pbar.close()
+writer.close()

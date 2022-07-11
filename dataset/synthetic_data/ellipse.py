@@ -1,12 +1,14 @@
-from transforms import rotx, roty, rotz
 import os.path as osp
 import numpy as np
 import sys
 import torch
 
-utils_lib_path = osp.abspath(osp.join(osp.dirname(__file__), '../utils'))
-sys.path.append(utils_lib_path)
-import torch_utils
+
+ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
+sys.path.append(ROOT_DIR)
+from utils import plots
+from utils import torch_utils
+from utils.transforms import rotx, roty, rotz
 
 
 class Ellipse:
