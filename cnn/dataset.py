@@ -18,16 +18,16 @@ class DatasetMode(Enum):
 
 class SingleVentricleDataset(Dataset):
     def __init__(self, config, mode, load_flow,
-                 data_transforms=None,
+                 img4d_transforms=None,
                  mask_transforms=None,
-                 data_mask_transforms=None,
+                 img4d_mask_transforms=None,
                  flow_transforms=None):
         self.config = config
         self.load_flow = load_flow
         self.mode = mode
-        self.data_transforms = data_transforms              # transformations applied only on data
+        self.img4d_transforms = img4d_transforms              # transformations applied only on data
         self.mask_tranforms = mask_transforms               # transformations applied only on masks
-        self.data_mask_transforms = data_mask_transforms    # transformations applied on data and masks
+        self.img4d_mask_transforms = img4d_mask_transforms    # transformations applied on data and masks
         self.flow_transforms = flow_transforms              # transformations applied on optical flow
 
         self.base_path = config.get('DATA', 'BASE_PATH_3D')
@@ -69,8 +69,8 @@ class SingleVentricleDataset(Dataset):
 
     def __getitem__(self, idx):
         # Load 4D nifty [x,y,z,t]
-        vol = nib.load(self.volume_files[idx])
-        vol_zyxt = np.swapaxes(vol.get_fdata(), 0, 2)
+        img4d = nib.load(self.volume_files[idx])
+        img4d_zyxt = np.swapaxes(img4d.get_fdata(), 0, 2)
 
         # Read time steps for systole and diastole
         patient_name = self.get_patient_name(idx)
@@ -79,15 +79,15 @@ class SingleVentricleDataset(Dataset):
         # Load segmentations masks and convert them to torch tensors
         mask_syst_zyx, mask_diast_zyx = self.systole_diastole_mask(patient_name)
 
-        if self.data_mask_transforms is not None:
-            vol_zyxt, mask_syst_zyx, mask_diast_zyx = self.data_mask_transforms(vol_zyxt, mask_syst_zyx, mask_diast_zyx)
+        if self.img4d_mask_transforms is not None:
+            img4d_zyxt, mask_syst_zyx, mask_diast_zyx = self.img4d_mask_transforms(img4d_zyxt, mask_syst_zyx, mask_diast_zyx)
 
         if self.mask_tranforms is not None:
             mask_syst_zyx = self.mask_tranforms(mask_syst_zyx)
             mask_diast_zyx = self.mask_tranforms(mask_diast_zyx)
 
-        if self.data_transforms is not None:
-            vol_zyxt = self.data_transforms(vol_zyxt)
+        if self.img4d_transforms is not None:
+            img4d_zyxt = self.img4d_transforms(img4d_zyxt)
 
         m0, mk, init_ts, final_ts = self.prepare_masks(tsyst, tdias, mask_syst_zyx, mask_diast_zyx)
 
@@ -96,7 +96,7 @@ class SingleVentricleDataset(Dataset):
         if self.load_flow:
             ff, bf = self.optflow_for_patient(patient_name)
 
-        return (patient_name, vol_zyxt, m0, mk, init_ts, final_ts, ff, bf)
+        return (patient_name, img4d_zyxt, m0, mk, init_ts, final_ts, ff, bf)
 
     def systole_diastole_time(self, patient_name):
         row_patient = self.df[self.df['Name'] == patient_name]

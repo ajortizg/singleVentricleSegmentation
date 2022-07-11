@@ -88,6 +88,19 @@ class Normalize:
         return f"{self.__class__.__name__}()"
 
 
+class PercentileClip:
+    def __init__(self, q1, q2):
+        self.q1 = q1
+        self.q2 = q2
+
+    def __call__(self, x: np.array) -> np.array:
+        low, high = np.percentile(x, (self.q1, self.q2))
+        return np.clip(x, low, high)
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}()"
+
+
 class BinaryClosing:
     def __init__(self):
         pass

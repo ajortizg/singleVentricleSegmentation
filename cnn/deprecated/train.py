@@ -42,8 +42,8 @@ SHUFFLE = config.getboolean('PARAMETERS', 'SHUFFLE')
 # Create train and validation datasets
 data_transf = T.ComposeUnary([T.Normalize(mean=0.1696055308066859, std=0.13478938549287428), T.ToTensor()])
 mask_transf = T.ComposeUnary([T.Normalize(), T.ToTensor()])
-train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, load_flow=True, data_transforms=data_transf, mask_transforms=mask_transf)
-val_ds = SingleVentricleDataset(config, DatasetMode.VAL, load_flow=True, data_transforms=data_transf, mask_transforms=mask_transf)
+train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, load_flow=True, img4d_transforms=data_transf, mask_transforms=mask_transf)
+val_ds = SingleVentricleDataset(config, DatasetMode.VAL, load_flow=True, img4d_transforms=data_transf, mask_transforms=mask_transf)
 
 # UNet3D model
 net = UNet3D(config).to(DEVICE)

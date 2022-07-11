@@ -76,11 +76,11 @@ if __name__ == "__main__":
     with open(conifg_output, 'w') as configfile:
         config.write(configfile)
 
-    data_transf = T.ComposeUnary([T.Normalize(), T.ToTensor()])
+    data_transf = T.ComposeUnary([T.ToTensor()])
     # mask_transf = T.ComposeUnary([T.ToTensor()])
 
-    train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, load_flow=False, data_transforms=data_transf)
-    val_ds = SingleVentricleDataset(config, DatasetMode.VAL, load_flow=False, data_transforms=data_transf)
+    train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, load_flow=False, img4d_transforms=data_transf)
+    val_ds = SingleVentricleDataset(config, DatasetMode.VAL, load_flow=False, img4d_transforms=data_transf)
 
     compute_all_patients = config.get('DATA', 'COMPUTE_ALL_PATIENTS')
     step = config.getint('PARAMETERS', 'step')

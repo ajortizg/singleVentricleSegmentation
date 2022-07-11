@@ -120,7 +120,7 @@ if __name__ == "__main__":
 
         # Generate new data
         for i in range(N):
-            vol_t, ms_t, md_t = transf_tern(patient.nii_data_zyxt,
+            img4d_t, ms_t, md_t = transf_tern(patient.nii_data_zyxt,
                                             patient.nii_mask_systole,
                                             patient.nii_mask_diastole)
 
@@ -130,7 +130,7 @@ if __name__ == "__main__":
             newPatient.tDiastole = patient.tDiastole
 
             # save new images with header
-            newPatient.nii_data_xyzt = np.swapaxes(vol_t, 0, 2)
+            newPatient.nii_data_xyzt = np.swapaxes(img4d_t, 0, 2)
             newPatient.nii_header_xyzt = patient.nii_header_xyzt
 
             # save new masks with header
