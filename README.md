@@ -16,6 +16,8 @@
 * pip install openpyxl
 * pip install torchsummary
 * pip install elasticdeform
+* pip install monai
+
 
 to install setup file use one of the following:
 * pip install . 

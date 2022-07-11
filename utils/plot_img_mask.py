@@ -16,8 +16,8 @@ if __name__ == "__main__":
 
     data_transf = T.ComposeUnary([T.Normalize(), T.ToTensor()])
     mask_transf = T.ComposeUnary([T.Normalize(), T.Round(th=0.5), T.ToTensor()])
-    train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, load_flow=False, data_transforms=data_transf, mask_transforms=mask_transf)
-    val_ds = SingleVentricleDataset(config, DatasetMode.VAL, load_flow=False, data_transforms=data_transf, mask_transforms=mask_transf)
+    train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, load_flow=False, img4d_transforms=data_transf, mask_transforms=mask_transf)
+    val_ds = SingleVentricleDataset(config, DatasetMode.VAL, load_flow=False, img4d_transforms=data_transf, mask_transforms=mask_transf)
 
     save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'ImageMask')
 

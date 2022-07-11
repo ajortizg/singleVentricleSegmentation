@@ -2,6 +2,7 @@ import os.path as osp
 import sys
 import torch
 from torch import nn
+import datetime
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
@@ -31,106 +32,136 @@ class Trainer:
     def train_epoch(self, train_loader, opt):
         self.net.train()
         total_train_loss = 0
+        total_l1_loss = 0
+        total_l2_loss = 0
+        total_l3_loss = 0
 
-        for i, (pnames, vols, m0s, mks, init_ts, final_ts, ff, bf, offsets) in enumerate(train_loader):
-            self.pbar.set_postfix_str(f'Train I: {i+1}')
-            mts, mtts = self.time_popagation(vols, m0s, mks, init_ts, final_ts, ff, bf, offsets)
+        for i, (pnames, imgs4d, m0s, mks, init_ts, final_ts, ff, bf, offsets) in enumerate(train_loader):
+            self.pbar.set_postfix_str(f'Train: {i+1}/{len(train_loader)}')
 
-            train_loss = self.compute_loss(mts, mtts, offsets)
+            mts, mtts = self.time_popagation(imgs4d, m0s, mks, init_ts, final_ts, ff, bf, offsets)
+            train_loss, l1, l2, l3 = self.compute_loss(mts, mtts, offsets)
+
             opt.zero_grad()
             train_loss.backward()
             opt.step()
 
             with torch.no_grad():
                 total_train_loss += train_loss.item()
-        return total_train_loss
+                total_l1_loss += l1
+                total_l2_loss += l2
+                total_l3_loss += l3
+        return (total_train_loss, total_l1_loss, total_l2_loss, total_l3_loss)
 
     def val_epoch(self, val_loader):
         self.net.eval()
         total_val_loss = 0
+        total_l1_loss = 0
+        total_l2_loss = 0
+        total_l3_loss = 0
 
         with torch.no_grad():
             for i, (pnames, vols, m0s, mks, init_ts, final_ts, ff, bf, offsets) in enumerate(val_loader):
-                self.pbar.set_postfix_str(f'Val I: {i+1}')
+                self.pbar.set_postfix_str(f'Val: {i+1}/{len(val_loader)}')
                 mts, mtts = self.time_popagation(vols, m0s, mks, init_ts, final_ts, ff, bf, offsets)
+                val_loss, l1, l2, l3 = self.compute_loss(mts, mtts, offsets)
 
-                val_loss = self.compute_loss(mts, mtts, offsets)
                 total_val_loss += val_loss.item()
-        return total_val_loss
+                total_l1_loss += l1
+                total_l2_loss += l2
+                total_l3_loss += l3
+        return (total_val_loss, total_l1_loss, total_l2_loss, total_l3_loss)
 
-    def time_popagation(self, vols, m0s, mks, init_ts, final_ts, ff, bf, offsets):
-        mts = [m0s.to(self.device)]
-        mtts = [mks.to(self.device)]
-        flow_times = ff.shape[1]
-        diff_t = flow_times - offsets
-        NZ, NY, NX = m0s.shape[2:]
+    def time_popagation(self, imgs4d, m0s, mks, init_ts, final_ts, ff, bf, offsets):
+        # mts = [m0s.to(self.device)]
+        # mtts = [mks.to(self.device)]
+        BS, timesteps, NZ, NY, NX, _ = ff.shape
+        dtype = m0s.dtype
+
+        mts = torch.empty(size=(timesteps + 1, BS, 1, NZ, NY, NX), dtype=dtype, device=self.device)
+        mts[0] = m0s.to(self.device)
+        mtts = torch.empty_like(mts)
+        mtts[-1] = mks.to(self.device)
+
+        diff_t = timesteps - offsets
         warp = WarpCNN(self.config, NZ, NY, NX)
 
-        for t in range(flow_times):
+        for t in range(timesteps):
+            # tic = datetime.datetime.now()
+            img4d_fwd, img4d_bwd = self.select_img4d(imgs4d, init_ts, final_ts, t, diff_t)
+            # toc = datetime.datetime.now()
+            # print(toc - tic)
+
             # Forward propagation m0 -> mk
-            mt = warp(mts[-1], ff[:, t, :, :, :, :].to(self.device))
-            data_t = self.select_volume_fwd(vols, init_ts, final_ts, t, diff_t).to(self.device)
-            x = torch.cat((data_t, mt), dim=1)
+            mt = warp(mts[t], ff[:, t, :, :, :, :].to(self.device))
+            # data_t = self.select_volume_fwd(imgs4d, init_ts, final_ts, t, diff_t).to(self.device)
+            x = torch.cat((img4d_fwd.to(self.device), mt), dim=1)
             x = self.net(x)
-            mts.append(x)
+            x = torch.sigmoid(x)
+            mts[t + 1] = x
+            # mts.append(x)
 
             # Backward propagation mk -> m0
-            mtt = warp(mtts[-1], bf[:, t, :, :, :, :].to(self.device))
-            data_t = self.select_volume_bwd(vols, init_ts, final_ts, t, diff_t).to(self.device)
-            x = torch.cat((data_t, mtt), dim=1)
+            mtt = warp(mtts[timesteps - t], bf[:, t, :, :, :, :].to(self.device))
+            # data_t = self.select_volume_bwd(imgs4d, init_ts, final_ts, t, diff_t).to(self.device)
+            x = torch.cat((img4d_bwd.to(self.device), mtt), dim=1)
             x = self.net(x)
-            mtts.append(x)
+            x = torch.sigmoid(x)
+            mtts[timesteps - t - 1] = x
+            # mtts.append(x)
 
-        mtts.reverse()
-        to_tensor = T.ListToTensor()
-        return (to_tensor(mts), to_tensor(mtts))
+        # mtts.reverse()
+        # to_tensor = T.ListToTensor()
 
-    def select_volume_fwd(self, vols: torch.Tensor, init_ts: torch.Tensor, final_ts: torch.Tensor, cur_t: int, diff_t: torch.Tensor) -> torch.Tensor:
-        ts = init_ts + cur_t + 1
+        # print(len(mts), len(mtts))
+        # print(to_tensor(mts).shape)
+        # print(ff.shape)
+        # return (to_tensor(mts), to_tensor(mtts))
+        return (mts, mtts)
 
-        BS, CH, NZ, NY, NX, NT = vols.shape
-        dtype = vols.dtype
-        vols_t = torch.zeros(size=(BS, CH, NZ, NY, NX), dtype=dtype)
+    def select_img4d(self, imgs4d: torch.Tensor, init_ts: torch.Tensor, final_ts: torch.Tensor, cur_t: int, diff_t: torch.Tensor):
+        ts_fwd = init_ts + cur_t + 1
+        ts_bwd = final_ts - cur_t - 1
+
+        BS, CH, NZ, NY, NX, NT = imgs4d.shape
+        dtype = imgs4d.dtype
+        # img4d_fwd = torch.zeros(size=(BS, CH, NZ, NY, NX), dtype=dtype)
+        img4d_fwd = torch.empty(size=(BS, CH, NZ, NY, NX), dtype=dtype)
+        img4d_bwd = torch.empty(size=(BS, CH, NZ, NY, NX), dtype=dtype)
+        # img4d_bwd = torch.zeros(size=(BS, CH, NZ, NY, NX), dtype=dtype)
 
         for b in range(BS):
             if cur_t >= diff_t[b]:
-                vols_t[b, :, :, :, :] = vols[b, :, :, :, :, final_ts[b]]
+                img4d_fwd[b, :, :, :, :] = imgs4d[b, :, :, :, :, final_ts[b]]
+                img4d_bwd[b, :, :, :, :] = imgs4d[b, :, :, :, :, init_ts[b]]
                 # print(f'correct: b: {b} - {cur_t} - {final_ts[b]}')
             else:
-                vols_t[b, :, :, :, :] = vols[b, :, :, :, :, ts[b]]
+                img4d_fwd[b, :, :, :, :] = imgs4d[b, :, :, :, :, ts_fwd[b]]
+                img4d_bwd[b, :, :, :, :] = imgs4d[b, :, :, :, :, ts_bwd[b]]
                 # print(f'normal: b: {b} - {cur_t} - {ts[b]}')
 
-        return vols_t
-
-    def select_volume_bwd(self, vols: torch.Tensor, init_ts: torch.Tensor, final_ts: torch.Tensor, cur_t: int, diff_t: torch.Tensor) -> torch.Tensor:
-        ts = final_ts - cur_t - 1
-
-        BS, CH, NZ, NY, NX, NT = vols.shape
-        dtype = vols.dtype
-        vols_t = torch.zeros(size=(BS, CH, NZ, NY, NX), dtype=dtype)
-
-        for b in range(BS):
-            if cur_t >= diff_t[b]:
-                vols_t[b, :, :, :, :] = vols[b, :, :, :, :, init_ts[b]]
-                # print(f'correct: b: {b} - {cur_t} - {init_ts[b]}')
-            else:
-                vols_t[b, :, :, :, :] = vols[b, :, :, :, :, ts[b]]
-                # print(f'normal: b: {b} - {cur_t} - {ts[b]}')
-
-        return vols_t
+        return (img4d_fwd, img4d_bwd)
 
     def compute_loss(self, mts: torch.Tensor, mtts: torch.Tensor, offsets: torch.Tensor):
         BS = mts.shape[1]
+        # bce_loss = nn.BCEWithLogitsLoss(reduction='mean')
+        # bce_loss = nn.BCELoss(reduction='mean')
+        # mse_loss = nn.MSELoss(reduction='sum')
+        # dice_bce_loss = L.DiceBCELoss(alpha=0.7)
 
         # compute l1
         m0 = mts[0]
         m0tt = mtts[0]
         l1 = self.loss_fn(m0tt, m0)
+        # l1 = bce_loss(m0tt, m0)
+        # l1 = dice_bce_loss(m0tt, m0)
 
         # compute l2
         mk = mtts[-1]
         mkt = mts[-1]
         l2 = self.loss_fn(mkt, mk)
+        # l2 = bce_loss(mkt, mk)
+        # l2 = dice_bce_loss(mkt, mk)
 
         # compute l3
         timesteps = mts.shape[0]
@@ -140,5 +171,46 @@ class Trainer:
             mtt = mtts[1 + offsets[b]:-1, b, :, :, :, :]
             l3 += self.loss_fn(mt, mtt) / mt.shape[0]
 
-        total_loss = l1 + l2 + self.loss_lambda * l3
-        return total_loss / BS
+        # l3 = l3 / BS
+        # lt = l1 + l2 + l3
+        # return lt
+        l1 = l1 / BS
+        l2 = l2 / BS
+        l3 = self.loss_lambda * l3 / BS
+        total_loss = l1 + l2 + l3
+        return (total_loss, l1.item(), l2.item(), l3.item())
+
+    # def select_volume_fwd(self, imgs4d: torch.Tensor, init_ts: torch.Tensor, final_ts: torch.Tensor, cur_t: int, diff_t: torch.Tensor) -> torch.Tensor:
+    #     ts_fwd = init_ts + cur_t + 1
+
+    #     BS, CH, NZ, NY, NX, NT = imgs4d.shape
+    #     dtype = imgs4d.dtype
+    #     img4d_fwd = torch.zeros(size=(BS, CH, NZ, NY, NX), dtype=dtype)
+
+    #     for b in range(BS):
+    #         if cur_t >= diff_t[b]:
+    #             img4d_fwd[b, :, :, :, :] = imgs4d[b, :, :, :, :, final_ts[b]]
+    #             # print(f'correct: b: {b} - {cur_t} - {final_ts[b]}')
+    #         else:
+    #             img4d_fwd[b, :, :, :, :] = imgs4d[b, :, :, :, :, ts_fwd[b]]
+    #             # print(f'normal: b: {b} - {cur_t} - {ts[b]}')
+
+    #     return img4d_fwd
+
+    # def select_volume_bwd(self, imgs4d: torch.Tensor, init_ts: torch.Tensor, final_ts: torch.Tensor, cur_t: int, diff_t: torch.Tensor) -> torch.Tensor:
+    #     ts = final_ts - cur_t - 1
+
+    #     BS, CH, NZ, NY, NX, NT = imgs4d.shape
+    #     dtype = imgs4d.dtype
+    #     vols_t = torch.zeros(size=(BS, CH, NZ, NY, NX), dtype=dtype)
+
+    #     for b in range(BS):
+    #         if cur_t >= diff_t[b]:
+    #             vols_t[b, :, :, :, :] = imgs4d[b, :, :, :, :, init_ts[b]]
+    #             # print(f'correct: b: {b} - {cur_t}
+    #             # - {init_ts[b]}')
+    #         else:
+    #             vols_t[b, :, :, :, :] = imgs4d[b, :, :, :, :, ts[b]]
+    #             # print(f'normal: b: {b} - {cur_t} - {ts[b]}')
+
+    #     return vols_t

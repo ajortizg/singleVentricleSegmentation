@@ -6,6 +6,7 @@ import torch.nn as nn
 import os.path as osp
 import os
 import torch.nn.functional as F
+from monai.networks.nets.unet import UNet
 
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
@@ -15,12 +16,38 @@ from cnn.warp import Warp
 from cnn.loss import loss_func_complete
 
 
+def create_model(config):
+    num_layers = config.getint('PARAMETERS', 'NUM_LAYERS')
+    num_classes = config.getint('PARAMETERS', 'NUM_CLASSES')
+    input_channels = config.getint('PARAMETERS', 'INPUT_CHANNELS')
+    features_start = config.getint('PARAMETERS', 'FEATURES_START')
+    num_res_units = config.getint('PARAMETERS', 'NUM_RES_UNITS')
+
+    channels = [features_start]
+    strides = []
+    for _ in range(1, num_layers):
+        channels.append(channels[-1] * 2)
+        strides.append(2)
+
+    net = UNet(
+        spatial_dims=3,
+        in_channels=input_channels,
+        out_channels=num_classes,
+        channels=channels,
+        strides=strides,
+        num_res_units=num_res_units
+    )
+
+    return net
+
+
 def warp_forward(net: Module, warp, data: torch.Tensor, nsize: tuple, u: torch.Tensor, mt: torch.Tensor):
     data_t = data.reshape(nsize)
     mt = warp(mt.squeeze(), u).unsqueeze(0).unsqueeze(0)
     x = torch.cat((data_t, mt), dim=1)
-    mt = net(x)
-    return mt
+    x = net(x)
+    x = torch.sigmoid(x)
+    return x
 
 
 def time_propagation(net: Module, vol, m0, mk, init_ts, final_ts, ff, bf, config, DEVICE):
@@ -112,7 +139,6 @@ def save_weights(net: Module, epoch: int, every: int, save_dir: str, filename: s
 
 
 # ------------------------------------ BATCH OPERATIONS ------------------------------------
-
 
 
 def collate_fn(data):

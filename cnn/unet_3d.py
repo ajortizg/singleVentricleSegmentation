@@ -34,6 +34,8 @@ class UNet3D(nn.Module):
                 \nPadding: {padding}\
                 \nKernel size: {kernel_size}\
                 \nNorm: {self.norm}\
+                \nAct: {self.act}\
+                \nAct slope: {self.slope}\
                 \nResidual net: {self.residual}")
             logger.info("==================================")
 
@@ -43,22 +45,20 @@ class UNet3D(nn.Module):
 
         super().__init__()
         self.num_layers = num_layers
-        layers = [DoubleConv3D(input_channels, features_start,
-                               dropout, dp, kernel_size, padding, self.norm, self.act, self.slope)]
+        layers = [DoubleConv3D(input_channels, features_start, dropout, dp, kernel_size, padding, self.norm, self.act, self.slope)]
 
         feats = features_start
         for _ in range(num_layers - 1):
-            layers.append(Down3D(feats, feats * 2, dropout,
-                          dp, kernel_size, padding, self.norm, self.act, self.slope))
+            layers.append(Down3D(feats, feats * 2, dropout, dp, kernel_size, padding, self.norm, self.act, self.slope))
             feats *= 2
 
         for _ in range(num_layers - 1):
-            layers.append(Up3D(feats, feats // 2, trilinear,
-                          dropout, dp, kernel_size, padding, self.norm, self.act, self.slope))
+            layers.append(Up3D(feats, feats // 2, trilinear, dropout, dp, kernel_size, padding, self.norm, self.act, self.slope))
             feats //= 2
 
         layers.append(nn.Conv3d(feats, num_classes, kernel_size=1))
         self.layers = nn.ModuleList(layers)
+        # self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
         identity_mask = x[:, 1:2, :, :, :] if self.residual else None
@@ -72,7 +72,10 @@ class UNet3D(nn.Module):
         for i, layer in enumerate(self.layers[self.num_layers: -1]):
             xi[-1] = layer(xi[-1], xi[-2 - i])
 
-        return (self.layers[-1](xi[-1])) + identity_mask if self.residual else (self.layers[-1](xi[-1]))
+        if self.residual:
+            return (self.layers[-1](xi[-1]) + identity_mask)
+        else:
+            return (self.layers[-1](xi[-1]))
 
 
 class DoubleConv3D(nn.Module):

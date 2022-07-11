@@ -7,13 +7,27 @@ import sys
 import os.path as osp
 from loss import loss_func_three
 import csv
-
+from metrics import dc
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 from utils import plots
 import utils.transforms as T
 from cnn.dataset import SingleVentricleDataset, DatasetMode, read_stats
+
+
+def compute_dc(x: torch.Tensor, y: torch.Tensor):
+    transf = T.ComposeUnary([T.ToArray(), T.Round(th=0.5)])
+    x = transf(x)
+    y = transf(y)
+    return dc(x, y)
+
+
+def compute_hd(x: torch.Tensor, y: torch.Tensor):
+    transf = T.ComposeUnary([T.ToArray(), T.Round(th=0.5)])
+    x = transf(x)
+    y = transf(y)
+    return 1.0
 
 
 if __name__ == "__main__":
@@ -30,30 +44,13 @@ if __name__ == "__main__":
 
     DATASET = config_eval.get('DATA', 'DATASET')
 
-    data_transf = T.ComposeUnary([T.Normalize(), T.ToTensor()])
-    mask_transf = T.ComposeUnary([T.Normalize(), T.ToTensor()])
-
-    # DATA_NORM = config_train.get('PARAMETERS', 'DATA_NORM')
-
-    # # Create train and validation datasets
-    # mean, std, min_obs, max_obs = read_stats(config_train, 'stats.yaml')
-
-    # mask_transforms = T.ComposeUnary([T.Normalize(), T.ToTensor()])
-    # if DATA_NORM == 'MIN_MAX_LOCAL':
-    #     data_transforms = T.ComposeUnary([T.Normalize(), T.ToTensor()])
-    # elif DATA_NORM == 'MIN_MAX_GLOBAL':
-    #     data_transforms = T.ComposeUnary([T.Normalize(min=min_obs, max=max_obs), T.ToTensor()])
-    # elif DATA_NORM == 'STANDARIZATION':
-    #     data_transforms = T.ComposeUnary([T.Standarize(mean=mean, std=std), T.ToTensor()])
-    # else:
-    #     data_transforms = None
-    #     print(f'[ERROR]: invaldia DATA_NORM: {DATA_NORM}')
-    #     sys.exit()
+    data_transf = T.ComposeUnary([T.ToTensor()])
+    mask_transf = T.ComposeUnary([T.ToTensor()])
 
     if DATASET == 'train':
-        ds = SingleVentricleDataset(config_train, DatasetMode.TRAIN, load_flow=True, data_transforms=data_transf, mask_transforms=mask_transf)
+        ds = SingleVentricleDataset(config_train, DatasetMode.TRAIN, load_flow=True, img4d_transforms=data_transf, mask_transforms=mask_transf)
     else:
-        ds = SingleVentricleDataset(config_train, DatasetMode.VAL, load_flow=True, data_transforms=data_transf, mask_transforms=mask_transf)
+        ds = SingleVentricleDataset(config_train, DatasetMode.VAL, load_flow=True, img4d_transforms=data_transf, mask_transforms=mask_transf)
 
     save_dir = plots.createSaveDirectory(config_eval.get('DATA', 'OUTPUT_PATH'), 'CNN_EVAL')
 
@@ -64,7 +61,7 @@ if __name__ == "__main__":
 
     csv_file = open(osp.join(save_dir, 'loss.csv'), 'w')
     csv_writer = csv.writer(csv_file)
-    csv_writer.writerow(['Patient', 'L1-CNN', 'L2-CNN', 'L3-CNN', 'LT-CNN', 'L1-OF', 'L2-OF', 'L3-OF', 'LT-OF'])
+    csv_writer.writerow(['Patient', 'L1-CNN', 'L2-CNN', 'L3-CNN', 'LT-CNN', 'L1-OF', 'L2-OF', 'L3-OF', 'LT-OF', 'dc_0', 'dc_k', 'hd_0', 'hd_k'])
 
     net = torch.load(osp.join(TRAINED_MODEL_DIR, MODEL_NAME)).to(DEVICE)
     pbar = tqdm(total=len(ds))
@@ -72,8 +69,8 @@ if __name__ == "__main__":
     save_size = (config_eval.getint('PARAMETERS', 'save_NZ'),
                  config_eval.getint('PARAMETERS', 'save_NY'),
                  config_eval.getint('PARAMETERS', 'save_NX'))
-    mask_posp = T.ComposeUnary([T.ToArray(), T.Resize(size=save_size), T.Normalize(), T.Erode(), T.ToTensor()])
-    m0_mk_posp = T.ComposeUnary([T.ToArray(), T.Resize(size=save_size), T.Normalize(), T.ToTensor()])
+    mask_posp = T.ComposeUnary([T.ToArray(), T.Resize(size=save_size), T.Round(th=0.5), T.Erode(), T.ToTensor()])
+    m0_mk_posp = T.ComposeUnary([T.ToArray(), T.Resize(size=save_size), T.Round(th=0.5), T.ToTensor()])
     img_posp = T.ComposeUnary([T.ToArray(), T.Resize(size=save_size), T.Normalize(), T.ToTensor()])
 
     net.eval()
@@ -124,6 +121,10 @@ if __name__ == "__main__":
             row.append('{:.2f}'.format(l2_iw.item()))
             row.append('{:.2f}'.format(l3_iw.item()))
             row.append('{:.2f}'.format(loss_iw.item()))
+            row.append('{:.3f}'.format(compute_dc(m0, mtts_cnn[0].squeeze())))
+            row.append('{:.3f}'.format(compute_dc(mk, mts_cnn[-1].squeeze())))
+            row.append('{:.3f}'.format(compute_hd(m0, mtts_cnn[0].squeeze())))
+            row.append('{:.3f}'.format(compute_hd(mk, mts_cnn[-1].squeeze())))
             csv_writer.writerow(row)
 
             if VERBOSE:
@@ -133,10 +134,7 @@ if __name__ == "__main__":
 
                 for i in range(len(mts_cnn)):
                     data_t = vol[:, :, :, init_ts + i]
-                    print(torch.amin(data_t), torch.amax(data_t))
                     data_t = img_posp(data_t.squeeze())
-                    print(torch.amin(data_t), torch.amax(data_t))
-                    print()
 
                     mtt_cnn = mask_posp(mtts_cnn[i].squeeze())
                     mtt_iw = mask_posp(mtts_iw[i])

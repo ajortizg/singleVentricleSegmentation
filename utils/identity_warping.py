@@ -21,19 +21,19 @@ if __name__ == "__main__":
     cuda_availabe = config.get('DEVICE', 'CUDA_AVAILABLE')
     DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-    data_transforms = T.ComposeUnary([T.Normalize(), T.ToTensor()])
-    mask_transforms = T.ComposeUnary([T.Normalize(), T.Round(th=0.5), T.ToTensor()])
+    data_transforms = T.ComposeUnary([ T.ToTensor()])
+    mask_transforms = T.ComposeUnary([T.ToTensor()])
 
     train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, load_flow=True,
-                                      data_transforms=data_transforms,
+                                      img4d_transforms=data_transforms,
                                       mask_transforms=mask_transforms,
-                                      data_mask_transforms=None,
+                                      img4d_mask_transforms=None,
                                       flow_transforms=None)
 
     val_ds = SingleVentricleDataset(config, DatasetMode.VAL, load_flow=True,
-                                    data_transforms=data_transforms,
+                                    img4d_transforms=data_transforms,
                                     mask_transforms=mask_transforms,
-                                    data_mask_transforms=None,
+                                    img4d_mask_transforms=None,
                                     flow_transforms=None)
 
     save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'Warping')
