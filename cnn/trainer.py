@@ -38,6 +38,11 @@ class Trainer:
 
         for i, (pnames, imgs4d, m0s, mks, init_ts, final_ts, ff, bf, offsets) in enumerate(train_loader):
             self.pbar.set_postfix_str(f'Train: {i+1}/{len(train_loader)}')
+            imgs4d = imgs4d.to(self.device)
+            m0s = m0s.to(self.device)
+            mks = mks.to(self.device)
+            ff = ff.to(self.device)
+            bf = bf.to(self.device)
 
             mts, mtts = self.time_popagation(imgs4d, m0s, mks, init_ts, final_ts, ff, bf, offsets)
             train_loss, l1, l2, l3 = self.compute_loss(mts, mtts, offsets)
@@ -61,9 +66,15 @@ class Trainer:
         total_l3_loss = 0
 
         with torch.no_grad():
-            for i, (pnames, vols, m0s, mks, init_ts, final_ts, ff, bf, offsets) in enumerate(val_loader):
+            for i, (pnames, imgs4d, m0s, mks, init_ts, final_ts, ff, bf, offsets) in enumerate(val_loader):
                 self.pbar.set_postfix_str(f'Val: {i+1}/{len(val_loader)}')
-                mts, mtts = self.time_popagation(vols, m0s, mks, init_ts, final_ts, ff, bf, offsets)
+                imgs4d = imgs4d.to(self.device)
+                m0s = m0s.to(self.device)
+                mks = mks.to(self.device)
+                ff = ff.to(self.device)
+                bf = bf.to(self.device)
+                
+                mts, mtts = self.time_popagation(imgs4d, m0s, mks, init_ts, final_ts, ff, bf, offsets)
                 val_loss, l1, l2, l3 = self.compute_loss(mts, mtts, offsets)
 
                 total_val_loss += val_loss.item()
@@ -79,34 +90,27 @@ class Trainer:
         dtype = m0s.dtype
 
         mts = torch.empty(size=(timesteps + 1, BS, 1, NZ, NY, NX), dtype=dtype, device=self.device)
-        mts[0] = m0s.to(self.device)
+        mts[0] = m0s
         mtts = torch.empty_like(mts)
-        mtts[-1] = mks.to(self.device)
+        mtts[-1] = mks
 
         diff_t = timesteps - offsets
         warp = WarpCNN(self.config, NZ, NY, NX)
 
         for t in range(timesteps):
-            # tic = datetime.datetime.now()
             img4d_fwd, img4d_bwd = self.select_img4d(imgs4d, init_ts, final_ts, t, diff_t)
-            # toc = datetime.datetime.now()
-            # print(toc - tic)
 
             # Forward propagation m0 -> mk
-            mt = warp(mts[t], ff[:, t, :, :, :, :].to(self.device))
-            # data_t = self.select_volume_fwd(imgs4d, init_ts, final_ts, t, diff_t).to(self.device)
-            x = torch.cat((img4d_fwd.to(self.device), mt), dim=1)
-            x = self.net(x)
-            x = torch.sigmoid(x)
+            mt = warp(mts[t], ff[:, t, :, :, :, :])
+            x = torch.cat((img4d_fwd, mt), dim=1)
+            x = torch.sigmoid(self.net(x))
             mts[t + 1] = x
             # mts.append(x)
 
             # Backward propagation mk -> m0
-            mtt = warp(mtts[timesteps - t], bf[:, t, :, :, :, :].to(self.device))
-            # data_t = self.select_volume_bwd(imgs4d, init_ts, final_ts, t, diff_t).to(self.device)
-            x = torch.cat((img4d_bwd.to(self.device), mtt), dim=1)
-            x = self.net(x)
-            x = torch.sigmoid(x)
+            mtt = warp(mtts[timesteps - t], bf[:, t, :, :, :, :])
+            x = torch.cat((img4d_bwd, mtt), dim=1)
+            x = torch.sigmoid(self.net(x))
             mtts[timesteps - t - 1] = x
             # mtts.append(x)
 
@@ -124,11 +128,10 @@ class Trainer:
         ts_bwd = final_ts - cur_t - 1
 
         BS, CH, NZ, NY, NX, NT = imgs4d.shape
+
         dtype = imgs4d.dtype
-        # img4d_fwd = torch.zeros(size=(BS, CH, NZ, NY, NX), dtype=dtype)
-        img4d_fwd = torch.empty(size=(BS, CH, NZ, NY, NX), dtype=dtype)
-        img4d_bwd = torch.empty(size=(BS, CH, NZ, NY, NX), dtype=dtype)
-        # img4d_bwd = torch.zeros(size=(BS, CH, NZ, NY, NX), dtype=dtype)
+        img4d_fwd = torch.empty(size=(BS, CH, NZ, NY, NX), dtype=dtype, device=self.device)
+        img4d_bwd = torch.empty(size=(BS, CH, NZ, NY, NX), dtype=dtype, device=self.device)
 
         for b in range(BS):
             if cur_t >= diff_t[b]:
@@ -179,38 +182,3 @@ class Trainer:
         l3 = self.loss_lambda * l3 / BS
         total_loss = l1 + l2 + l3
         return (total_loss, l1.item(), l2.item(), l3.item())
-
-    # def select_volume_fwd(self, imgs4d: torch.Tensor, init_ts: torch.Tensor, final_ts: torch.Tensor, cur_t: int, diff_t: torch.Tensor) -> torch.Tensor:
-    #     ts_fwd = init_ts + cur_t + 1
-
-    #     BS, CH, NZ, NY, NX, NT = imgs4d.shape
-    #     dtype = imgs4d.dtype
-    #     img4d_fwd = torch.zeros(size=(BS, CH, NZ, NY, NX), dtype=dtype)
-
-    #     for b in range(BS):
-    #         if cur_t >= diff_t[b]:
-    #             img4d_fwd[b, :, :, :, :] = imgs4d[b, :, :, :, :, final_ts[b]]
-    #             # print(f'correct: b: {b} - {cur_t} - {final_ts[b]}')
-    #         else:
-    #             img4d_fwd[b, :, :, :, :] = imgs4d[b, :, :, :, :, ts_fwd[b]]
-    #             # print(f'normal: b: {b} - {cur_t} - {ts[b]}')
-
-    #     return img4d_fwd
-
-    # def select_volume_bwd(self, imgs4d: torch.Tensor, init_ts: torch.Tensor, final_ts: torch.Tensor, cur_t: int, diff_t: torch.Tensor) -> torch.Tensor:
-    #     ts = final_ts - cur_t - 1
-
-    #     BS, CH, NZ, NY, NX, NT = imgs4d.shape
-    #     dtype = imgs4d.dtype
-    #     vols_t = torch.zeros(size=(BS, CH, NZ, NY, NX), dtype=dtype)
-
-    #     for b in range(BS):
-    #         if cur_t >= diff_t[b]:
-    #             vols_t[b, :, :, :, :] = imgs4d[b, :, :, :, :, init_ts[b]]
-    #             # print(f'correct: b: {b} - {cur_t}
-    #             # - {init_ts[b]}')
-    #         else:
-    #             vols_t[b, :, :, :, :] = imgs4d[b, :, :, :, :, ts[b]]
-    #             # print(f'normal: b: {b} - {cur_t} - {ts[b]}')
-
-    #     return vols_t

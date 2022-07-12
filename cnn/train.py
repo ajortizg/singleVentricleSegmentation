@@ -4,7 +4,7 @@ import sys
 from torch.optim import Adam
 from tqdm import tqdm
 from torch.optim.lr_scheduler import StepLR
-# from unet_3d import UNet3D
+from unet_3d import UNet3D
 from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
 from torch.utils.tensorboard import SummaryWriter
@@ -60,17 +60,17 @@ if __name__ == "__main__":
                                        flow_transforms=None)
 
     # Create data loaders
-    train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=SHUFFLE, num_workers=16,
+    train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=SHUFFLE, num_workers=4,
                               collate_fn=cnn_utils.collate_fn)
-    val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=16,
+    val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=4,
                             collate_fn=cnn_utils.collate_fn)
 
     save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'CNN')
     logger = plots.create_logger(save_dir)
 
     # UNet3D model
-    # net = UNet3D(config, logger).to(DEVICE)
-    net = cnn_utils.create_model(config, logger).to(DEVICE)
+    # net = UNet3D(config, logger).to(DEVICE) # my implementation
+    net = cnn_utils.create_model(config, logger).to(DEVICE) # monai implementation
 
     if VERBOSE:
         logger.info("===========================================================")
@@ -85,7 +85,7 @@ if __name__ == "__main__":
         logger.info(f'\t* Weight decay: {WEIGHT_DECAY}, betas: {(BETA1, BETA2)}')
         logger.info(f'\t* Step size: {STEP_SIZE}, gamma: {GAMMA}')
         logger.info(f'\t* Loss lambda: {LOSS_LAMBDA}')
-        logger.info(f'\t* Num workers: {16}')
+        logger.info(f'\t* Num workers: {4}')
         logger.info(f'\t* Num GPUs: {NUM_GPUS}')
         logger.info("===========================================================")
         logger.info("\n")
@@ -147,9 +147,9 @@ if __name__ == "__main__":
         cnn_utils.save_weights(net, e, 10, save_dir, 'model_e.pth')
         pbar.update(1)
 
-
 toc = time.time()
 logger.info('\nTotal time taken to train the model: {:.2f}s'.format(toc - tic))
+logger.info('\nTotal time taken for loading data: {:.2f}s'.format(train_ds.total_time + val_ds.total_time))
 
 plt.style.use('ggplot')
 plt.figure()
