@@ -15,7 +15,7 @@ if __name__ == '__main__':
     parser.add_argument('--gpu', type=int, default=0)
     args = parser.parse_args()
 
-    DEVICE = torch_utils.getTorchDEVICE(args.gpu)
+    DEVICE = torch_utils.getTorchDevice(args.gpu)
 
     # if torch.cuda.is_available():
 
