@@ -1,3 +1,4 @@
+import os
 import torch
 import torch.nn.functional as F
 
@@ -31,3 +32,15 @@ def normalize(x):
     min = torch.amin(x)
     max = torch.amax(x)
     return (x - min) / (max - min)
+
+
+def getTorchDevice(gpuNum):
+    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+    os.environ['CUDA_VISIBLE_DEVICES'] = str(gpuNum)
+
+    if torch.cuda.is_available():
+        DEVICE = torch.device('cuda:' + str(gpuNum))
+    else:
+        DEVICE = 'cpu'
+    
+    return DEVICE

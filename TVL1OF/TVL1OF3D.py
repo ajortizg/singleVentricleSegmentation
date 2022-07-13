@@ -11,18 +11,19 @@ import torch
 import time
 from tqdm import tqdm
 
-
-sys.path.append("../utils")
-from utils.plots import *
-# from utils.config import *
-from utils.flow_viz import *
+utils_lib_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../utils'))
+sys.path.append(utils_lib_path)
+#sys.path.append("../utils")
+#from utils.plots import *
+import torch_utils
+import flow_viz
 
 # sys.path.append("../pythonOps/")
 # from pythonOps.mesh import *
 # from pythonOps.differentialOps import *
 pythonOps_lib_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../pythonOps'))
 sys.path.append(pythonOps_lib_path)
-import utils.torch_utils as tu
+#import utils.torch_utils as tu
 # import mesh
 # import differentialOps
 

@@ -1,10 +1,17 @@
 import os.path as osp
 import os
 from enum import Enum
-from TVL1OF.TVL1OF3D import *
-from cnn.dataset import SingleVentricleDataset, DatasetMode
-from utils import plots
-import utils.transforms as T
+
+from TVL1OF3D import *
+
+cnn_lib_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../cnn'))
+sys.path.append(cnn_lib_path)
+from dataset import SingleVentricleDataset, DatasetMode
+
+import plots 
+import transforms as T
+#from utils import plots
+#import utils.transforms as T
 
 
 class OpticalFlowMode(Enum):

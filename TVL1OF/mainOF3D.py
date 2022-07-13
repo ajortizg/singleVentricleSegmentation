@@ -24,8 +24,6 @@ if __name__ == "__main__":
     config.read('parser/configTVL1OF3D.ini')
     cuda_availabe = config.get('DEVICE', 'cuda_availabe')
     DEVICE = "cuda" if cuda_availabe else "cpu"
-    #TODO include check from torch
-    #DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
     # create save directory
     timestr = time.strftime("%Y%m%d-%H%M%S")
