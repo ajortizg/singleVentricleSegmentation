@@ -73,7 +73,7 @@ class Trainer:
                 mks = mks.to(self.device)
                 ff = ff.to(self.device)
                 bf = bf.to(self.device)
-                
+
                 mts, mtts = self.time_popagation(imgs4d, m0s, mks, init_ts, final_ts, ff, bf, offsets)
                 val_loss, l1, l2, l3 = self.compute_loss(mts, mtts, offsets)
 
@@ -84,8 +84,6 @@ class Trainer:
         return (total_val_loss, total_l1_loss, total_l2_loss, total_l3_loss)
 
     def time_popagation(self, imgs4d, m0s, mks, init_ts, final_ts, ff, bf, offsets):
-        # mts = [m0s.to(self.device)]
-        # mtts = [mks.to(self.device)]
         BS, timesteps, NZ, NY, NX, _ = ff.shape
         dtype = m0s.dtype
 
@@ -103,24 +101,17 @@ class Trainer:
             # Forward propagation m0 -> mk
             mt = warp(mts[t], ff[:, t, :, :, :, :])
             x = torch.cat((img4d_fwd, mt), dim=1)
-            x = torch.sigmoid(self.net(x))
+            x = self.net(x)
+            x = torch.sigmoid(x)
             mts[t + 1] = x
-            # mts.append(x)
 
             # Backward propagation mk -> m0
             mtt = warp(mtts[timesteps - t], bf[:, t, :, :, :, :])
             x = torch.cat((img4d_bwd, mtt), dim=1)
-            x = torch.sigmoid(self.net(x))
+            x = self.net(x)
+            x = torch.sigmoid(x)
             mtts[timesteps - t - 1] = x
-            # mtts.append(x)
 
-        # mtts.reverse()
-        # to_tensor = T.ListToTensor()
-
-        # print(len(mts), len(mtts))
-        # print(to_tensor(mts).shape)
-        # print(ff.shape)
-        # return (to_tensor(mts), to_tensor(mtts))
         return (mts, mtts)
 
     def select_img4d(self, imgs4d: torch.Tensor, init_ts: torch.Tensor, final_ts: torch.Tensor, cur_t: int, diff_t: torch.Tensor):

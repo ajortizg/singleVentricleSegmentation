@@ -45,74 +45,6 @@ def create_model(config, logger):
     return net
 
 
-def warp_forward(net: Module, warp, data: torch.Tensor, nsize: tuple, u: torch.Tensor, mt: torch.Tensor):
-    data_t = data.reshape(nsize)
-    mt = warp(mt.squeeze(), u).unsqueeze(0).unsqueeze(0)
-    x = torch.cat((data_t, mt), dim=1)
-    x = net(x)
-    x = torch.sigmoid(x)
-    return x
-
-
-def time_propagation(net: Module, vol, m0, mk, init_ts, final_ts, ff, bf, config, DEVICE):
-    NZ, NY, NX, NT = vol.shape
-    nsize = (1, 1, NZ, NY, NX)
-    warp = Warp(config, NZ, NY, NX)
-    mts = [m0.reshape(nsize).to(DEVICE)]
-    mtts = [mk.reshape(nsize).to(DEVICE)]
-    ts = ff.shape[0]
-    for t in range(ts):
-        # Forward mask propagation m0 -> mk
-        mt = warp_forward(net, warp, vol[:, :, :, init_ts + t + 1].to(DEVICE), nsize, ff[t, :, :, :, :].to(DEVICE), mts[-1])
-        mts.append(mt)
-
-        # Backward mask propagation mk -> m0
-        mtt = warp_forward(net, warp, vol[:, :, :, final_ts - t - 1].to(DEVICE), nsize, bf[t, :, :, :, :].to(DEVICE), mtts[-1])
-        mtts.append(mtt)
-
-    mtts.reverse()
-    return (mts, mtts)
-
-
-def train(net: Module, opt, train_idxs, train_ds, epoch, pbar, config, writer, DEVICE):
-    net.train()
-    total_train_loss = 0
-    # normalize = T.Normalize()
-
-    for idx in train_idxs:
-        (pname, vol, m0, mk, init_ts, final_ts, ff, bf) = train_ds[idx]
-        pbar.set_postfix_str(f'Train P: {pname}, E: {epoch}')
-        mts, mtts = time_propagation(net, vol, m0, mk, init_ts, final_ts, ff, bf, config, DEVICE)
-
-        train_loss, *_ = loss_func_complete(mts, mtts)
-        opt.zero_grad()
-        train_loss.backward()
-        opt.step()
-
-        with torch.no_grad():
-            total_train_loss += train_loss.item()
-            # writer.add_image(f'train_{pname}_mkt', torch.swapaxes(normalize(mts[-1]).squeeze(1), 0, 1), dataformats='NCHW')
-            # writer.add_image(f'train_{pname}_m0tt', torch.swapaxes(normalize(mtts[0]).squeeze(1), 0, 1), dataformats='NCHW')
-    return total_train_loss
-
-
-def validate(net, val_ds, epoch, pbar, config, writer, DEVICE):
-    net.eval()
-    total_val_loss = 0
-    # normalize = T.Normalize()
-
-    with torch.no_grad():
-        for (pname, vol, m0, mk, init_ts, final_ts, ff, bf) in val_ds:
-            pbar.set_postfix_str(f'Val P: {pname}, E: {epoch}')
-            mts, mtts = time_propagation(net, vol, m0, mk, init_ts, final_ts, ff, bf, config, DEVICE)
-
-            val_loss, *_ = loss_func_complete(mts, mtts)
-            total_val_loss += val_loss.item()
-            # writer.add_image(f'val_{pname}_mkt', torch.swapaxes(normalize(mts[-1]).squeeze(1), 0, 1), dataformats='NCHW')
-            # writer.add_image(f'val_{pname}_m0tt', torch.swapaxes(normalize(mtts[0]).squeeze(1), 0, 1), dataformats='NCHW')
-    return total_val_loss
-
-
 def seeding(seed):
     np.random.seed(seed)
     os.environ["PYTHONHASHSEED"] = str(seed)
@@ -140,9 +72,6 @@ def save_model(net: Module, save_dir: str, filename: str):
 def save_weights(net: Module, epoch: int, every: int, save_dir: str, filename: str):
     if epoch % every == 0:
         torch.save(net, osp.join(save_dir, filename))
-
-
-# ------------------------------------ BATCH OPERATIONS ------------------------------------
 
 
 def collate_fn(data):
@@ -181,6 +110,74 @@ def max_ts(ff):
         if t > maxts:
             maxts = t
     return maxts
+
+
+# def warp_forward(net: Module, warp, data: torch.Tensor, nsize: tuple, u: torch.Tensor, mt: torch.Tensor):
+#     data_t = data.reshape(nsize)
+#     mt = warp(mt.squeeze(), u).unsqueeze(0).unsqueeze(0)
+#     x = torch.cat((data_t, mt), dim=1)
+#     x = net(x)
+#     x = torch.sigmoid(x)
+#     return x
+
+
+# def time_propagation(net: Module, vol, m0, mk, init_ts, final_ts, ff, bf, config, DEVICE):
+#     NZ, NY, NX, NT = vol.shape
+#     nsize = (1, 1, NZ, NY, NX)
+#     warp = Warp(config, NZ, NY, NX)
+#     mts = [m0.reshape(nsize).to(DEVICE)]
+#     mtts = [mk.reshape(nsize).to(DEVICE)]
+#     ts = ff.shape[0]
+#     for t in range(ts):
+#         # Forward mask propagation m0 -> mk
+#         mt = warp_forward(net, warp, vol[:, :, :, init_ts + t + 1].to(DEVICE), nsize, ff[t, :, :, :, :].to(DEVICE), mts[-1])
+#         mts.append(mt)
+
+#         # Backward mask propagation mk -> m0
+#         mtt = warp_forward(net, warp, vol[:, :, :, final_ts - t - 1].to(DEVICE), nsize, bf[t, :, :, :, :].to(DEVICE), mtts[-1])
+#         mtts.append(mtt)
+
+#     mtts.reverse()
+#     return (mts, mtts)
+
+
+# def train(net: Module, opt, train_idxs, train_ds, epoch, pbar, config, writer, DEVICE):
+#     net.train()
+#     total_train_loss = 0
+#     # normalize = T.Normalize()
+
+#     for idx in train_idxs:
+#         (pname, vol, m0, mk, init_ts, final_ts, ff, bf) = train_ds[idx]
+#         pbar.set_postfix_str(f'Train P: {pname}, E: {epoch}')
+#         mts, mtts = time_propagation(net, vol, m0, mk, init_ts, final_ts, ff, bf, config, DEVICE)
+
+#         train_loss, *_ = loss_func_complete(mts, mtts)
+#         opt.zero_grad()
+#         train_loss.backward()
+#         opt.step()
+
+#         with torch.no_grad():
+#             total_train_loss += train_loss.item()
+#             # writer.add_image(f'train_{pname}_mkt', torch.swapaxes(normalize(mts[-1]).squeeze(1), 0, 1), dataformats='NCHW')
+#             # writer.add_image(f'train_{pname}_m0tt', torch.swapaxes(normalize(mtts[0]).squeeze(1), 0, 1), dataformats='NCHW')
+#     return total_train_loss
+
+
+# def validate(net, val_ds, epoch, pbar, config, writer, DEVICE):
+#     net.eval()
+#     total_val_loss = 0
+#     # normalize = T.Normalize()
+
+#     with torch.no_grad():
+#         for (pname, vol, m0, mk, init_ts, final_ts, ff, bf) in val_ds:
+#             pbar.set_postfix_str(f'Val P: {pname}, E: {epoch}')
+#             mts, mtts = time_propagation(net, vol, m0, mk, init_ts, final_ts, ff, bf, config, DEVICE)
+
+#             val_loss, *_ = loss_func_complete(mts, mtts)
+#             total_val_loss += val_loss.item()
+#             # writer.add_image(f'val_{pname}_mkt', torch.swapaxes(normalize(mts[-1]).squeeze(1), 0, 1), dataformats='NCHW')
+#             # writer.add_image(f'val_{pname}_m0tt', torch.swapaxes(normalize(mtts[0]).squeeze(1), 0, 1), dataformats='NCHW')
+#     return total_val_loss
 
 
 # def train_batch(net, opt, train_loader, pbar, config, DEVICE):

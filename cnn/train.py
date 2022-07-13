@@ -62,7 +62,7 @@ if __name__ == "__main__":
     # Create data loaders
     train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=SHUFFLE, num_workers=4,
                               collate_fn=cnn_utils.collate_fn)
-    val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=4,
+    val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=True, num_workers=4,
                             collate_fn=cnn_utils.collate_fn)
 
     save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'CNN')
@@ -70,7 +70,8 @@ if __name__ == "__main__":
 
     # UNet3D model
     # net = UNet3D(config, logger).to(DEVICE) # my implementation
-    net = cnn_utils.create_model(config, logger).to(DEVICE) # monai implementation
+    # net = cnn_utils.create_model(config, logger).to(DEVICE)  # monai implementation
+    net = torch.load(osp.join('results/CNN_20220712-161617', 'model.pth'), map_location='cpu').to(DEVICE)
 
     if VERBOSE:
         logger.info("===========================================================")
@@ -117,7 +118,7 @@ if __name__ == "__main__":
     tic = time.time()
     trainer = Trainer(net, pbar, config, DEVICE)
     for e in range(NUM_EPOCHS):
-        total_train_loss, l1_train, l2_train, l3_train = trainer.train_epoch(train_loader, opt)
+        total_train_loss, l1_train, l2_train, l3_train = trainer.train_epoch(val_loader, opt)
         total_val_loss, l1_val, l2_val, l3_val = trainer.val_epoch(val_loader)
 
         schedule_lr.step()
@@ -162,7 +163,7 @@ plt.legend(loc='lower left')
 plt.savefig(osp.join(save_dir, 'loss.png'))
 torch.save(net, osp.join(save_dir, 'model.pth'))
 # net = torch.load('model.pth')
-# torch.save(net.state_dict(), osp.join(save_dir, 'model_weights.pth'))
+torch.save(net.state_dict(), osp.join(save_dir, 'weights.pth'))
 # net.load_state_dict(torch.load('model_weights.pth'))
 pbar.close()
 writer.close()
