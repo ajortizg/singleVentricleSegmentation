@@ -36,7 +36,7 @@ def warp_forward(net, warp, data, u, mt, use_sigmoid):
         x = torch.sigmoid(net(x))
     else:
         x = net(x)
-    return (mt.squeeze(), x)
+    return x
 
 
 if __name__ == "__main__":
@@ -106,16 +106,18 @@ if __name__ == "__main__":
 
                 # Forward mask propagation m0 -> mk
                 img3d = img4d[:, :, :, init_ts + t + 1].reshape(nsize)
-                u = ff[t, :, :, :, :]
-                mt_iw, mt_cnn = warp_forward(net, warp, img3d, u, mts_cnn_list[-1], use_sigmoid=True)
+                mt_cnn = warp_forward(net, warp, img3d, ff[t, :, :, :, :], mts_cnn_list[-1], use_sigmoid=False)
                 mts_cnn_list.append(mt_cnn)
+
+                mt_iw = warp(mts_iw_list[-1], ff[t, :, :, :, :])
                 mts_iw_list.append(mt_iw)
 
                 # Backward mask propagation mk -> m0
                 img3d = img4d[:, :, :, final_ts - t - 1].reshape(nsize)
-                u = bf[t, :, :, :, :]
-                mtt_iw, mtt_cnn = warp_forward(net, warp, img3d, u, mtts_cnn_list[-1], use_sigmoid=True)
+                mtt_cnn = warp_forward(net, warp, img3d, bf[t, :, :, :, :], mtts_cnn_list[-1], use_sigmoid=False)
                 mtts_cnn_list.append(mtt_cnn)
+
+                mtt_iw = warp(mtts_iw_list[-1], bf[t, :, :, :, :])
                 mtts_iw_list.append(mtt_iw)
 
             assert(len(mtts_cnn_list) == len(mts_cnn_list) and len(mtts_iw_list) == len(mts_iw_list))

@@ -43,16 +43,21 @@ if __name__ == "__main__":
     config = configparser.ConfigParser()
     config.read('parser/configPreprocessing.ini')
 
+    N = config.getint('DATA_AUGMENTATION', 'CREATE_NEW')
+
+    # Flip
     flip_prob_z = config.getfloat('DATA_AUGMENTATION', 'FLIP_Z_PROB')
     flip_prob_y = config.getfloat('DATA_AUGMENTATION', 'FLIP_Y_PROB')
     flip_prob_x = config.getfloat('DATA_AUGMENTATION', 'FLIP_X_PROB')
 
+    # Rotation
     prob_rot = config.getfloat('DATA_AUGMENTATION', 'ROT_PROB')
     rot_range_z = tuple(map(float, config.get('DATA_AUGMENTATION', 'ROT_Z_RANGE').split(',')))
     rot_range_y = tuple(map(float, config.get('DATA_AUGMENTATION', 'ROT_Y_RANGE').split(',')))
     rot_range_x = tuple(map(float, config.get('DATA_AUGMENTATION', 'ROT_X_RANGE').split(',')))
     rot_bdryMode = config.get('DATA_AUGMENTATION', 'ROT_DEFORM_BDRYMODE')
 
+    # Elastic deformation
     ed_prob = config.getfloat('DATA_AUGMENTATION', 'ELASTIC_DEFORM_PROB')
     ed_grid = config.getint('DATA_AUGMENTATION', 'ELASTIC_DEFORM_GRID')
     ed_sigma_min = config.getfloat('DATA_AUGMENTATION', 'ELASTIC_DEFORM_SIGMA_MIN')
@@ -60,16 +65,24 @@ if __name__ == "__main__":
     ed_bdryMode = config.get('DATA_AUGMENTATION', 'ELASTIC_DEFORM_BDRYMODE')
     ed_usePrefilter = config.getboolean('DATA_AUGMENTATION', 'ELASTIC_DEFORM_USE_PREFILTER')
 
-    N = config.getint('DATA_AUGMENTATION', 'CREATE_NEW')
+    # Additive gaussian noise
+    noise_prob = config.getfloat('DATA_AUGMENTATION', 'NOISE_PROB')
+    noise_mu = config.getfloat('DATA_AUGMENTATION', 'NOISE_MU')
+    noise_sigma = config.getfloat('DATA_AUGMENTATION', 'NOISE_SIGMA')
+
+    # Intensity scaling
+    scaling_prob = config.getfloat('DATA_AUGMENTATION', 'SCALING_PROB')
+    scaling_range = tuple(map(float, config.get('DATA_AUGMENTATION', 'SCALING_RANGE').split(',')))
 
     transf_tern = T.ComposeTernary(
         [T.RandomFlipZ(p=flip_prob_z),
          T.RandomFlipY(p=flip_prob_y),
          T.RandomFlipX(p=flip_prob_x),
          T.RandomRotate(p=prob_rot, range_z=rot_range_z, range_y=rot_range_y, range_x=rot_range_x, total=N, boundary=rot_bdryMode),
-         T.ElasticDeformation(
-             p=ed_prob, sigma_range=(ed_sigma_min, ed_sigma_max),
-             points=ed_grid, boundaryMode=ed_bdryMode, usePrefilter=ed_usePrefilter)])
+         T.ElasticDeformation(p=ed_prob, sigma_range=(ed_sigma_min, ed_sigma_max),
+                              points=ed_grid, boundaryMode=ed_bdryMode, usePrefilter=ed_usePrefilter),
+         T.AdditiveGaussianNoise(p=noise_prob, mu=noise_mu, sigma=noise_sigma),
+         T.IntensityScaling(p=scaling_prob, scale_range=scaling_range)])
 
     train_ds = SingleVentricleDataset(config, mode='train')
     val_ds = SingleVentricleDataset(config, mode='val')
@@ -85,7 +98,10 @@ if __name__ == "__main__":
     logger.info(f'\t* Rot prob: {prob_rot}, with ranges: {rot_range_x}, {rot_range_y}, {rot_range_z}')
     logger.info(
         f'\t* Elastic def prob: {ed_prob}, grid: {ed_grid}, sigma: {ed_sigma_min,ed_sigma_max}, boundary: {ed_bdryMode}, prefilter: {ed_usePrefilter}')
-    logger.info('save directory: ' + saveDir)
+    logger.info(f'\t* Noise prob: {noise_prob}, mu: {noise_mu}, sigma: {noise_sigma}')
+    logger.info(f'\t* Scaling prob: {scaling_prob}, range: {scaling_range}')
+    logger.info("===========================================================")
+    logger.info('\nsave directory: ' + saveDir)
 
     # train paths
     saveDir_train = plots.createSubDirectory(saveDir, 'train')
@@ -121,8 +137,8 @@ if __name__ == "__main__":
         # Generate new data
         for i in range(N):
             img4d_t, ms_t, md_t = transf_tern(patient.nii_data_zyxt,
-                                            patient.nii_mask_systole,
-                                            patient.nii_mask_diastole)
+                                              patient.nii_mask_systole,
+                                              patient.nii_mask_diastole)
 
             newPatient = SingleVentriclePatient()
             newPatient.name = patient.name + f'_A_{i}'

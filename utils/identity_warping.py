@@ -23,6 +23,8 @@ def compute_dc(x: torch.Tensor, y: torch.Tensor):
 
 
 if __name__ == "__main__":
+    SAVE_IMAGES = True
+
     plots.printConsoleOutput_Header('Identity warping')
 
     config = configparser.ConfigParser()
@@ -30,7 +32,7 @@ if __name__ == "__main__":
     cuda_availabe = config.get('DEVICE', 'CUDA_AVAILABLE')
     DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-    data_transforms = T.ComposeUnary([T.ToTensor()])
+    data_transforms = T.ComposeUnary([T.Normalize(), T.ToTensor()])
     mask_transforms = T.ComposeUnary([T.ToTensor()])
 
     train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, load_flow=True,
@@ -72,7 +74,6 @@ if __name__ == "__main__":
 
                 # Forward mask propagation m0 -> mk
                 mt = warp(mts[-1], ff[t, :, :, :, :])
-                # print(torch.allclose(mts[-1], mt))
                 mts.append(mt)
 
                 # Backward mask propagation mk -> m0
@@ -93,7 +94,7 @@ if __name__ == "__main__":
             row.append('{:.3f}'.format(compute_dc(mk, mts[-1])))
             writer.writerow(row)
 
-            if True:
+            if SAVE_IMAGES:
                 patient_dir = plots.createSubDirectory(save_dir, pname)
                 fwd_dir = plots.createSubDirectory(patient_dir, 'fwd')
                 bwd_dir = plots.createSubDirectory(patient_dir, 'bwd')

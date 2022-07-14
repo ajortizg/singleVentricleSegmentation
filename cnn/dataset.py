@@ -27,7 +27,7 @@ class SingleVentricleDataset(Dataset):
         self.load_flow = load_flow
         self.mode = mode
         self.img4d_transforms = img4d_transforms              # transformations applied only on data
-        self.mask_tranforms = mask_transforms               # transformations applied only on masks
+        self.mask_transforms = mask_transforms               # transformations applied only on masks
         self.img4d_mask_transforms = img4d_mask_transforms    # transformations applied on data and masks
         self.flow_transforms = flow_transforms              # transformations applied on optical flow
 
@@ -86,9 +86,9 @@ class SingleVentricleDataset(Dataset):
         if self.img4d_mask_transforms is not None:
             img4d_zyxt, mask_syst_zyx, mask_diast_zyx = self.img4d_mask_transforms(img4d_zyxt, mask_syst_zyx, mask_diast_zyx)
 
-        if self.mask_tranforms is not None:
-            mask_syst_zyx = self.mask_tranforms(mask_syst_zyx)
-            mask_diast_zyx = self.mask_tranforms(mask_diast_zyx)
+        if self.mask_transforms is not None:
+            mask_syst_zyx = self.mask_transforms(mask_syst_zyx)
+            mask_diast_zyx = self.mask_transforms(mask_diast_zyx)
 
         if self.img4d_transforms is not None:
             img4d_zyxt = self.img4d_transforms(img4d_zyxt)

@@ -28,8 +28,8 @@ with open(conifg_output, 'w') as config_file:
 # transf = T.ComposeUnary([T.Normalize()])
 # transf = T.ComposeUnary([T.Normalize(min=-6418.61376953125, max=269167.3125)])
 
-ds_train = SingleVentricleDataset(config, mode='full')
-ds_val = SingleVentricleDataset(config, mode='full')
+ds_train = SingleVentricleDataset(config, mode='train')
+ds_val = SingleVentricleDataset(config, mode='val')
 
 N = len(ds_train) + len(ds_val)
 pbar = tqdm(total=N)
@@ -54,8 +54,6 @@ for ds in [ds_train, ds_val]:
 
         # data = patient.nii_data_zyxt[:, :, :, init_ts:final_ts + 1]
         data = patient.nii_data_xyzt
-
-        print(patient.hdr_mask_diastole)
 
         max_local = np.max(data)
         if max_local > max_global:

@@ -102,14 +102,14 @@ class Trainer:
             mt = warp(mts[t], ff[:, t, :, :, :, :])
             x = torch.cat((img4d_fwd, mt), dim=1)
             x = self.net(x)
-            x = torch.sigmoid(x)
+            # x = torch.sigmoid(x)
             mts[t + 1] = x
 
             # Backward propagation mk -> m0
             mtt = warp(mtts[timesteps - t], bf[:, t, :, :, :, :])
             x = torch.cat((img4d_bwd, mtt), dim=1)
             x = self.net(x)
-            x = torch.sigmoid(x)
+            # x = torch.sigmoid(x)
             mtts[timesteps - t - 1] = x
 
         return (mts, mtts)
@@ -138,24 +138,16 @@ class Trainer:
 
     def compute_loss(self, mts: torch.Tensor, mtts: torch.Tensor, offsets: torch.Tensor):
         BS = mts.shape[1]
-        # bce_loss = nn.BCEWithLogitsLoss(reduction='mean')
-        # bce_loss = nn.BCELoss(reduction='mean')
-        # mse_loss = nn.MSELoss(reduction='sum')
-        # dice_bce_loss = L.DiceBCELoss(alpha=0.7)
 
         # compute l1
         m0 = mts[0]
         m0tt = mtts[0]
         l1 = self.loss_fn(m0tt, m0)
-        # l1 = bce_loss(m0tt, m0)
-        # l1 = dice_bce_loss(m0tt, m0)
 
         # compute l2
         mk = mtts[-1]
         mkt = mts[-1]
         l2 = self.loss_fn(mkt, mk)
-        # l2 = bce_loss(mkt, mk)
-        # l2 = dice_bce_loss(mkt, mk)
 
         # compute l3
         timesteps = mts.shape[0]
@@ -165,9 +157,6 @@ class Trainer:
             mtt = mtts[1 + offsets[b]:-1, b, :, :, :, :]
             l3 += self.loss_fn(mt, mtt) / mt.shape[0]
 
-        # l3 = l3 / BS
-        # lt = l1 + l2 + l3
-        # return lt
         l1 = l1 / BS
         l2 = l2 / BS
         l3 = self.loss_lambda * l3 / BS

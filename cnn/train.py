@@ -4,7 +4,7 @@ import sys
 from torch.optim import Adam
 from tqdm import tqdm
 from torch.optim.lr_scheduler import StepLR
-from unet_3d import UNet3D
+from unet_3d import UNet
 from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
 from torch.utils.tensorboard import SummaryWriter
@@ -45,8 +45,8 @@ if __name__ == "__main__":
     NUM_GPUS = config.getint('PARAMETERS', 'NUM_GPUS')
 
     # Create train and validation datasets
-    mask_transforms = T.ComposeUnary([T.ToTensor()])
     img4d_transforms = T.ComposeUnary([T.ToTensor()])
+    mask_transforms = T.ComposeUnary([T.Round(th=0.5), T.ToTensor()])
 
     train_ds = ds.SingleVentricleDataset(config, ds.DatasetMode.TRAIN, load_flow=True,
                                          img4d_transforms=img4d_transforms,
@@ -62,7 +62,7 @@ if __name__ == "__main__":
     # Create data loaders
     train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=SHUFFLE, num_workers=4,
                               collate_fn=cnn_utils.collate_fn)
-    val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=True, num_workers=4,
+    val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=4,
                             collate_fn=cnn_utils.collate_fn)
 
     save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'CNN')
@@ -70,8 +70,8 @@ if __name__ == "__main__":
 
     # UNet3D model
     # net = UNet3D(config, logger).to(DEVICE) # my implementation
+    net = UNet(config).to(DEVICE)
     # net = cnn_utils.create_model(config, logger).to(DEVICE)  # monai implementation
-    net = torch.load(osp.join('results/CNN_20220712-161617', 'model.pth'), map_location='cpu').to(DEVICE)
 
     if VERBOSE:
         logger.info("===========================================================")
@@ -92,6 +92,14 @@ if __name__ == "__main__":
         logger.info("\n")
 
     net = torch.nn.DataParallel(net, device_ids=np.arange(NUM_GPUS).tolist())
+
+    PRETRAIED = config.getboolean('DATA', 'PRETRAINED')
+    if PRETRAIED:
+        PRETRAIED_WEIGHTS = config.get('DATA', 'PRETRAIED_WEIGHTS')
+        net.load_state_dict(torch.load(PRETRAIED_WEIGHTS), strict=True)
+        logger.info(f'Use pretrained model: {PRETRAIED_WEIGHTS}')
+        train_loader = val_loader # TODO! check shuffle
+
     opt = Adam(net.parameters(), lr=LR, weight_decay=WEIGHT_DECAY, betas=(BETA1, BETA2))
     schedule_lr = StepLR(opt, step_size=STEP_SIZE, gamma=GAMMA)
 
@@ -107,8 +115,8 @@ if __name__ == "__main__":
     val_ds.save_patients(save_dir, 'val.txt')
 
     # Steps per epoch for training and evaluation set
-    train_steps = len(train_ds) // BATCH_SIZE
-    val_steps = len(val_ds) // BATCH_SIZE
+    train_steps = len(train_loader)
+    val_steps = len(val_loader)
     H = {"train_loss": [], "val_loss": []}
 
     logger.info('\n[INFO] Save directory: ' + save_dir)
@@ -117,9 +125,16 @@ if __name__ == "__main__":
     pbar = tqdm(total=NUM_EPOCHS)
     tic = time.time()
     trainer = Trainer(net, pbar, config, DEVICE)
+    best_val_loss = 1e10
+    best_train_loss = 1e10
+
     for e in range(NUM_EPOCHS):
-        total_train_loss, l1_train, l2_train, l3_train = trainer.train_epoch(val_loader, opt)
-        total_val_loss, l1_val, l2_val, l3_val = trainer.val_epoch(val_loader)
+        total_train_loss, l1_train, l2_train, l3_train = trainer.train_epoch(train_loader, opt)
+
+        if PRETRAIED:
+            total_val_loss = l1_val = l2_val = l3_val = 0
+        else:
+            total_val_loss, l1_val, l2_val, l3_val = trainer.val_epoch(val_loader)
 
         schedule_lr.step()
 
@@ -137,15 +152,24 @@ if __name__ == "__main__":
         logger.info(f'\t*Train:\tlt: {avg_train_loss:,.2f}\tl1: {avg_l1_train_loss:,.2f}\tl2: {avg_l2_train_loss:,.2f}\tl3: {avg_l3_train_loss:,.2f}')
         logger.info(f'\t*Val:\tlt: {avg_val_loss:,.2f}\tl1: {avg_l1_val_loss:,.2f}\tl2: {avg_l2_val_loss:,.2f}\tl3: {avg_l3_val_loss:,.2f}')
 
+        if avg_train_loss < best_train_loss:
+            best_train_loss = avg_train_loss
+            torch.save(net, osp.join(save_dir, 'best_train_model.pth'))
+            torch.save(net.state_dict(), osp.join(save_dir, 'best_train_weights.pth'))
+            logger.info(f'\t*Best train model and weights updated with loss: {best_train_loss:,.2f}')
+        if avg_val_loss < best_val_loss:
+            best_val_loss = avg_val_loss
+            torch.save(net, osp.join(save_dir, 'best_val_model.pth'))
+            torch.save(net.state_dict(), osp.join(save_dir, 'best_val_weights.pth'))
+            logger.info(f'\t*Best val model and weights updated with loss: {best_val_loss:,.2f}')
+
         H['train_loss'].append(avg_train_loss)
         H['val_loss'].append(avg_val_loss)
 
         writer.add_scalars('loss', {'e_train_loss': avg_train_loss, 'e_val_loss:': avg_val_loss}, e)
-        # writer.add_scalars('l123', {'l123/train_l1': avg_l1_train_loss, 'l123/train_l2': avg_l2_train_loss, 'l123/train_l3': avg_l3_train_loss}, e)
-        # writer.add_scalars('l123', {'l123/val_l1': avg_l1_val_loss, 'l123/val_l2': avg_l2_val_loss, 'l123/val_l3': avg_l3_val_loss}, e)
+        writer.add_scalars('l123', {'l123/train_l1': avg_l1_train_loss, 'l123/train_l2': avg_l2_train_loss, 'l123/train_l3': avg_l3_train_loss}, e)
+        writer.add_scalars('l123', {'l123/val_l1': avg_l1_val_loss, 'l123/val_l2': avg_l2_val_loss, 'l123/val_l3': avg_l3_val_loss}, e)
         writer.add_scalar('lr', schedule_lr.get_last_lr()[0], e)
-
-        cnn_utils.save_weights(net, e, 10, save_dir, 'model_e.pth')
         pbar.update(1)
 
 toc = time.time()
@@ -162,8 +186,6 @@ plt.ylabel('Loss')
 plt.legend(loc='lower left')
 plt.savefig(osp.join(save_dir, 'loss.png'))
 torch.save(net, osp.join(save_dir, 'model.pth'))
-# net = torch.load('model.pth')
 torch.save(net.state_dict(), osp.join(save_dir, 'weights.pth'))
-# net.load_state_dict(torch.load('model_weights.pth'))
 pbar.close()
 writer.close()

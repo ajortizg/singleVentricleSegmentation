@@ -41,10 +41,6 @@ def save_data(patient: SingleVentriclePatient, saveDir4D: str, saveDirSegmentati
     save_np_to_nifty(patient.nii_mask_diastole_xyz, saveDirPatient, patient.name + "_Diastole_Labelmap.nii", patient.hdr_mask_diastole)
     save_np_to_nifty(patient.nii_mask_systole_xyz, saveDirPatient, patient.name + "_Systole_Labelmap.nii", patient.hdr_mask_systole)
 
-    row = {'Name': patient.name, 'Systole': patient.tSystole, 'Diastole': patient.tDiastole}
-    df_patient = pd.DataFrame(row, index=[0])
-    return df_patient
-
 
 if __name__ == "__main__":
     config = configparser.ConfigParser()
@@ -75,14 +71,13 @@ if __name__ == "__main__":
     pbar = tqdm(total=len(ds))
     logger.info(f'Found {len(ds)} patientes')
 
-    # Generate augmented dataset
     for index in range(0, len(ds)):
         patient = ds[index]
-        pbar.set_postfix_str(f'P: {patient.name}')
+        pbar.set_postfix_str(f'{patient.name}')
         logger.info(f'[Patient]: {index} -> {patient.name}')
 
-        #normalize data for newPatient 
-        per95 = np.percentile(patient.nii_data_zyxt,95)
+        # normalize data for newPatient
+        per95 = np.percentile(patient.nii_data_zyxt, 95)
         new_nii_data_zyxt = np.clip(patient.nii_data_zyxt, 0, per95)
 
         # print("old min, max :", np.min(patient.nii_data_zyxt), np.max(patient.nii_data_zyxt) )
@@ -95,7 +90,7 @@ if __name__ == "__main__":
         # print("avg = ", avg, "per95 = ", per95)
         # print("denom= ", (per95*avg*(per95-avg)))
 
-        #old: quadratic normalization n(I) = a I**2 + b I
+        # old: quadratic normalization n(I) = a I**2 + b I
         # norm_a = (per95 - 2.*avg)/(2.*per95*avg*(avg - per95))
         # norm_b = (2*avg*avg - per95*per95)/(2.*per95*avg*(avg - per95))
         # new_nii_data_zyxt = norm_a * (new_nii_data_zyxt**2) + norm_b * new_nii_data_zyxt
@@ -103,14 +98,14 @@ if __name__ == "__main__":
         # print("norm(avg) = ", norm_a*avg*avg+norm_b*avg)
         # print("norm(0) = ", norm_a*0.+norm_b*0.)
 
-        #new: normalization n(I) = a I/sqrt(1+beta I**2)
-        norm_a = math.sqrt(per95*per95 - avg*avg)/( math.sqrt(3) * per95 * avg )
-        norm_b = (per95*per95 - 4.*avg*avg)/(3.*per95*per95*avg*avg)
-        new_nii_data_zyxt = norm_a * new_nii_data_zyxt / np.sqrt( 1 + norm_b * new_nii_data_zyxt**2)
-        print("norm(per95) = ", norm_a*per95/math.sqrt(1+norm_b*per95*per95) )
-        print("norm(avg) = ", norm_a*avg/math.sqrt(1+norm_b*avg*avg) )
+        # new: normalization n(I) = a I/sqrt(1+beta I**2)
+        norm_a = math.sqrt(per95 * per95 - avg * avg) / (math.sqrt(3) * per95 * avg)
+        norm_b = (per95 * per95 - 4. * avg * avg) / (3. * per95 * per95 * avg * avg)
+        new_nii_data_zyxt = norm_a * new_nii_data_zyxt / np.sqrt(1 + norm_b * new_nii_data_zyxt**2)
+        logger.info("norm(per95) = ", norm_a * per95 / math.sqrt(1 + norm_b * per95 * per95))
+        logger.info("norm(avg) = ", norm_a * avg / math.sqrt(1 + norm_b * avg * avg))
 
-        print(np.min(new_nii_data_zyxt), np.max(new_nii_data_zyxt))
+        logger.info(np.min(new_nii_data_zyxt), np.max(new_nii_data_zyxt))
 
         newPatient = SingleVentriclePatient()
         newPatient.name = patient.name
@@ -130,9 +125,9 @@ if __name__ == "__main__":
         save_data(newPatient, saveDir4D, saveDirSegmentations)
         pbar.update(1)
 
-    print("\n")
-    print("==================================")
-    print("save database to excel file")
+    logger.info("\n")
+    logger.info("==================================")
+    logger.info("save database to excel file")
     output_df = ds.df.copy()
     output_df_file = os.path.sep.join([saveDir, ds.segmentations_filename])
     output_df.to_excel(output_df_file, index=False)
