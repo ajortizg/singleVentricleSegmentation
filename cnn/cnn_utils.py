@@ -6,43 +6,43 @@ import torch.nn as nn
 import os.path as osp
 import os
 import torch.nn.functional as F
-from monai.networks.nets.unet import UNet
+# from monai.networks.nets.unet import UNet
 
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 import utils.transforms as T
 from cnn.warp import Warp
-from cnn.loss import loss_func_complete
+# from cnn.loss import loss_func_complete
 
 
-def create_model(config, logger):
-    num_layers = config.getint('PARAMETERS', 'NUM_LAYERS')
-    num_classes = config.getint('PARAMETERS', 'NUM_CLASSES')
-    input_channels = config.getint('PARAMETERS', 'INPUT_CHANNELS')
-    features_start = config.getint('PARAMETERS', 'FEATURES_START')
-    num_res_units = config.getint('PARAMETERS', 'NUM_RES_UNITS')
+# def create_model(config, logger):
+#     num_layers = config.getint('PARAMETERS', 'NUM_LAYERS')
+#     num_classes = config.getint('PARAMETERS', 'NUM_CLASSES')
+#     input_channels = config.getint('PARAMETERS', 'INPUT_CHANNELS')
+#     features_start = config.getint('PARAMETERS', 'FEATURES_START')
+#     num_res_units = config.getint('PARAMETERS', 'NUM_RES_UNITS')
 
-    channels = [features_start]
-    strides = []
-    for _ in range(1, num_layers):
-        channels.append(channels[-1] * 2)
-        strides.append(2)
+#     channels = [features_start]
+#     strides = []
+#     for _ in range(1, num_layers):
+#         channels.append(channels[-1] * 2)
+#         strides.append(2)
 
-    logger.info(f'cnn channels: {channels}')
-    logger.info(f'cnn strides: {strides}')
-    logger.info(f'cnn res units: {num_res_units}')
+#     logger.info(f'cnn channels: {channels}')
+#     logger.info(f'cnn strides: {strides}')
+#     logger.info(f'cnn res units: {num_res_units}')
 
-    net = UNet(
-        spatial_dims=3,
-        in_channels=input_channels,
-        out_channels=num_classes,
-        channels=channels,
-        strides=strides,
-        num_res_units=num_res_units
-    )
+#     net = UNet(
+#         spatial_dims=3,
+#         in_channels=input_channels,
+#         out_channels=num_classes,
+#         channels=channels,
+#         strides=strides,
+#         num_res_units=num_res_units
+#     )
 
-    return net
+#     return net
 
 
 def seeding(seed):
@@ -100,6 +100,140 @@ def collate_fn(data):
             bwd_t[b, :, :, :, :, :] = bf[b]
 
     return (pnames, vols.unsqueeze_(1), m0s.unsqueeze_(1), mks.unsqueeze_(1), init_ts, final_ts, fwd_t, bwd_t, offsets)
+
+
+def collate_fn_2(data):
+    pnames, imgs4d, m0s, mks, init_ts, final_ts, ff, bf = zip(*data)
+    # maxts = max_ts(ff)
+    # imgs4d_fwd, imgs4d_bwd, ff, bf, offsets = reduce_imgs4d_optflow(imgs4d, ff, bf, maxts + 1, maxts, init_ts, final_ts)
+
+    # BS = len(imgs4d)
+    # print(imgs4d_r.shape)
+
+    # bsr = torch.arange(BS)
+    # c = 13
+    # time_per_batch = torch.tensor([c, c, c, c])
+
+    # t1 = imgs4d_r[bsr, :, :, :, time_per_batch[bsr]]
+    # print('t1: ', t1.shape)
+
+    # to_tensor = T.ListToTensor()
+    # img_tensor = to_tensor(imgs4d)
+    # print('img_t: ', img_tensor.shape)
+    # init_ts = torch.tensor(init_ts)
+    # final_ts = torch.tensor(final_ts)
+    # print(init_ts)
+    # print(final_ts)
+
+    # print(torch.equal(t1, img_tensor[bsr, :, :, :, init_ts[bsr] + c]))
+
+    # to_tensor = T.ListToTensor()
+    # imgs4d = to_tensor(imgs4d)
+    # m0s = to_tensor(m0s)
+    # mks = to_tensor(mks)
+    # init_ts = torch.tensor(init_ts)
+    # final_ts = torch.tensor(final_ts)
+    # imgs4d_fwd.unsqueeze_(1)
+    # imgs4d_bwd.unsqueeze_(1)
+    # imgs4d.unsqueeze_(1)
+    # m0s.unsqueeze_(1)
+    # mks.unsqueeze_(1)
+
+    # return (pnames, imgs4d_fwd, imgs4d_bwd, m0s, mks, init_ts, final_ts, ff, bf, offsets)
+
+    list_times_fwd, list_times_bwd = reduce_times(init_ts, final_ts)
+    ff, bf, offsets = reduce_optical_flow(ff, bf)
+
+    to_tensor = T.ListToTensor()
+    imgs4d = to_tensor(imgs4d)
+    m0s = to_tensor(m0s)
+    mks = to_tensor(mks)
+    imgs4d.unsqueeze_(1)
+    m0s.unsqueeze_(1)
+    mks.unsqueeze_(1)
+
+    return (pnames, imgs4d, m0s, mks, list_times_fwd, list_times_bwd, ff, bf, offsets)
+
+
+def reduce_times(init_ts, final_ts):
+    init_ts = torch.tensor(init_ts)
+    final_ts = torch.tensor(final_ts)
+    num_ts = (final_ts - init_ts).max().item()
+
+    list_times_fwd = [init_ts]
+    list_times_bwd = [final_ts]
+
+    for _ in range(num_ts):
+        next_time = list_times_fwd[-1] + 1
+        list_times_fwd.append(torch.where(next_time > final_ts, final_ts, next_time))
+
+        prev_time = list_times_bwd[-1] - 1
+        list_times_bwd.append(torch.where(prev_time < init_ts, init_ts, prev_time))
+
+    return(list_times_fwd, list_times_bwd)
+
+
+def reduce_optical_flow(off, ofb):
+    BS = len(off)
+    maxts_flow = max_ts(off)
+    NT, NZ, NY, NX, CH = off[0].shape
+
+    off_t = torch.zeros(size=(BS, maxts_flow, NZ, NY, NX, CH))
+    ofb_t = torch.zeros(size=(BS, maxts_flow, NZ, NY, NX, CH))
+    offsets = torch.zeros(BS, dtype=torch.int)
+
+    for b in range(BS):
+        # Prepare optical flow
+        diff_of_ts = (int)(maxts_flow - off[b].shape[0])
+        offsets[b] = diff_of_ts
+        if diff_of_ts != 0:
+            zeros = torch.zeros(size=(diff_of_ts, NZ, NY, NX, 3))
+            off_t[b, :, :, :, :, :] = torch.cat((off[b], zeros), dim=0)
+            ofb_t[b, :, :, :, :, :] = torch.cat((ofb[b], zeros), dim=0)
+        else:
+            off_t[b, :, :, :, :, :] = off[b]
+            ofb_t[b, :, :, :, :, :] = ofb[b]
+
+    return (off_t, ofb_t, offsets)
+
+
+def reduce_imgs4d_optflow(imgs4d_list, off, ofb, maxts_imgs, maxts_flow, init_ts, final_ts):
+    BS = len(imgs4d_list)
+    NZ, NY, NX, _ = imgs4d_list[0].shape
+    imgs4d_fwd = torch.zeros(BS, NZ, NY, NX, maxts_imgs)
+    imgs4d_bwd = torch.zeros(BS, NZ, NY, NX, maxts_imgs)
+    off_t = torch.zeros(size=(BS, maxts_flow, NZ, NY, NX, 3))
+    ofb_t = torch.zeros(size=(BS, maxts_flow, NZ, NY, NX, 3))
+    offsets = torch.zeros(BS, dtype=torch.int)
+
+    for b in range(BS):
+        # Prepare images 4d
+        img4d_r = imgs4d_list[b][:, :, :, init_ts[b]:final_ts[b] + 1]
+        ts = img4d_r.shape[3]
+        if ts == maxts_imgs:
+            imgs4d_fwd[b] = img4d_r
+        else:
+            diff_img_ts = maxts_imgs - ts
+            # Repeat the last element at the end
+            last = img4d_r[:, :, :, -1].unsqueeze(3).repeat(1, 1, 1, diff_img_ts)
+            imgs4d_fwd[b] = torch.cat((img4d_r, last), dim=3)
+
+            # Repeat the first element at the beginning
+            first = img4d_r[:, :, :, 0].unsqueeze(3).repeat(1, 1, 1, diff_img_ts)
+            imgs4d_bwd[b] = torch.cat((first, img4d_r), dim=3)
+
+        # Prepare optical flow
+        diff_of_ts = (int)(maxts_flow - off[b].shape[0])
+        offsets[b] = diff_of_ts
+        if diff_of_ts != 0:
+            zeros = torch.zeros(size=(diff_of_ts, NZ, NY, NX, 3))
+            off_t[b, :, :, :, :, :] = torch.cat((off[b], zeros), dim=0)
+            ofb_t[b, :, :, :, :, :] = torch.cat((ofb[b], zeros), dim=0)
+        else:
+            off_t[b, :, :, :, :, :] = off[b]
+            ofb_t[b, :, :, :, :, :] = ofb[b]
+
+    return (imgs4d_fwd, imgs4d_bwd, off_t, ofb_t, offsets)
 
 
 def max_ts(ff):

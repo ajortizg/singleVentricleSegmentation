@@ -23,7 +23,7 @@ def compute_dc(x: torch.Tensor, y: torch.Tensor):
 
 
 if __name__ == "__main__":
-    SAVE_IMAGES = True
+    SAVE_IMAGES = False
 
     plots.printConsoleOutput_Header('Identity warping')
 
@@ -32,17 +32,17 @@ if __name__ == "__main__":
     cuda_availabe = config.get('DEVICE', 'CUDA_AVAILABLE')
     DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-    data_transforms = T.ComposeUnary([T.Normalize(), T.ToTensor()])
+    img4d_transforms = T.ComposeUnary([T.Normalize(), T.ToTensor()])
     mask_transforms = T.ComposeUnary([T.ToTensor()])
 
     train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, load_flow=True,
-                                      img4d_transforms=data_transforms,
+                                      img4d_transforms=img4d_transforms,
                                       mask_transforms=mask_transforms,
                                       img4d_mask_transforms=None,
                                       flow_transforms=None)
 
     val_ds = SingleVentricleDataset(config, DatasetMode.VAL, load_flow=True,
-                                    img4d_transforms=data_transforms,
+                                    img4d_transforms=img4d_transforms,
                                     mask_transforms=mask_transforms,
                                     img4d_mask_transforms=None,
                                     flow_transforms=None)

@@ -4,7 +4,7 @@ import sys
 from torch.optim import Adam
 from tqdm import tqdm
 from torch.optim.lr_scheduler import StepLR
-from unet_3d import UNet
+from unet_3d import UNet3D
 from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
 from torch.utils.tensorboard import SummaryWriter
@@ -60,17 +60,17 @@ if __name__ == "__main__":
                                        flow_transforms=None)
 
     # Create data loaders
-    train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=SHUFFLE, num_workers=4,
-                              collate_fn=cnn_utils.collate_fn)
-    val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=4,
-                            collate_fn=cnn_utils.collate_fn)
+    train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=SHUFFLE, num_workers=12,
+                              collate_fn=cnn_utils.collate_fn_2)
+    val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=12,
+                            collate_fn=cnn_utils.collate_fn_2)
 
     save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'CNN')
     logger = plots.create_logger(save_dir)
 
     # UNet3D model
-    # net = UNet3D(config, logger).to(DEVICE) # my implementation
-    net = UNet(config).to(DEVICE)
+    net = UNet3D(config, logger).to(DEVICE) # my implementation
+    # net = Unet(config).to(DEVICE)
     # net = cnn_utils.create_model(config, logger).to(DEVICE)  # monai implementation
 
     if VERBOSE:
@@ -86,19 +86,19 @@ if __name__ == "__main__":
         logger.info(f'\t* Weight decay: {WEIGHT_DECAY}, betas: {(BETA1, BETA2)}')
         logger.info(f'\t* Step size: {STEP_SIZE}, gamma: {GAMMA}')
         logger.info(f'\t* Loss lambda: {LOSS_LAMBDA}')
-        logger.info(f'\t* Num workers: {4}')
+        logger.info(f'\t* Num workers: {12}')
         logger.info(f'\t* Num GPUs: {NUM_GPUS}')
         logger.info("===========================================================")
         logger.info("\n")
 
     net = torch.nn.DataParallel(net, device_ids=np.arange(NUM_GPUS).tolist())
 
-    PRETRAIED = config.getboolean('DATA', 'PRETRAINED')
-    if PRETRAIED:
-        PRETRAIED_WEIGHTS = config.get('DATA', 'PRETRAIED_WEIGHTS')
-        net.load_state_dict(torch.load(PRETRAIED_WEIGHTS), strict=True)
-        logger.info(f'Use pretrained model: {PRETRAIED_WEIGHTS}')
-        train_loader = val_loader # TODO! check shuffle
+    # PRETRAIED = config.getboolean('DATA', 'PRETRAINED')
+    # if PRETRAIED:
+    #     PRETRAIED_WEIGHTS = config.get('DATA', 'PRETRAIED_WEIGHTS')
+    #     net.load_state_dict(torch.load(PRETRAIED_WEIGHTS), strict=True)
+    #     logger.info(f'Use pretrained model: {PRETRAIED_WEIGHTS}')
+    #     train_loader = val_loader # TODO! check shuffle
 
     opt = Adam(net.parameters(), lr=LR, weight_decay=WEIGHT_DECAY, betas=(BETA1, BETA2))
     schedule_lr = StepLR(opt, step_size=STEP_SIZE, gamma=GAMMA)
@@ -130,11 +130,7 @@ if __name__ == "__main__":
 
     for e in range(NUM_EPOCHS):
         total_train_loss, l1_train, l2_train, l3_train = trainer.train_epoch(train_loader, opt)
-
-        if PRETRAIED:
-            total_val_loss = l1_val = l2_val = l3_val = 0
-        else:
-            total_val_loss, l1_val, l2_val, l3_val = trainer.val_epoch(val_loader)
+        total_val_loss, l1_val, l2_val, l3_val = trainer.val_epoch(val_loader)
 
         schedule_lr.step()
 
