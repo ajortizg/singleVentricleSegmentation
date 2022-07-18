@@ -18,18 +18,15 @@ class DatasetMode(Enum):
 
 
 class SingleVentricleDataset(Dataset):
-    def __init__(self, config, mode, load_flow,
-                 img4d_transforms=None,
-                 mask_transforms=None,
-                 img4d_mask_transforms=None,
-                 flow_transforms=None):
+    def __init__(self, config, mode, load_flow, img4d_transforms=None, mask_transforms=None,
+                 img4d_mask_transforms=None, flow_transforms=None):
         self.config = config
         self.load_flow = load_flow
         self.mode = mode
-        self.img4d_transforms = img4d_transforms              # transformations applied only on data
-        self.mask_transforms = mask_transforms               # transformations applied only on masks
-        self.img4d_mask_transforms = img4d_mask_transforms    # transformations applied on data and masks
-        self.flow_transforms = flow_transforms              # transformations applied on optical flow
+        self.img4d_transforms = img4d_transforms                # transformations applied only on data
+        self.mask_transforms = mask_transforms                  # transformations applied only on masks
+        self.img4d_mask_transforms = img4d_mask_transforms      # transformations applied on data and masks
+        self.flow_transforms = flow_transforms                  # transformations applied on optical flow
 
         self.base_path = config.get('DATA', 'BASE_PATH_3D')
         if mode == DatasetMode.TRAIN:

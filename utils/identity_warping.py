@@ -23,7 +23,7 @@ def compute_dc(x: torch.Tensor, y: torch.Tensor):
 
 
 if __name__ == "__main__":
-    SAVE_IMAGES = False
+    SAVE_IMAGES = True
 
     plots.printConsoleOutput_Header('Identity warping')
 
@@ -33,7 +33,7 @@ if __name__ == "__main__":
     DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     img4d_transforms = T.ComposeUnary([T.Normalize(), T.ToTensor()])
-    mask_transforms = T.ComposeUnary([T.ToTensor()])
+    mask_transforms = T.ComposeUnary([T.Round(th=0.5), T.ToTensor()])
 
     train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, load_flow=True,
                                       img4d_transforms=img4d_transforms,
@@ -58,7 +58,7 @@ if __name__ == "__main__":
     writer = csv.writer(csv_file)
     writer.writerow(['Patient', 'L1-OF', 'L2-OF', 'L3-OF', 'LT-OF', 'dc_0', 'dc_k'])
     pbar = tqdm(total=len(train_ds) + len(val_ds))
-    mask_posp = T.ComposeUnary([T.ToArray(), T.Normalize(), T.Round(th=0.5), T.Erode(), T.ToTensor()])
+    mask_posp = T.ComposeUnary([T.ToArray(), T.Round(th=0.5), T.Erode(), T.ToTensor()])
 
     for ds in [train_ds, val_ds]:
         for (pname, img4d, m0, mk, init_ts, final_ts, ff, bf) in ds:

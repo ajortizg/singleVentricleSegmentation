@@ -43,33 +43,25 @@ if __name__ == "__main__":
     VERBOSE = config.getboolean('DEBUG', 'VERBOSE')
     LOSS_LAMBDA = config.getfloat('PARAMETERS', 'LOSS_LAMBDA')
     NUM_GPUS = config.getint('PARAMETERS', 'NUM_GPUS')
+    NUM_WORKERS = config.getint('PARAMETERS', 'NUM_WORKERS')
 
     # Create train and validation datasets
     img4d_transforms = T.ComposeUnary([T.ToTensor()])
     mask_transforms = T.ComposeUnary([T.Round(th=0.5), T.ToTensor()])
-
     train_ds = ds.SingleVentricleDataset(config, ds.DatasetMode.TRAIN, load_flow=True,
-                                         img4d_transforms=img4d_transforms,
-                                         mask_transforms=mask_transforms,
-                                         img4d_mask_transforms=None,
-                                         flow_transforms=None)
+                                         img4d_transforms=img4d_transforms, mask_transforms=mask_transforms)
     val_ds = ds.SingleVentricleDataset(config, ds.DatasetMode.VAL, load_flow=True,
-                                       img4d_transforms=img4d_transforms,
-                                       mask_transforms=mask_transforms,
-                                       img4d_mask_transforms=None,
-                                       flow_transforms=None)
+                                       img4d_transforms=img4d_transforms, mask_transforms=mask_transforms)
 
     # Create data loaders
-    train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=SHUFFLE, num_workers=12,
-                              collate_fn=cnn_utils.collate_fn_2)
-    val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=12,
-                            collate_fn=cnn_utils.collate_fn_2)
+    train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=SHUFFLE, num_workers=NUM_WORKERS, collate_fn=cnn_utils.collate_fn_2)
+    val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS, collate_fn=cnn_utils.collate_fn_2)
 
     save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'CNN')
     logger = plots.create_logger(save_dir)
 
     # UNet3D model
-    net = UNet3D(config, logger).to(DEVICE) # my implementation
+    net = UNet3D(config, logger).to(DEVICE)  # my implementation
     # net = Unet(config).to(DEVICE)
     # net = cnn_utils.create_model(config, logger).to(DEVICE)  # monai implementation
 
@@ -86,7 +78,7 @@ if __name__ == "__main__":
         logger.info(f'\t* Weight decay: {WEIGHT_DECAY}, betas: {(BETA1, BETA2)}')
         logger.info(f'\t* Step size: {STEP_SIZE}, gamma: {GAMMA}')
         logger.info(f'\t* Loss lambda: {LOSS_LAMBDA}')
-        logger.info(f'\t* Num workers: {12}')
+        logger.info(f'\t* Num workers: {NUM_WORKERS}')
         logger.info(f'\t* Num GPUs: {NUM_GPUS}')
         logger.info("===========================================================")
         logger.info("\n")
