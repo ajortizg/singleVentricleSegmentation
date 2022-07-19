@@ -7,7 +7,7 @@ import os.path as osp
 from loss import loss_func_three
 import csv
 from torch.utils.data import DataLoader
-from metrics import dc
+import metrics
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
@@ -17,18 +17,18 @@ from cnn.dataset import SingleVentricleDataset, DatasetMode
 from cnn import cnn_utils
 
 
-def compute_dc(x: torch.Tensor, y: torch.Tensor):
-    transf = T.ComposeUnary([T.ToArray(), T.Round(th=0.5)])
-    x = transf(x)
-    y = transf(y)
-    return dc(x, y)
+# def compute_dc(x: torch.Tensor, y: torch.Tensor):
+#     transf = T.ComposeUnary([T.ToArray(), T.Round(th=0.5)])
+#     x = transf(x)
+#     y = transf(y)
+#     return metrics.dc(x, y)
 
 
-def compute_hd(x: torch.Tensor, y: torch.Tensor):
-    transf = T.ComposeUnary([T.ToArray(), T.Round(th=0.5)])
-    x = transf(x)
-    y = transf(y)
-    return 1.0
+# def compute_hd(x: torch.Tensor, y: torch.Tensor):
+#     transf = T.ComposeUnary([T.ToArray(), T.Round(th=0.5)])
+#     x = transf(x)
+#     y = transf(y)
+#     return 1.0
 
 
 if __name__ == "__main__":
@@ -75,7 +75,7 @@ if __name__ == "__main__":
 
     csv_file = open(osp.join(save_dir, 'loss.csv'), 'w')
     csv_writer = csv.writer(csv_file)
-    csv_writer.writerow(['Patient', 'L1-CNN', 'L2-CNN', 'L3-CNN', 'LT-CNN', 'L1-OF', 'L2-OF', 'L3-OF', 'LT-OF', 'dc_0', 'dc_k', 'hd_0', 'hd_k'])
+    csv_writer.writerow(['Patient', 'L1-CNN', 'L2-CNN', 'L3-CNN', 'LT-CNN', 'L1-OF', 'L2-OF', 'L3-OF', 'LT-OF', 'dc_0', 'dc_k'])
 
     net = torch.load(osp.join(TRAINED_MODEL_DIR, MODEL_NAME), map_location='cpu').to(DEVICE)
     pbar = tqdm(total=len(ds))
@@ -143,10 +143,8 @@ if __name__ == "__main__":
             row.append('{:.2f}'.format(l2_iw.item()))
             row.append('{:.2f}'.format(l3_iw.item()))
             row.append('{:.2f}'.format(loss_iw.item()))
-            row.append('{:.3f}'.format(compute_dc(m0s, mtts_cnn_list[0])))
-            row.append('{:.3f}'.format(compute_dc(mks, mts_cnn_list[-1])))
-            row.append('{:.3f}'.format(compute_hd(m0s, mtts_cnn_list[0])))
-            row.append('{:.3f}'.format(compute_hd(mks, mts_cnn_list[-1])))
+            row.append('{:.3f}'.format(metrics.dice(mts_cnn_list[0], mtts_cnn_list[0])))
+            row.append('{:.3f}'.format(metrics.dice(mtts_cnn_list[-1], mts_cnn_list[-1])))
             csv_writer.writerow(row)
 
             if VERBOSE:

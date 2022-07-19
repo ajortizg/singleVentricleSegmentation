@@ -52,12 +52,12 @@ if __name__ == "__main__":
     ds = SingleVentricleDataset(config, mode='full')
 
     saveDir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'preprocessing_normalization')
-    logger = plots.create_logger(saveDir)
+    
 
-    logger.info("===========================================================")
-    logger.info("Data normalization")
-    logger.info("===========================================================")
-    logger.info('save directory: ' + saveDir)
+    print("===========================================================")
+    print("Data normalization")
+    print("===========================================================")
+    print('save directory: ' + saveDir)
 
     # paths
     saveDir4D = plots.createSubDirectory(saveDir, ds.volumes_subdir_path)
@@ -69,12 +69,12 @@ if __name__ == "__main__":
         config.write(configfile)
 
     pbar = tqdm(total=len(ds))
-    logger.info(f'Found {len(ds)} patientes')
+    print(f'Found {len(ds)} patientes')
 
     for index in range(0, len(ds)):
         patient = ds[index]
         pbar.set_postfix_str(f'{patient.name}')
-        logger.info(f'[Patient]: {index} -> {patient.name}')
+        print(f'[Patient]: {index} -> {patient.name}')
 
         # normalize data for newPatient
         per95 = np.percentile(patient.nii_data_zyxt, 95)
@@ -102,10 +102,10 @@ if __name__ == "__main__":
         norm_a = math.sqrt(per95 * per95 - avg * avg) / (math.sqrt(3) * per95 * avg)
         norm_b = (per95 * per95 - 4. * avg * avg) / (3. * per95 * per95 * avg * avg)
         new_nii_data_zyxt = norm_a * new_nii_data_zyxt / np.sqrt(1 + norm_b * new_nii_data_zyxt**2)
-        logger.info("norm(per95) = ", norm_a * per95 / math.sqrt(1 + norm_b * per95 * per95))
-        logger.info("norm(avg) = ", norm_a * avg / math.sqrt(1 + norm_b * avg * avg))
+        print("norm(per95) = ", norm_a * per95 / math.sqrt(1 + norm_b * per95 * per95))
+        print("norm(avg) = ", norm_a * avg / math.sqrt(1 + norm_b * avg * avg))
 
-        logger.info(np.min(new_nii_data_zyxt), np.max(new_nii_data_zyxt))
+        print(np.min(new_nii_data_zyxt), np.max(new_nii_data_zyxt))
 
         newPatient = SingleVentriclePatient()
         newPatient.name = patient.name
@@ -125,9 +125,9 @@ if __name__ == "__main__":
         save_data(newPatient, saveDir4D, saveDirSegmentations)
         pbar.update(1)
 
-    logger.info("\n")
-    logger.info("==================================")
-    logger.info("save database to excel file")
+    print("\n")
+    print("==================================")
+    print("save database to excel file")
     output_df = ds.df.copy()
     output_df_file = os.path.sep.join([saveDir, ds.segmentations_filename])
     output_df.to_excel(output_df_file, index=False)

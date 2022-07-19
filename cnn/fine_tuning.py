@@ -14,6 +14,7 @@ import os.path as osp
 import cnn_utils
 import os
 from torchsummary import summary
+import csv
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
@@ -43,6 +44,7 @@ if __name__ == "__main__":
     GAMMA = config.getfloat('PARAMETERS', 'GAMMA')
     BETA1 = config.getfloat('PARAMETERS', 'BETA1')
     BETA2 = config.getfloat('PARAMETERS', 'BETA2')
+    LOSS_LAMBDA = config.getfloat('PARAMETERS', 'LOSS_LAMBDA')
 
     config_train = configparser.ConfigParser()
     config_train.read(osp.join(PRETRAINED_MODEL_DIR, 'config.ini'))
@@ -51,10 +53,10 @@ if __name__ == "__main__":
     img4d_transforms = T.ComposeUnary([T.ToTensor()])
     mask_transforms = T.ComposeUnary([T.Round(th=0.5), T.ToTensor()])
     train_ds = ds.SingleVentricleDataset(config_train, ds.DatasetMode.VAL, load_flow=True,
-                                       img4d_transforms=img4d_transforms, mask_transforms=mask_transforms)
+                                         img4d_transforms=img4d_transforms, mask_transforms=mask_transforms)
     train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS, collate_fn=cnn_utils.collate_fn_2)
 
-    save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'TL')
+    save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'FT')
     logger = plots.create_logger(save_dir)
 
     # UNet3D model
@@ -79,7 +81,6 @@ if __name__ == "__main__":
 
     # Steps per epoch for training and evaluation set
     H = {"train_loss": []}
-    train_steps = 1
     logger.info('Save directory: ' + save_dir)
     logger.info(f'Searching patient: {PATIENT_NAME}')
 
@@ -102,48 +103,57 @@ if __name__ == "__main__":
     if not patient_found:
         logger.error(f'No patient found: {PATIENT_NAME}')
         sys.exit()
-    
+
+    csv_file = open(osp.join(save_dir, 'acc.csv'), 'w')
+    csv_writer = csv.writer(csv_file)
+    csv_writer.writerow(['Patient', 'Lambda', ' ', '1', ' ', '100', ' ', '200', ' ', '300', ' ', '400', ' ', '500'])
+
+    row = [PATIENT_NAME]
+    row.append(LOSS_LAMBDA)
+
     logger.info('Train CNN')
     for e in range(NUM_EPOCHS):
         pbar.set_postfix_str(f'Train: {pnames[0]}')
-        total_train_loss, l1_train, l2_train, l3_train = trainer.train_patient(imgs4d, m0s, mks, list_times_fwd, list_times_bwd, ff, bf, offsets, opt)
+        total_train_loss, l1_train, l2_train, l3_train, mean_acc = trainer.train_patient(
+            imgs4d, m0s, mks, list_times_fwd, list_times_bwd, ff, bf, offsets, opt)
 
         schedule_lr.step()
 
-        avg_train_loss = total_train_loss / train_steps
-        avg_l1_train_loss = l1_train / train_steps
-        avg_l2_train_loss = l2_train / train_steps
-        avg_l3_train_loss = l3_train / train_steps
-
         logger.info(f'Epoch: {e}')
-        logger.info(f'\t*Train:\tlt: {avg_train_loss:,.2f}\tl1: {avg_l1_train_loss:,.2f}\tl2: {avg_l2_train_loss:,.2f}\tl3: {avg_l3_train_loss:,.2f}')
+        logger.info(f'\t*Train:\tlt: {total_train_loss:,.4f}\tl1: {l1_train:,.4f}\tl2: {l2_train:,.4f}\tl3: {l3_train:,.4f}\tAcc: {mean_acc:,.3f}')
 
-        if avg_train_loss < best_train_loss:
-            best_train_loss = avg_train_loss
+        if total_train_loss < best_train_loss:
+            best_train_loss = total_train_loss
             torch.save(net, osp.join(save_dir, 'best_train_model.pth'))
             torch.save(net.state_dict(), osp.join(save_dir, 'best_train_weights.pth'))
-            logger.info(f'\t*Best train model and weights updated with loss: {best_train_loss:,.2f}')
+            logger.info(f'\t*Best train model and weights updated with loss: {best_train_loss:,.4f}')
 
-        H['train_loss'].append(avg_train_loss)
+        H['train_loss'].append(total_train_loss)
 
-        writer.add_scalars('loss', {'e_train_loss': avg_train_loss}, e)
-        writer.add_scalars('l123', {'l123/train_l1': avg_l1_train_loss, 'l123/train_l2': avg_l2_train_loss, 'l123/train_l3': avg_l3_train_loss}, e)
+        writer.add_scalars('loss', {'e_train_loss': total_train_loss}, e)
+        writer.add_scalars('l123', {'l123/train_l1': l1_train, 'l123/train_l2': l2_train, 'l123/train_l3': l3_train}, e)
         writer.add_scalar('lr', schedule_lr.get_last_lr()[0], e)
+        writer.add_scalars('acc', {'train': mean_acc}, e)
+
+        if e == 0 or e == 99 or e == 199 or e == 299 or e == 399 or e == 499:
+            row.append(mean_acc)
+            row.append(' ')
         pbar.update(1)
 
-toc = time.time()
-logger.info('\nTotal time taken to train the model: {:.2f}s'.format(toc - tic))
-logger.info('\nTotal time taken for loading data: {:.2f}s'.format(train_ds.total_time + train_ds.total_time))
+    csv_writer.writerow(row)
+    toc = time.time()
+    logger.info('\nTotal time taken to train the model: {:.4f}s'.format(toc - tic))
 
-plt.style.use('ggplot')
-plt.figure()
-plt.plot(H['train_loss'], label='train_loss')
-plt.title('Training Loss on Dataset')
-plt.xlabel('Epoch #')
-plt.ylabel('Loss')
-plt.legend(loc='lower left')
-plt.savefig(osp.join(save_dir, 'loss.png'))
-torch.save(net, osp.join(save_dir, 'model.pth'))
-torch.save(net.state_dict(), osp.join(save_dir, 'weights.pth'))
-pbar.close()
-writer.close()
+    plt.style.use('ggplot')
+    plt.figure()
+    plt.plot(H['train_loss'], label='train_loss')
+    plt.title('Training Loss on Dataset')
+    plt.xlabel('Epoch #')
+    plt.ylabel('Loss')
+    plt.legend(loc='lower left')
+    plt.savefig(osp.join(save_dir, 'loss.png'))
+    torch.save(net, osp.join(save_dir, 'model.pth'))
+    torch.save(net.state_dict(), osp.join(save_dir, 'weights.pth'))
+    pbar.close()
+    writer.close()
+    csv_file.close()

@@ -55,8 +55,6 @@ class SingleVentricleDataset(Dataset):
         self.flow_name = None
         self.flow_level = None
 
-        self.total_time = 0
-
         if self.load_flow:
             use_filtered_flow = config.getboolean('PARAMETERS', 'USE_MEDIAN_FILTERED_FLOW')
             self.flow_name = 'flow_m_it0.pt' if use_filtered_flow else 'flow_it0.pt'
@@ -69,7 +67,6 @@ class SingleVentricleDataset(Dataset):
 
     def __getitem__(self, idx):
         # Load 4D nifty [x,y,z,t]
-        tic = time.time()
         img4d = nib.load(self.volume_files[idx])
         img4d_zyxt = np.swapaxes(img4d.get_fdata(), 0, 2)
 
@@ -97,8 +94,6 @@ class SingleVentricleDataset(Dataset):
         if self.load_flow:
             ff, bf = self.optflow_for_patient(patient_name)
 
-        toc = time.time()
-        self.total_time += (toc - tic)
         return (patient_name, img4d_zyxt, m0, mk, init_ts, final_ts, ff, bf)
 
     def systole_diastole_time(self, patient_name):

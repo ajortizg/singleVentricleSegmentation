@@ -84,14 +84,6 @@ if __name__ == "__main__":
         logger.info("\n")
 
     net = torch.nn.DataParallel(net, device_ids=np.arange(NUM_GPUS).tolist())
-
-    # PRETRAIED = config.getboolean('DATA', 'PRETRAINED')
-    # if PRETRAIED:
-    #     PRETRAIED_WEIGHTS = config.get('DATA', 'PRETRAIED_WEIGHTS')
-    #     net.load_state_dict(torch.load(PRETRAIED_WEIGHTS), strict=True)
-    #     logger.info(f'Use pretrained model: {PRETRAIED_WEIGHTS}')
-    #     train_loader = val_loader # TODO! check shuffle
-
     opt = Adam(net.parameters(), lr=LR, weight_decay=WEIGHT_DECAY, betas=(BETA1, BETA2))
     schedule_lr = StepLR(opt, step_size=STEP_SIZE, gamma=GAMMA)
 
@@ -121,8 +113,8 @@ if __name__ == "__main__":
     best_train_loss = 1e10
 
     for e in range(NUM_EPOCHS):
-        total_train_loss, l1_train, l2_train, l3_train = trainer.train_epoch(train_loader, opt)
-        total_val_loss, l1_val, l2_val, l3_val = trainer.val_epoch(val_loader)
+        total_train_loss, l1_train, l2_train, l3_train, train_acc = trainer.train_epoch(train_loader, opt)
+        total_val_loss, l1_val, l2_val, l3_val, val_acc = trainer.val_epoch(val_loader)
 
         schedule_lr.step()
 
@@ -130,26 +122,30 @@ if __name__ == "__main__":
         avg_l1_train_loss = l1_train / train_steps
         avg_l2_train_loss = l2_train / train_steps
         avg_l3_train_loss = l3_train / train_steps
+        avg_train_acc = train_acc / train_steps
 
         avg_val_loss = total_val_loss / val_steps
         avg_l1_val_loss = l1_val / val_steps
         avg_l2_val_loss = l2_val / val_steps
         avg_l3_val_loss = l3_val / val_steps
+        avg_val_acc = val_acc / val_steps
 
         logger.info(f'Epoch: {e}')
-        logger.info(f'\t*Train:\tlt: {avg_train_loss:,.2f}\tl1: {avg_l1_train_loss:,.2f}\tl2: {avg_l2_train_loss:,.2f}\tl3: {avg_l3_train_loss:,.2f}')
-        logger.info(f'\t*Val:\tlt: {avg_val_loss:,.2f}\tl1: {avg_l1_val_loss:,.2f}\tl2: {avg_l2_val_loss:,.2f}\tl3: {avg_l3_val_loss:,.2f}')
+        logger.info(
+            f'\t*Train:\tlt: {avg_train_loss:,.3f}\tl1: {avg_l1_train_loss:,.3f}\tl2: {avg_l2_train_loss:,.3f}\tl3: {avg_l3_train_loss:,.3f}\tAcc: {avg_train_acc:,.3f}')
+        logger.info(
+            f'\t*Val:\tlt: {avg_val_loss:,.3f}\tl1: {avg_l1_val_loss:,.3f}\tl2: {avg_l2_val_loss:,.3f}\tl3: {avg_l3_val_loss:,.3f}\tAcc: {avg_val_acc:,.3f}')
 
         if avg_train_loss < best_train_loss:
             best_train_loss = avg_train_loss
             torch.save(net, osp.join(save_dir, 'best_train_model.pth'))
             torch.save(net.state_dict(), osp.join(save_dir, 'best_train_weights.pth'))
-            logger.info(f'\t*Best train model and weights updated with loss: {best_train_loss:,.2f}')
+            logger.info(f'\t*Best train model and weights updated with loss: {best_train_loss:,.3f}')
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
             torch.save(net, osp.join(save_dir, 'best_val_model.pth'))
             torch.save(net.state_dict(), osp.join(save_dir, 'best_val_weights.pth'))
-            logger.info(f'\t*Best val model and weights updated with loss: {best_val_loss:,.2f}')
+            logger.info(f'\t*Best val model and weights updated with loss: {best_val_loss:,.3f}')
 
         H['train_loss'].append(avg_train_loss)
         H['val_loss'].append(avg_val_loss)
@@ -158,11 +154,12 @@ if __name__ == "__main__":
         writer.add_scalars('l123', {'l123/train_l1': avg_l1_train_loss, 'l123/train_l2': avg_l2_train_loss, 'l123/train_l3': avg_l3_train_loss}, e)
         writer.add_scalars('l123', {'l123/val_l1': avg_l1_val_loss, 'l123/val_l2': avg_l2_val_loss, 'l123/val_l3': avg_l3_val_loss}, e)
         writer.add_scalar('lr', schedule_lr.get_last_lr()[0], e)
+        writer.add_scalars('acc', {'train': avg_train_acc, 'val': avg_val_acc}, e)
         pbar.update(1)
 
 toc = time.time()
-logger.info('\nTotal time taken to train the model: {:.2f}s'.format(toc - tic))
-logger.info('\nTotal time taken for loading data: {:.2f}s'.format(train_ds.total_time + val_ds.total_time))
+logger.info('\nTotal time taken to train the model: {:.3f}s'.format(toc - tic))
+logger.info('\nTotal time taken for loading data: {:.3f}s'.format(train_ds.total_time + val_ds.total_time))
 
 plt.style.use('ggplot')
 plt.figure()
