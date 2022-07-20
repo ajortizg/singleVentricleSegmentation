@@ -89,3 +89,19 @@ class SingleVentricleDataset(Dataset):
     def __getitem__(self, idx):
         patient = SingleVentriclePatient(idx, self.df.iloc[[idx]], self.volumes_path, self.segmentations_path)
         return patient
+
+    def index_for_patient(self, patient_name):
+        row_patient = self.df[self.df['Name'] == patient_name]
+        index_patient = row_patient.index[0]
+        return index_patient
+    
+    def get_patient_name(self, idx):
+        return self.df.iloc[idx]['Name']
+    
+    def get_systole_time(self, idx):
+        return self.df.iloc[idx]['Systole']
+    
+    def get_diastole_time(self, idx):
+        return self.df.iloc[idx]['Diastole']
+    
+    

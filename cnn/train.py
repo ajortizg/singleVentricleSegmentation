@@ -99,9 +99,9 @@ if __name__ == "__main__":
     val_ds.save_patients(save_dir, 'val.txt')
 
     # Steps per epoch for training and evaluation set
-    train_steps = len(train_loader)
-    val_steps = len(val_loader)
-    H = {"train_loss": [], "val_loss": []}
+    train_steps = len(train_ds) / BATCH_SIZE
+    val_steps = len(val_ds) / BATCH_SIZE
+    H = {'train_loss': [], 'val_loss': [], 'train_acc': [], 'val_acc': []}
 
     logger.info('\n[INFO] Save directory: ' + save_dir)
     logger.info('\n[INFO]: Trainig CNN')
@@ -149,6 +149,8 @@ if __name__ == "__main__":
 
         H['train_loss'].append(avg_train_loss)
         H['val_loss'].append(avg_val_loss)
+        H['train_acc'].append(avg_train_acc)
+        H['val_acc'].append(avg_val_acc)
 
         writer.add_scalars('loss', {'e_train_loss': avg_train_loss, 'e_val_loss:': avg_val_loss}, e)
         writer.add_scalars('l123', {'l123/train_l1': avg_l1_train_loss, 'l123/train_l2': avg_l2_train_loss, 'l123/train_l3': avg_l3_train_loss}, e)
@@ -159,7 +161,6 @@ if __name__ == "__main__":
 
 toc = time.time()
 logger.info('\nTotal time taken to train the model: {:.3f}s'.format(toc - tic))
-logger.info('\nTotal time taken for loading data: {:.3f}s'.format(train_ds.total_time + val_ds.total_time))
 
 plt.style.use('ggplot')
 plt.figure()
@@ -170,6 +171,16 @@ plt.xlabel('Epoch #')
 plt.ylabel('Loss')
 plt.legend(loc='lower left')
 plt.savefig(osp.join(save_dir, 'loss.png'))
+
+plt.figure()
+plt.plot(H['train_acc'], label='train_acc')
+plt.plot(H['val_acc'], label='val_acc')
+plt.title('Accuracy on Dataset')
+plt.xlabel('Epoch #')
+plt.ylabel('Acc')
+plt.legend(loc='lower left')
+plt.savefig(osp.join(save_dir, 'acc.png'))
+
 torch.save(net, osp.join(save_dir, 'model.pth'))
 torch.save(net.state_dict(), osp.join(save_dir, 'weights.pth'))
 pbar.close()

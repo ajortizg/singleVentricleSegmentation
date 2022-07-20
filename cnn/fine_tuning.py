@@ -63,9 +63,9 @@ if __name__ == "__main__":
     net = UNet3D(config_train, logger).to(DEVICE)
     net = torch.nn.DataParallel(net, device_ids=np.arange(NUM_GPUS).tolist())
 
-    PRETRAIED_WEIGHTS = osp.join(PRETRAINED_MODEL_DIR, WEIGHTS_FILENAME)
-    net.load_state_dict(torch.load(PRETRAIED_WEIGHTS), strict=True)
-    logger.info(f'Use pretrained model: {PRETRAIED_WEIGHTS}')
+    # PRETRAIED_WEIGHTS = osp.join(PRETRAINED_MODEL_DIR, WEIGHTS_FILENAME)
+    # net.load_state_dict(torch.load(PRETRAIED_WEIGHTS), strict=True)
+    # logger.info(f'Use pretrained model: {PRETRAIED_WEIGHTS}')
 
     opt = Adam(net.parameters(), lr=LR, weight_decay=WEIGHT_DECAY, betas=(BETA1, BETA2))
     schedule_lr = StepLR(opt, step_size=STEP_SIZE, gamma=GAMMA)
@@ -80,7 +80,7 @@ if __name__ == "__main__":
     cnn_utils.save_model(net, save_dir, 'net.txt')
 
     # Steps per epoch for training and evaluation set
-    H = {"train_loss": []}
+    H = {'train_loss': [], 'acc': []}
     logger.info('Save directory: ' + save_dir)
     logger.info(f'Searching patient: {PATIENT_NAME}')
 
@@ -106,7 +106,8 @@ if __name__ == "__main__":
 
     csv_file = open(osp.join(save_dir, 'acc.csv'), 'w')
     csv_writer = csv.writer(csv_file)
-    csv_writer.writerow(['Patient', 'Lambda', ' ', '1', ' ', '100', ' ', '200', ' ', '300', ' ', '400', ' ', '500'])
+    csv_writer.writerow(['Patient', 'Lambda', '1', '100', '200', '300', '400', '500'])
+    save_epochs = {0, 99, 199, 299, 399, 499}
 
     row = [PATIENT_NAME]
     row.append(LOSS_LAMBDA)
@@ -129,15 +130,15 @@ if __name__ == "__main__":
             logger.info(f'\t*Best train model and weights updated with loss: {best_train_loss:,.4f}')
 
         H['train_loss'].append(total_train_loss)
+        H['acc'].append(mean_acc)
 
         writer.add_scalars('loss', {'e_train_loss': total_train_loss}, e)
         writer.add_scalars('l123', {'l123/train_l1': l1_train, 'l123/train_l2': l2_train, 'l123/train_l3': l3_train}, e)
         writer.add_scalar('lr', schedule_lr.get_last_lr()[0], e)
         writer.add_scalars('acc', {'train': mean_acc}, e)
 
-        if e == 0 or e == 99 or e == 199 or e == 299 or e == 399 or e == 499:
+        if e in save_epochs:
             row.append(mean_acc)
-            row.append(' ')
         pbar.update(1)
 
     csv_writer.writerow(row)
@@ -152,6 +153,15 @@ if __name__ == "__main__":
     plt.ylabel('Loss')
     plt.legend(loc='lower left')
     plt.savefig(osp.join(save_dir, 'loss.png'))
+
+    plt.figure()
+    plt.plot(H['acc'], label='acc')
+    plt.title('Acc on Dataset')
+    plt.xlabel('Epoch #')
+    plt.ylabel('Acc')
+    plt.legend(loc='lower left')
+    plt.savefig(osp.join(save_dir, 'acc.png'))
+
     torch.save(net, osp.join(save_dir, 'model.pth'))
     torch.save(net.state_dict(), osp.join(save_dir, 'weights.pth'))
     pbar.close()

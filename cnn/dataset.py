@@ -9,6 +9,25 @@ import time
 import torch
 from enum import Enum
 import yaml
+import re
+
+
+def atof(text):
+    try:
+        retval = float(text)
+    except ValueError:
+        retval = text
+    return retval
+
+
+def natural_keys(text):
+    '''
+    alist.sort(key=natural_keys) sorts in human order
+    http://nedbatchelder.com/blog/200712/human_sorting.html
+    (See Toothy's implementation in the comments)
+    float regex comes from https://stackoverflow.com/a/12643073/190597
+    '''
+    return [atof(c) for c in re.split(r'[+-]?([0-9]+(?:[.][0-9]*)?|[.][0-9]+)', text)]
 
 
 class DatasetMode(Enum):
@@ -133,11 +152,19 @@ class SingleVentricleDataset(Dataset):
         fwd_flows = []
         bwd_flows = []
         fwd_patient_dir = osp.join(self.fwdof_dir, patient)
-        fwd_time_dirs = sorted(os.listdir(fwd_patient_dir))
+        fwd_time_dirs = sorted(os.listdir(fwd_patient_dir), key=natural_keys)
         bwd_patient_dir = osp.join(self.bwdof_dir, patient)
         # bwd_time_dirs = sorted(os.listdir(bwd_patient_dir))
-        bwd_time_dirs = sorted(os.listdir(bwd_patient_dir), reverse=True)
+        bwd_time_dirs = sorted(os.listdir(bwd_patient_dir), key=natural_keys, reverse=True)
         assert len(fwd_time_dirs) == len(bwd_time_dirs)
+
+        # print(patient)
+        # for d in fwd_time_dirs:
+        #     print(d)
+        # print('=======================')
+        # for d in bwd_time_dirs:
+        #     print(d)
+        # print('\n\n')
 
         for fwd_dir, bwd_dir in zip(fwd_time_dirs, bwd_time_dirs):
             # Read forward optical flow

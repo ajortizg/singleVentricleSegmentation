@@ -7,6 +7,7 @@ import os.path as osp
 from loss import loss_func_three
 import csv
 from torch.utils.data import DataLoader
+import nibabel as nib
 import metrics
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
@@ -17,18 +18,14 @@ from cnn.dataset import SingleVentricleDataset, DatasetMode
 from cnn import cnn_utils
 
 
-# def compute_dc(x: torch.Tensor, y: torch.Tensor):
-#     transf = T.ComposeUnary([T.ToArray(), T.Round(th=0.5)])
-#     x = transf(x)
-#     y = transf(y)
-#     return metrics.dc(x, y)
+def save_nifty(mask, save_dir, filename):
+    mask = mask.squeeze()
+    mask = torch.swapaxes(mask, 0, 2)           # xyz format
+    mask = torch.where(mask > 0.5, 1.0, 0.0)    # binarize
 
-
-# def compute_hd(x: torch.Tensor, y: torch.Tensor):
-#     transf = T.ComposeUnary([T.ToArray(), T.Round(th=0.5)])
-#     x = transf(x)
-#     y = transf(y)
-#     return 1.0
+    mt_nii = nib.Nifti1Image(T.ToArray()(mask), affine=None, header=None)
+    outputFile = osp.sep.join([save_dir, filename])
+    nib.save(mt_nii, outputFile)
 
 
 if __name__ == "__main__":
@@ -37,7 +34,8 @@ if __name__ == "__main__":
 
     TRAINED_MODEL_DIR = config_eval.get('DATA', 'TRAINED_MODEL_DIR')
     MODEL_NAME = config_eval.get('DATA', 'MODEL_NAME')
-    VERBOSE = config_eval.getboolean('DEBUG', 'VERBOSE')
+    SAVE_IMGS = config_eval.getboolean('DEBUG', 'SAVE_IMGS')
+    SAVE_NIFTI = config_eval.getboolean('DEBUG', 'SAVE_NIFTI')
     DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
     NUM_WORKERS = config_eval.getint('PARAMETERS', 'NUM_WORKERS')
 
@@ -147,37 +145,43 @@ if __name__ == "__main__":
             row.append('{:.3f}'.format(metrics.dice(mtts_cnn_list[-1], mts_cnn_list[-1])))
             csv_writer.writerow(row)
 
-            if VERBOSE:
+            if SAVE_IMGS or SAVE_NIFTI:
                 patient_dir = plots.createSubDirectory(save_dir, pnames[0])
                 fwd_dir = plots.createSubDirectory(patient_dir, 'fwd')
                 bwd_dir = plots.createSubDirectory(patient_dir, 'bwd')
 
                 for t in range(len(mts_cnn_list)):
-                    img3d = img_posp(imgs4d[batch_indices, :, :, :, :, list_times_fwd[t][batch_indices]].squeeze())
-                    mtt_cnn = mask_posp(mtts_cnn_list[t].squeeze())
-                    mtt_iw = mask_posp(mtts_iw_list[t].squeeze())
-                    mt_cnn = mask_posp(mts_cnn_list[t].squeeze())
-                    mt_iw = mask_posp(mts_iw_list[t].squeeze())
+                    if SAVE_IMGS:
+                        img3d = img_posp(imgs4d[batch_indices, :, :, :, :, list_times_fwd[t][batch_indices]].squeeze())
+                        mtt_cnn = mask_posp(mtts_cnn_list[t].squeeze())
+                        mtt_iw = mask_posp(mtts_iw_list[t].squeeze())
+                        mt_cnn = mask_posp(mts_cnn_list[t].squeeze())
+                        mt_iw = mask_posp(mts_iw_list[t].squeeze())
 
-                    if t == 0:
-                        plots.save_img_masks(img3d, [m0_mk_posp(m0s.squeeze()), mtt_cnn, mtt_iw], 'im_m0_m0tt', fwd_dir, th=0.5,
-                                             alphas=[0.3, 1.0, 1.0], colors=[[1, 0.7, 0], [0, 1, 0], [0, 0, 1]])
-                        # plots.save_img_masks_slices(data_t, [m0_mk_posp(m0), mtt_cnn, mtt_iw], fwd_dir, 'im_m0_m0tt_slices', th=0.5,
-                        #                             alphas=[0.3, 1.0, 1.0], colors=[[1, 0.7, 0], [0, 1, 0], [0, 0, 1]])
-                    elif t == len(mts_cnn_list) - 1:
-                        plots.save_img_masks(img3d, [m0_mk_posp(mks.squeeze()), mt_cnn, mt_iw], 'mk_mkt', bwd_dir, th=0.5,
-                                             alphas=[0.3, 1.0, 1.0], colors=[[1, 0.7, 0], [0, 1, 0], [0, 0, 1]])
-                        # plots.save_img_masks_slices(data_t, [m0_mk_posp(mk), mt_cnn, mt_iw], bwd_dir, 'mk_mkt_slices', th=0.5,
-                        #                             alphas=[0.3, 1.0, 1.0], colors=[[1, 0.7, 0], [0, 1, 0], [0, 0, 1]])
+                        if t == 0:
+                            plots.save_img_masks(img3d, [m0_mk_posp(m0s.squeeze()), mtt_cnn, mtt_iw], 'im_m0_m0tt', fwd_dir, th=0.5,
+                                                 alphas=[0.3, 1.0, 1.0], colors=[[1, 0.7, 0], [0, 1, 0], [0, 0, 1]])
+                            # plots.save_img_masks_slices(data_t, [m0_mk_posp(m0), mtt_cnn, mtt_iw], fwd_dir, 'im_m0_m0tt_slices', th=0.5,
+                            #                             alphas=[0.3, 1.0, 1.0], colors=[[1, 0.7, 0], [0, 1, 0], [0, 0, 1]])
+                        elif t == len(mts_cnn_list) - 1:
+                            plots.save_img_masks(img3d, [m0_mk_posp(mks.squeeze()), mt_cnn, mt_iw], 'mk_mkt', bwd_dir, th=0.5,
+                                                 alphas=[0.3, 1.0, 1.0], colors=[[1, 0.7, 0], [0, 1, 0], [0, 0, 1]])
+                            # plots.save_img_masks_slices(data_t, [m0_mk_posp(mk), mt_cnn, mt_iw], bwd_dir, 'mk_mkt_slices', th=0.5,
+                            #                             alphas=[0.3, 1.0, 1.0], colors=[[1, 0.7, 0], [0, 1, 0], [0, 0, 1]])
 
-                    plots.save_img_masks(img3d, [mt_cnn, mt_iw], f'im_t_{list_times_fwd[t][batch_indices].item()}', fwd_dir, th=0.5,
-                                         alphas=[1.0, 1.0], colors=[[0, 1, 0], [0, 0, 1]])
-                    # plots.save_img_masks_slices(data_t, [mt_cnn, mt_iw], fwd_dir, f'im_t_{init_ts + i}', th=0.5,
-                    #                             alphas=[1.0, 1.0], colors=[[0, 1, 0], [0, 0, 1]])
+                        plots.save_img_masks(img3d, [mt_cnn, mt_iw], f'im_t_{list_times_fwd[t][batch_indices].item()}', fwd_dir, th=0.5,
+                                             alphas=[1.0, 1.0], colors=[[0, 1, 0], [0, 0, 1]])
+                        # plots.save_img_masks_slices(data_t, [mt_cnn, mt_iw], fwd_dir, f'im_t_{init_ts + i}', th=0.5,
+                        #                             alphas=[1.0, 1.0], colors=[[0, 1, 0], [0, 0, 1]])
 
-                    plots.save_img_masks(img3d, [mtt_cnn, mtt_iw], f'im_tt_{list_times_fwd[t][batch_indices].item()}', bwd_dir, th=0.5,
-                                         alphas=[1.0, 1.0], colors=[[0, 1, 0], [0, 0, 1]])
-                    # plots.save_img_masks_slices(data_t, [mtt_cnn, mtt_iw], bwd_dir, f'im_tt_{init_ts + i}', th=0.5,
-                    #                             alphas=[1.0, 1.0], colors=[[0, 1, 0], [0, 0, 1]])
+                        plots.save_img_masks(img3d, [mtt_cnn, mtt_iw], f'im_tt_{list_times_fwd[t][batch_indices].item()}', bwd_dir, th=0.5,
+                                             alphas=[1.0, 1.0], colors=[[0, 1, 0], [0, 0, 1]])
+                        # plots.save_img_masks_slices(data_t, [mtt_cnn, mtt_iw], bwd_dir, f'im_tt_{init_ts + i}', th=0.5,
+                        #                             alphas=[1.0, 1.0], colors=[[0, 1, 0], [0, 0, 1]])
+
+                    if SAVE_NIFTI:
+                        save_nifty(mts_cnn_list[t], fwd_dir, f'mt_{list_times_fwd[t][batch_indices].item()}.nii')
+                        save_nifty(mtts_cnn_list[t], bwd_dir, f'mtt_{list_times_fwd[t][batch_indices].item()}.nii')
+
             pbar.update(1)
     csv_file.close()

@@ -12,18 +12,18 @@ from cnn.dataset import SingleVentricleDataset, DatasetMode
 import utils.transforms as T
 from cnn.loss import loss_func_three
 from cnn.warp import Warp
-from cnn.metrics import dc
+from cnn import metrics
 
 
-def compute_dc(x: torch.Tensor, y: torch.Tensor):
-    transf = T.ComposeUnary([T.ToArray(), T.Round(th=0.5)])
-    x = transf(x)
-    y = transf(y)
-    return dc(x, y)
+# def compute_dc(x: torch.Tensor, y: torch.Tensor):
+#     transf = T.ComposeUnary([T.ToArray(), T.Round(th=0.5)])
+#     x = transf(x)
+#     y = transf(y)
+#     return dc(x, y)
 
 
 if __name__ == "__main__":
-    SAVE_IMAGES = True
+    SAVE_IMAGES = False
 
     plots.printConsoleOutput_Header('Identity warping')
 
@@ -90,8 +90,8 @@ if __name__ == "__main__":
             row.append('{:.2f}'.format(l2.item()))
             row.append('{:.2f}'.format(l3.item()))
             row.append('{:.2f}'.format(loss.item()))
-            row.append('{:.3f}'.format(compute_dc(m0, mtts[0])))
-            row.append('{:.3f}'.format(compute_dc(mk, mts[-1])))
+            row.append('{:.3f}'.format(metrics.dice(mts[0].unsqueeze(0).unsqueeze(0), mtts[0].unsqueeze(0).unsqueeze(0))))
+            row.append('{:.3f}'.format(metrics.dice(mtts[-1].unsqueeze(0).unsqueeze(0), mts[-1].unsqueeze(0).unsqueeze(0))))
             writer.writerow(row)
 
             if SAVE_IMAGES:
