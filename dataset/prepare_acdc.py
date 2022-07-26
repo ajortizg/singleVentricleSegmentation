@@ -13,23 +13,36 @@ from utils import plots
 
 
 class ACDCPatient:
-    def __init__(self, name, img4d_nii, mask_systole_nii, mask_diastole_nii, tsystole, tdiastole, group, height, nbframe, weight):
+    def __init__(self, name, img4d_nii, mask_systole_nii, mask_diastole_nii, tsystole, tdiastole):
         self.name = name
         self.img4d_nii = img4d_nii
         self.mask_systole_nii = mask_systole_nii
         self.mask_diastole_nii = mask_diastole_nii
         self.tsystole = tsystole
         self.tdiastole = tdiastole
-        self.group = group
-        self.height = height
-        self.nbframe = nbframe
-        self.weight = weight
+
+    def save(self, save4d_dir, save_segmentations_dir):
+        # Save 4d data
+        outputFile = osp.sep.join([save4d_dir, self.name + ".nii.gz"])
+        nib.save(self.img4d_nii, outputFile)
+
+        # Save masks
+        save_patient_seg_dir = plots.createSubDirectory(save_segmentations_dir, self.name)
+        outputFile = osp.sep.join([save_patient_seg_dir, self.name + "_Systole_Labelmap.nii"])
+        nib.save(self.mask_systole_nii, outputFile)
+        outputFile = osp.sep.join([save_patient_seg_dir, self.name + "_Diastole_Labelmap.nii"])
+        nib.save(self.mask_diastole_nii, outputFile)
+
+        row = {'Name': self.name, 'Systole': self.tsystole, 'Diastole': self.tdiastole}
+        df_patient = pd.DataFrame(row, index=[0])
+        return df_patient
 
 
 class ACDCDataset:
-    def __init__(self, base_path, mode):
+    def __init__(self, base_path, label1, label2):
+        self.label1 = label1
+        self.label2 = label2
         self.base_path = base_path
-        self.mode = mode
         self.patient_dirs = sorted(os.listdir(base_path))
 
     def __getitem__(self, idx):
@@ -40,66 +53,45 @@ class ACDCDataset:
         with open(osp.join(patient_dir, 'Info.cfg'), 'r') as f:
             tdiastole = int(f.readline().replace(' ', '').replace('\n', '').split(':')[1])
             tsystole = int(f.readline().replace(' ', '').replace('\n', '').split(':')[1])
-            if self.mode == 'train':
-                group = f.readline().replace(' ', '').replace('\n', '').split(':')[1]
-            else:
-                group = ''
-            height = f.readline().replace(' ', '').replace('\n', '').split(':')[1]
-            nbframe = f.readline().replace(' ', '').replace('\n', '').split(':')[1]
-            weight = f.readline().replace(' ', '').replace('\n', '').split(':')[1]
-        if self.mode == 'train':
-            mask_diastole_nii = nib.load(osp.sep.join([self.base_path, name, name + '_frame%02d_gt.nii.gz' % (tdiastole)]))
-            mask_systole_nii = nib.load(osp.sep.join([self.base_path, name, name + '_frame%02d_gt.nii.gz' % (tsystole)]))
-        else:
-            mask_diastole_nii = nib.load(osp.sep.join([self.base_path, name, name + '_frame%02d.nii.gz' % (tdiastole)]))
-            mask_systole_nii = nib.load(osp.sep.join([self.base_path, name, name + '_frame%02d.nii.gz' % (tsystole)]))
 
-        patient = ACDCPatient(name, img4d_nii, mask_systole_nii, mask_diastole_nii, tsystole, tdiastole, group, height, nbframe, weight)
+        mask_diastole_nii = nib.load(osp.sep.join([self.base_path, name, name + '_frame%02d_gt.nii.gz' % (tdiastole)]))
+        mask_systole_nii = nib.load(osp.sep.join([self.base_path, name, name + '_frame%02d_gt.nii.gz' % (tsystole)]))
+
+        mask_diastole_nii = self.extract_label(mask_diastole_nii)
+        mask_systole_nii = self.extract_label(mask_systole_nii)
+
+        patient = ACDCPatient(name, img4d_nii, mask_systole_nii, mask_diastole_nii, tsystole, tdiastole)
         return patient
+
+    def extract_label(self, mask_nii):
+        mask_data = mask_nii.get_fdata()
+        mask_data_label = np.where(np.logical_or(mask_data == self.label1, mask_data == self.label2), 1.0, 0.0)
+        mask_nii = nib.Nifti1Image(mask_data_label, affine=mask_nii.affine, header=mask_nii.header)
+        return mask_nii
 
     def __len__(self):
         return len(self.patient_dirs)
 
 
-def save_data(patient, saveDir4D, saveDirSegmentations):
-    # Save 4d data
-    img4d_nii = nib.Nifti1Image(patient.img4d_nii.get_fdata(), affine=patient.img4d_nii.affine, header=patient.img4d_nii.header)
-    outputFile = osp.sep.join([saveDir4D, patient.name + ".nii.gz"])
-    nib.save(img4d_nii, outputFile)
-
-    save_patient_seg_dir = plots.createSubDirectory(saveDirSegmentations, patient.name)
-
-    # Save systole mask
-    mask_systole_nii = nib.Nifti1Image(patient.mask_systole_nii.get_fdata(),
-                                       affine=patient.mask_systole_nii.affine, header=patient.mask_systole_nii.header)
-    outputFile = osp.sep.join([save_patient_seg_dir, patient.name + "_Systole_Labelmap.nii"])
-    nib.save(mask_systole_nii, outputFile)
-
-    # Save diastole mask
-    mask_diastole_nii = nib.Nifti1Image(patient.mask_diastole_nii.get_fdata(),
-                                        affine=patient.mask_diastole_nii.affine, header=patient.mask_diastole_nii.header)
-    outputFile = osp.sep.join([save_patient_seg_dir, patient.name + "_Diastole_Labelmap.nii"])
-    nib.save(mask_diastole_nii, outputFile)
-
-    row = {'Name': patient.name, 'Systole': patient.tsystole, 'Diastole': patient.tdiastole}
-    df_patient = pd.DataFrame(row, index=[0])
-    return df_patient
-
-
 if __name__ == "__main__":
-    save_dir = 'results/ACDCData'
+    labels = {'background': 0,
+              'right_ventricle': 1,
+              'myocardium': 2,
+              'left_ventricle': 3}
+
+    save_dir = plots.createSaveDirectory('results', 'ACDCData')
     save4d_dir = plots.createSubDirectory(save_dir, 'NIFTI_4D_Datasets')
     save_segmentations_dir = plots.createSubDirectory(save_dir, 'NIFTI_Single_Ventricle_Segmentations')
     df_dset = pd.DataFrame(columns=['Name', 'Systole', 'Diastole'])
 
-    train_ds = ACDCDataset('data/acdc/training/training', mode='train')
+    train_ds = ACDCDataset('data/preprocessing/acdc/training/training', label1=labels['left_ventricle'], label2=labels['right_ventricle'])
     # test_ds = ACDCDataset('data/ACDC/testing/testing', mode='test')
     dsets = [train_ds]
     pbar = tqdm(total=len(train_ds))
     for ds in dsets:
         for i in range(len(ds)):
             patient = ds[i]
-            df = save_data(patient, save4d_dir, save_segmentations_dir)
+            df = patient.save(save4d_dir, save_segmentations_dir)
             df_dset = pd.concat([df_dset, df])
             pbar.update(1)
 

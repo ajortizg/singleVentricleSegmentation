@@ -98,7 +98,6 @@ if __name__ == "__main__":
     use_th = config.getboolean('PROLONGATION', 'USE_TH')
     bin_th = config.getfloat('PROLONGATION', 'BIN_TH')
     time_pad = config.getint('PROLONGATION', 'PAD_TIME')
-
     time_padder = T.PadTime(maxt=time_pad)
 
     # create save directory
@@ -121,6 +120,7 @@ if __name__ == "__main__":
     yprolongfac = np.zeros(len(dataSet))
     zprolongfac = np.zeros(len(dataSet))
     timeprolongfac = np.zeros(len(dataSet))
+    original_NT = np.zeros(len(dataSet))
 
     # iterate over all patients
     pbar = tqdm(total=len(dataSet))
@@ -161,6 +161,8 @@ if __name__ == "__main__":
         prolongation_systole = prolongationOp.forward(mask_systole)
         prolongation_4d = prolongationOp.forwardVectorField(data_4d.contiguous())
 
+        original_NT[index] = prolongation_4d.shape[3]
+        
         # Time padding
         prolongation_4d = time_padder(prolongation_4d)
 
@@ -196,5 +198,6 @@ if __name__ == "__main__":
     output_df['yprolongfac'] = yprolongfac
     output_df['zprolongfac'] = zprolongfac
     output_df['timeprolongfac'] = timeprolongfac
+    output_df['original_NT'] = original_NT
     output_df_file = os.path.sep.join([saveDir, dataSet.segmentations_filename])
     output_df.to_excel(output_df_file, index=False)

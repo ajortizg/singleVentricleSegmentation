@@ -52,8 +52,7 @@ if __name__ == "__main__":
     # Create validation dataset and loader
     img4d_transforms = T.ComposeUnary([T.ToTensor()])
     mask_transforms = T.ComposeUnary([T.Round(th=0.5), T.ToTensor()])
-    train_ds = ds.SingleVentricleDataset(config_train, ds.DatasetMode.VAL, load_flow=True,
-                                         img4d_transforms=img4d_transforms, mask_transforms=mask_transforms)
+    train_ds = ds.SingleVentricleDataset(config_train, ds.DatasetMode.VAL, ds.LoadFlowMode.TRAIN_OF, img4d_transforms, mask_transforms)
     train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS, collate_fn=cnn_utils.collate_fn_2)
 
     save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'FT')
@@ -63,9 +62,9 @@ if __name__ == "__main__":
     net = UNet3D(config_train, logger).to(DEVICE)
     net = torch.nn.DataParallel(net, device_ids=np.arange(NUM_GPUS).tolist())
 
-    # PRETRAIED_WEIGHTS = osp.join(PRETRAINED_MODEL_DIR, WEIGHTS_FILENAME)
-    # net.load_state_dict(torch.load(PRETRAIED_WEIGHTS), strict=True)
-    # logger.info(f'Use pretrained model: {PRETRAIED_WEIGHTS}')
+    PRETRAIED_WEIGHTS = osp.join(PRETRAINED_MODEL_DIR, WEIGHTS_FILENAME)
+    net.load_state_dict(torch.load(PRETRAIED_WEIGHTS), strict=True)
+    logger.info(f'Use pretrained model: {PRETRAIED_WEIGHTS}')
 
     opt = Adam(net.parameters(), lr=LR, weight_decay=WEIGHT_DECAY, betas=(BETA1, BETA2))
     schedule_lr = StepLR(opt, step_size=STEP_SIZE, gamma=GAMMA)

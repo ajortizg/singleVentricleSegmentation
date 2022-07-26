@@ -54,9 +54,12 @@ class Trainer:
             mks = mks.to(self.device)
             ff = ff.to(self.device)
             bf = bf.to(self.device)
+            offsets = offsets.to(torch.long)
+            BS = offsets.shape[0]
+            batch_indices = torch.arange(BS)
 
-            mts, mtts = self.time_popagation(imgs4d, m0s, mks, list_times_fwd, list_times_bwd, ff, bf)
-            train_loss, l1, l2, l3 = self.compute_loss(mts, mtts, offsets)
+            mts, mtts = self.time_popagation(imgs4d, m0s, mks, list_times_fwd, list_times_bwd, ff, bf, batch_indices)
+            train_loss, l1, l2, l3 = self.compute_loss(mts, mtts, offsets, batch_indices)
 
             opt.zero_grad()
             train_loss.backward()
@@ -67,7 +70,7 @@ class Trainer:
                 total_l1_loss += l1
                 total_l2_loss += l2
                 total_l3_loss += l3
-                total_mean_acc += self.compute_dice_acc(mts, mtts).item()
+                total_mean_acc += self.compute_dice_acc(mts, mtts, offsets, batch_indices).item()
         return (total_train_loss, total_l1_loss, total_l2_loss, total_l3_loss, total_mean_acc)
 
     def val_epoch(self, val_loader):
@@ -86,47 +89,66 @@ class Trainer:
                 mks = mks.to(self.device)
                 ff = ff.to(self.device)
                 bf = bf.to(self.device)
+                offsets = offsets.to(torch.long)
+                BS = offsets.shape[0]
+                batch_indices = torch.arange(BS)
 
-                mts, mtts = self.time_popagation(imgs4d, m0s, mks, list_times_fwd, list_times_bwd, ff, bf)
-                val_loss, l1, l2, l3 = self.compute_loss(mts, mtts, offsets)
+                mts, mtts = self.time_popagation(imgs4d, m0s, mks, list_times_fwd, list_times_bwd, ff, bf, batch_indices)
+                val_loss, l1, l2, l3 = self.compute_loss(mts, mtts, offsets, batch_indices)
 
                 total_val_loss += val_loss.item()
                 total_l1_loss += l1
                 total_l2_loss += l2
                 total_l3_loss += l3
-                total_mean_acc += self.compute_dice_acc(mts, mtts).item()
+                total_mean_acc += self.compute_dice_acc(mts, mtts, offsets, batch_indices).item()
         return (total_val_loss, total_l1_loss, total_l2_loss, total_l3_loss, total_mean_acc)
 
     def train_patient(self, imgs4d, m0s, mks, list_times_fwd, list_times_bwd, ff, bf, offsets, opt):
+        offsets = offsets.to(torch.long)
+        BS = offsets.shape[0]
+        batch_indices = torch.arange(BS)
+
         self.net.train()
-        mts, mtts = self.time_popagation(imgs4d, m0s, mks, list_times_fwd, list_times_bwd, ff, bf)
-        train_loss, l1, l2, l3 = self.compute_loss(mts, mtts, offsets)
+        mts, mtts = self.time_popagation(imgs4d, m0s, mks, list_times_fwd, list_times_bwd, ff, bf, batch_indices)
+        train_loss, l1, l2, l3 = self.compute_loss(mts, mtts, offsets, batch_indices)
 
         opt.zero_grad()
         train_loss.backward()
         opt.step()
 
         with torch.no_grad():
-            mean_acc = self.compute_dice_acc(mts, mtts).item()
+            mean_acc = self.compute_dice_acc(mts, mtts, offsets, batch_indices).item()
         return (train_loss.item(), l1, l2, l3, mean_acc)
 
     def val_patient(self, imgs4d, m0s, mks, list_times_fwd, list_times_bwd, ff, bf, offsets):
+        offsets = offsets.to(torch.long)
+        BS = offsets.shape[0]
+        batch_indices = torch.arange(BS)
         self.net.eval()
+        
         with torch.no_grad():
-            mts, mtts = self.time_popagation(imgs4d, m0s, mks, list_times_fwd, list_times_bwd, ff, bf)
-            val_loss, l1, l2, l3 = self.compute_loss(mts, mtts, offsets)
-            mean_acc = self.compute_dice_acc(mts, mtts).item()
+            mts, mtts = self.time_popagation(imgs4d, m0s, mks, list_times_fwd, list_times_bwd, ff, bf, batch_indices)
+            val_loss, l1, l2, l3 = self.compute_loss(mts, mtts, offsets, batch_indices)
+            mean_acc = self.compute_dice_acc(mts, mtts, offsets, batch_indices).item()
         return (val_loss.item(), l1, l2, l3, mean_acc)
 
-    def compute_dice_acc(self, mts, mtts):
-        acc0 = metrics.dice(mts[0], mtts[0])
-        acck = metrics.dice(mtts[-1], mts[-1])
-        return 0.5 * (acc0 + acck)
+    def compute_dice_acc(self, mts, mtts, offsets, batch_indices):
+        m0 = mts[0, batch_indices]
+        m0tt = mtts[offsets[batch_indices], batch_indices]
+        m0tt = torch.where(m0tt > 0.5, 1.0, 0.0)
+        
+        mk = mtts[-1]
+        mkt = mts[-offsets[batch_indices] - 1, batch_indices]
+        mkt = torch.where(mkt > 0.5, 1.0, 0.0)
 
-    def time_popagation(self, imgs4d, m0s, mks, list_times_fwd, list_times_bwd, ff, bf):
+        acc0 = metrics.dice(m0tt, m0)
+        acck = metrics.dice(mkt, mk)
+        dc = 0.5 * (acc0 + acck)
+        return dc
+
+    def time_popagation(self, imgs4d, m0s, mks, list_times_fwd, list_times_bwd, ff, bf, batch_indices):
         BS, timesteps, NZ, NY, NX, _ = ff.shape
         dtype = m0s.dtype
-        batch_indices = torch.arange(BS)
         warp = WarpCNN(self.config, NZ, NY, NX)
         mts = torch.empty(size=(timesteps + 1, BS, 1, NZ, NY, NX), dtype=dtype, device=self.device)
         mts[0] = m0s
@@ -145,10 +167,8 @@ class Trainer:
             mtts[timesteps - t - 1] = self.net(x)
         return (mts, mtts)
 
-    def compute_loss(self, mts: torch.Tensor, mtts: torch.Tensor, offsets: torch.Tensor):
+    def compute_loss(self, mts: torch.Tensor, mtts: torch.Tensor, offsets: torch.Tensor, batch_indices: torch.Tensor):
         BS = mts.shape[1]
-        batch_indices = torch.arange(BS)
-        offsets = offsets.to(torch.long)
 
         # compute l1
         m0 = mts[0, batch_indices]

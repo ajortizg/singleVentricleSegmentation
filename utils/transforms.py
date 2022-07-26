@@ -341,6 +341,21 @@ class IntensityScaling:
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}()"
 
+class Clip:
+    def __init__(self, p, interval: tuple):
+        self.p = p
+        self.interval = interval
+
+    def __call__(self, img4d: np.array, ms: np.array, md: np.array):
+        if np.random.rand() < self.p:
+            img4d_t = np.clip(img4d, a_min=self.interval[0], a_max=self.interval[1])
+            return (img4d_t, ms, md)
+        else:
+            return (img4d, ms, md)
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}()"
+
 
 class Round:
     def __init__(self, th=0.5):

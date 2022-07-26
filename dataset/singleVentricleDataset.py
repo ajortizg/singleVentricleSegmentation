@@ -15,6 +15,7 @@ class SingleVentriclePatient:
         # else:
         #     print("index wrong")
         if idx is not None and df_row is not None and volumes_path is not None and segmentations_path is not None:
+            self.df_row = df_row
             self.name = df_row.loc[idx, "Name"]
             self.tDiastole = df_row.loc[idx, "Diastole"]
             self.tSystole = df_row.loc[idx, "Systole"]
@@ -44,6 +45,7 @@ class SingleVentriclePatient:
             self.nii_mask_systole_xyz = self.nii_mask_systole_load.get_fdata()
             self.nii_mask_systole = np.swapaxes(self.nii_mask_systole_xyz, 0, 2)
         else:
+            self.df_row = None
             self.name = self.tDiastole = self.tSystole = None
             self.nii_xyzt = self.nii_data_xyzt = self.nii_header_xyzt = self.nii_data_zyxt = None
             self.NX = self.NY = self.NZ = self.NT = None

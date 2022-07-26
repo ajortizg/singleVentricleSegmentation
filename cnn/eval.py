@@ -14,7 +14,7 @@ ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 from utils import plots
 import utils.transforms as T
-from cnn.dataset import SingleVentricleDataset, DatasetMode
+from cnn.dataset import SingleVentricleDataset, DatasetMode, LoadFlowMode
 from cnn import cnn_utils
 
 
@@ -59,9 +59,9 @@ if __name__ == "__main__":
     mask_transf = T.ComposeUnary([T.Round(th=0.5), T.ToTensor()])
 
     if DATASET == 'train':
-        ds = SingleVentricleDataset(config_train, DatasetMode.TRAIN, load_flow=True, img4d_transforms=data_transf, mask_transforms=mask_transf)
+        ds = SingleVentricleDataset(config_train, DatasetMode.TRAIN, LoadFlowMode.PREDICT_OF, data_transf, mask_transf)
     else:
-        ds = SingleVentricleDataset(config_train, DatasetMode.VAL, load_flow=True, img4d_transforms=data_transf, mask_transforms=mask_transf)
+        ds = SingleVentricleDataset(config_train, DatasetMode.VAL, LoadFlowMode.PREDICT_OF, data_transf, mask_transf)
     loader = DataLoader(ds, batch_size=1, shuffle=False, num_workers=NUM_WORKERS, collate_fn=cnn_utils.collate_fn_2)
 
     save_dir = plots.createSaveDirectory(config_eval.get('DATA', 'OUTPUT_PATH'), 'EVAL')
@@ -97,10 +97,8 @@ if __name__ == "__main__":
             mks = mks.to(DEVICE)
             ff = ff.to(DEVICE)
             bf = bf.to(DEVICE)
-
             BS, CH, NZ, NY, NX, NT = imgs4d.shape
             warp = WarpCNN(config_train, NZ, NY, NX)
-
             mts_cnn_list = [m0s]
             mts_iw_list = [m0s]
             mtts_cnn_list = [mks]
@@ -141,8 +139,8 @@ if __name__ == "__main__":
             row.append('{:.2f}'.format(l2_iw.item()))
             row.append('{:.2f}'.format(l3_iw.item()))
             row.append('{:.2f}'.format(loss_iw.item()))
-            row.append('{:.3f}'.format(metrics.dice(mts_cnn_list[0], mtts_cnn_list[0])))
-            row.append('{:.3f}'.format(metrics.dice(mtts_cnn_list[-1], mts_cnn_list[-1])))
+            row.append('{:.3f}'.format(metrics.dice(mtts_cnn_list[0], mts_cnn_list[0])))
+            row.append('{:.3f}'.format(metrics.dice(mts_cnn_list[-1], mtts_cnn_list[-1])))
             csv_writer.writerow(row)
 
             if SAVE_IMGS or SAVE_NIFTI:

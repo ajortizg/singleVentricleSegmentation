@@ -34,9 +34,10 @@ def save_data(patient: SingleVentriclePatient, saveDir4D: str, saveDirSegmentati
     save_np_to_nifty(patient.nii_mask_diastole_xyz, saveDirPatient, patient.name + "_Diastole_Labelmap.nii", patient.hdr_mask_diastole)
     save_np_to_nifty(patient.nii_mask_systole_xyz, saveDirPatient, patient.name + "_Systole_Labelmap.nii", patient.hdr_mask_systole)
 
-    row = {'Name': patient.name, 'Systole': patient.tSystole, 'Diastole': patient.tDiastole}
-    df_patient = pd.DataFrame(row, index=[0])
-    return df_patient
+    # row = {'Name': patient.name, 'Systole': patient.tSystole, 'Diastole': patient.tDiastole}
+    # df_patient = pd.DataFrame(row, index=[0])
+    # return df_patient
+    return patient.df_row
 
 
 if __name__ == "__main__":
@@ -74,6 +75,10 @@ if __name__ == "__main__":
     scaling_prob = config.getfloat('DATA_AUGMENTATION', 'SCALING_PROB')
     scaling_range = tuple(map(float, config.get('DATA_AUGMENTATION', 'SCALING_RANGE').split(',')))
 
+    # Clip
+    clip_prob = config.getfloat('DATA_AUGMENTATION', 'CLIP_PROB')
+    clip_interval = tuple(map(float, config.get('DATA_AUGMENTATION', 'CLIP_INTERVAL').split(',')))
+
     transf_tern = T.ComposeTernary(
         [T.RandomFlipZ(p=flip_prob_z),
          T.RandomFlipY(p=flip_prob_y),
@@ -82,7 +87,8 @@ if __name__ == "__main__":
          T.ElasticDeformation(p=ed_prob, sigma_range=(ed_sigma_min, ed_sigma_max),
                               points=ed_grid, boundaryMode=ed_bdryMode, usePrefilter=ed_usePrefilter),
          T.AdditiveGaussianNoise(p=noise_prob, mu=noise_mu, sigma=noise_sigma),
-         T.IntensityScaling(p=scaling_prob, scale_range=scaling_range)])
+         T.IntensityScaling(p=scaling_prob, scale_range=scaling_range),
+         T.Clip(p=clip_prob, interval=clip_interval)])
 
     train_ds = SingleVentricleDataset(config, mode='train')
     val_ds = SingleVentricleDataset(config, mode='val')
@@ -100,6 +106,7 @@ if __name__ == "__main__":
         f'\t* Elastic def prob: {ed_prob}, grid: {ed_grid}, sigma: {ed_sigma_min,ed_sigma_max}, boundary: {ed_bdryMode}, prefilter: {ed_usePrefilter}')
     logger.info(f'\t* Noise prob: {noise_prob}, mu: {noise_mu}, sigma: {noise_sigma}')
     logger.info(f'\t* Scaling prob: {scaling_prob}, range: {scaling_range}')
+    logger.info(f'\t* Clip prob: {clip_prob}, interval: {clip_interval}')
     logger.info("===========================================================")
     logger.info('\nsave directory: ' + saveDir)
 
@@ -118,8 +125,8 @@ if __name__ == "__main__":
     with open(conifg_output, 'w') as configfile:
         config.write(configfile)
 
-    df_train = pd.DataFrame(columns=['Name', 'Systole', 'Diastole'])
-    df_val = pd.DataFrame(columns=['Name', 'Systole', 'Diastole'])
+    df_train = pd.DataFrame()
+    df_val = pd.DataFrame()
     pbar = tqdm(total=len(train_ds) + (len(val_ds)))
     logger.info(f'Found {len(train_ds)} training patientes')
     logger.info(f'Found {len(val_ds)} validation patients')
@@ -144,6 +151,8 @@ if __name__ == "__main__":
             newPatient.name = patient.name + f'_A_{i}'
             newPatient.tSystole = patient.tSystole
             newPatient.tDiastole = patient.tDiastole
+            newPatient.df_row = patient.df_row
+            newPatient.df_row.loc[index, 'Name'] = newPatient.name
 
             # save new images with header
             newPatient.nii_data_xyzt = np.swapaxes(img4d_t, 0, 2)

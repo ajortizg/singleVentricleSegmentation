@@ -1,17 +1,13 @@
 import os.path as osp
 import os
 from enum import Enum
-
 from TVL1OF3D import *
 
-cnn_lib_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../cnn'))
-sys.path.append(cnn_lib_path)
-from dataset import SingleVentricleDataset, DatasetMode
-
-import plots
-import transforms as T
-#from utils import plots
-#import utils.transforms as T
+ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../'))
+sys.path.append(ROOT_DIR)
+from utils import plots
+import utils.transforms as T
+from cnn.dataset import SingleVentricleDataset, DatasetMode, LoadFlowMode
 
 
 class OpticalFlowMode(Enum):
@@ -21,31 +17,32 @@ class OpticalFlowMode(Enum):
 
 
 def compute_optical_flow(ds: SingleVentricleDataset, idx: int, mode: OpticalFlowMode, save_dir: str, device: str, config, logger):
-    (pname, data, _, _, init_ts, final_ts, _, _) = ds[idx]
+    (pname, data, _, _, _, _, _, _) = ds[idx]
     data = data.to(device)
-    NZ, NY, NX, NT = data.shape
+    NZ, NY, NX, _ = data.shape
+    original_NT = ds.get_original_NT(idx)
 
     patient_dir = plots.createSubDirectory(save_dir, pname)
-    logger.info(f'{idx} - {pname}')
+    logger.info(f'{idx} - {pname} ({data.shape}), {original_NT}')
 
     # initialization of optical flow and mask
     u = torch.zeros([NZ, NY, NX, 3]).float().to(device)
     p = torch.zeros([NZ, NY, NX, 3, 3]).float().to(device)
 
-    idxs = None
     if mode == OpticalFlowMode.FORWARD:
         # mask = m0.to(DEVICE)
-        idxs = torch.arange(init_ts, final_ts + 1, 1)
+        indices = torch.arange(0, original_NT + 1, 1)
+        indices[-1] = 0
     elif mode == OpticalFlowMode.BACKWARD:
         # mask = mk.to(DEVICE)
-        idxs = torch.arange(final_ts, init_ts - 1, -1)
+        indices = torch.arange(original_NT - 1, -2, -1)
+        indices[-1] = original_NT - 1
 
-    for i in range(len(idxs) - 1):
-        # t0, t1 = t + inc_t, t
-        t0 = idxs[i + 1].item()
-        t1 = idxs[i].item()
-        I0 = data[:, :, :, t0]
-        I1 = data[:, :, :, t1]
+    for i in range(len(indices) - 1):
+        t0 = indices[i + 1].item()
+        t1 = indices[i].item()
+        I0 = data[:, :, :, t0]  # tgt
+        I1 = data[:, :, :, t1]  # src
         # print(f'{t1}->{t0}')
         pbar.set_postfix_str(f'P: {pname}, ({t1}->{t0})')
         save_dir_timestep = plots.createSubDirectory(patient_dir, f'time{t1}')
@@ -84,10 +81,8 @@ if __name__ == "__main__":
         config.write(configfile)
 
     data_transf = T.ComposeUnary([T.ToTensor()])
-    # mask_transf = T.ComposeUnary([T.ToTensor()])
-
-    train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, load_flow=False, img4d_transforms=data_transf)
-    val_ds = SingleVentricleDataset(config, DatasetMode.VAL, load_flow=False, img4d_transforms=data_transf)
+    train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, LoadFlowMode.NO_LOAD_OF, data_transf)
+    val_ds = SingleVentricleDataset(config, DatasetMode.VAL, LoadFlowMode.NO_LOAD_OF, data_transf)
 
     compute_all_patients = config.get('DATA', 'COMPUTE_ALL_PATIENTS')
 

@@ -62,6 +62,7 @@ if __name__ == "__main__":
 
     for ds in [train_ds, val_ds]:
         for (pname, img4d, m0, mk, init_ts, final_ts, ff, bf) in ds:
+            print(pname)
             ff = ff.to(DEVICE)
             bf = bf.to(DEVICE)
             NZ, NY, NX, NT = img4d.shape

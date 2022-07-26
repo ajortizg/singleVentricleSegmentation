@@ -73,9 +73,7 @@ if __name__ == "__main__":
     # iterate over all patients
     pbar = tqdm(total=len(dataSet))
     for index in range(0, len(dataSet)):
-
         patient = dataSet[index]
-
         pbar.set_postfix_str(f'P: {patient.name}')
 
         # flip masks for diastole and systole

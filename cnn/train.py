@@ -48,10 +48,8 @@ if __name__ == "__main__":
     # Create train and validation datasets
     img4d_transforms = T.ComposeUnary([T.ToTensor()])
     mask_transforms = T.ComposeUnary([T.Round(th=0.5), T.ToTensor()])
-    train_ds = ds.SingleVentricleDataset(config, ds.DatasetMode.TRAIN, load_flow=True,
-                                         img4d_transforms=img4d_transforms, mask_transforms=mask_transforms)
-    val_ds = ds.SingleVentricleDataset(config, ds.DatasetMode.VAL, load_flow=True,
-                                       img4d_transforms=img4d_transforms, mask_transforms=mask_transforms)
+    train_ds = ds.SingleVentricleDataset(config, ds.DatasetMode.TRAIN, ds.LoadFlowMode.TRAIN_OF, img4d_transforms, mask_transforms)
+    val_ds = ds.SingleVentricleDataset(config, ds.DatasetMode.VAL, ds.LoadFlowMode.TRAIN_OF, img4d_transforms, mask_transforms)
 
     # Create data loaders
     train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=SHUFFLE, num_workers=NUM_WORKERS, collate_fn=cnn_utils.collate_fn_2)
@@ -95,8 +93,8 @@ if __name__ == "__main__":
         config.write(config_file)
 
     cnn_utils.save_model(net, save_dir, 'net.txt')
-    train_ds.save_patients(save_dir, 'train.txt')
-    val_ds.save_patients(save_dir, 'val.txt')
+    train_ds.save_patients(save_dir, 'train.xlsx')
+    val_ds.save_patients(save_dir, 'val.xlsx')
 
     # Steps per epoch for training and evaluation set
     train_steps = len(train_ds) / BATCH_SIZE

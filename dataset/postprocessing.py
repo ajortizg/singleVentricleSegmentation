@@ -7,6 +7,7 @@ from tqdm import tqdm
 import os
 import pandas as pd
 import re
+from scipy import ndimage
 import nrrd
 import numpy as np
 from singleVentricleDataset import SingleVentricleDataset
@@ -43,12 +44,11 @@ def natural_keys(text):
     '''
     return [atof(c) for c in re.split(r'[+-]?([0-9]+(?:[.][0-9]*)?|[.][0-9]+)', text)]
 
-def prolongation(mask_nii, row, idx):
+def prolongation(mask_data_xyz, row, idx):
     xprolongfac = row.loc[idx, 'xprolongfac']
     yprolongfac = row.loc[idx, 'yprolongfac']
     zprolongfac = row.loc[idx, 'zprolongfac']
 
-    mask_data_xyz = mask_nii.get_fdata() 
     mask_data_zyx = np.swapaxes(mask_data_xyz, 0, 2)
     new_z = mask_data_zyx.shape[0] / zprolongfac
     new_y = mask_data_zyx.shape[1] / yprolongfac
@@ -94,6 +94,11 @@ if __name__ == "__main__":
     FWD_DIR = config.get('PARAMETERS', 'FWD_DIR')
     BWD_DIR = config.get('PARAMETERS', 'BWD_DIR')
 
+    BINARY_CLOSING = config.getboolean('PARAMETERS', 'BINARY_CLOSING')
+    BC_KERNEL = config.getint('PARAMETERS','BC_KERNEL')
+    BINARY_OPENING = config.getboolean('PARAMETERS', 'BINARY_OPENING')
+    BO_KERNEL = config.getint('PARAMETERS','BO_KERNEL')
+
     save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), "postprocessing")
 
     orig_dataset = SingleVentricleDataset(config)
@@ -101,6 +106,7 @@ if __name__ == "__main__":
     patients_cnn_list = filter_dirs(os.listdir(CNN_OUTPUT_PATH), CNN_OUTPUT_PATH)
     prep_df = pd.read_excel(PREPROCESSED_SEGMETATIONS_FILE)
     pbar = tqdm(total=len(patients_cnn_list))
+
 
     for patient_path in patients_cnn_list:
         patient_name = patient_path.split(os.path.sep)[-1]
@@ -126,8 +132,17 @@ if __name__ == "__main__":
         for list_masks in list_masks_files:
             for mask_file in list_masks:
                 mask_nii = nib.load(mask_file)
-                mask_prol = prolongation(mask_nii, prep_row, idx)
+                mask_data = mask_nii.get_fdata()
+
+                if BINARY_CLOSING:
+                    mask_data = ndimage.binary_closing(mask_data, structure=np.ones((BC_KERNEL,BC_KERNEL,BC_KERNEL))).astype(int)
+                if BINARY_OPENING:
+                    mask_data = ndimage.binary_opening(mask_data, structure=np.ones((BO_KERNEL,BO_KERNEL,BO_KERNEL))).astype(int)
+                
+                # mask_data = ndimage.binary_fill_holes(mask_data).astype(int)
+                mask_prol = prolongation(mask_data, prep_row, idx)
                 mask_flip = flip(mask_prol, prep_row, idx)
+                # mask_bc = binary_closing(mask_flip)            
             
                 # NX,NY,NZ = mask_flip.shape
                 # diff_x = orig_size[0] - NX

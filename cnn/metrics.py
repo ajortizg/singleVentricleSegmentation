@@ -4,18 +4,44 @@ import torch
 eps = 1e-10
 
 
-def dice(y_true: torch.Tensor, y_pred: torch.Tensor, axis: list = [1, 2, 3, 4]):
+def dice(pred: torch.Tensor, target: torch.Tensor):
     """
     Dice coefficient
     y_true and y_pred are tensors with shape [BS, CH, NZ, NY, NX]
     Returns the mean along the batch dimension
     """
-    y_true = torch.where(y_true > 0.5, 1.0, 0.0)
-    y_pred = torch.where(y_pred > 0.5, 1.0, 0.0)
-    intersection = torch.sum(y_true * y_pred, dim=axis)
-    summation = torch.sum(y_true, dim=axis) + torch.sum(y_pred, dim=axis)
-    return torch.mean((2.0 * intersection + eps) / (summation + eps))
+    # # y_true = torch.where(y_true > 0.5, 1.0, 0.0)
+    # # y_pred = torch.where(y_pred > 0.5, 1.0, 0.0)
+    # intersection = torch.sum(y_true * y_pred, dim=axis)
+    # summation = torch.sum(y_true, dim=axis) + torch.sum(y_pred, dim=axis)
+    # return torch.mean((2.0 * intersection + eps) / (summation + eps))
 
+    smooth = 1.0
+    num = pred.size(0)
+    m1 = pred.view(num, -1)  # Flatten
+    m2 = target.view(num, -1)  # Flatten
+    intersection = (m1 * m2).sum()
+
+    return (2.0 * intersection + smooth) / (m1.sum() + m2.sum() + smooth)
+
+# def dice_2(y_true: torch.Tensor, y_pred: torch.Tensor, axis: list = [1, 2, 3, 4]):
+#     x = torch.where(y_true > 0.5, 1.0, 0.0)
+#     y = torch.where(y_pred > 0.5, 1.0, 0.0)
+
+#     x = torch.atleast_1d(x).to(torch.bool)
+#     y = torch.atleast_1d(y).to(torch.bool)
+
+#     intersection = torch.count_nonzero(x & y)
+
+#     size_i1 = torch.count_nonzero(x)
+#     size_i2 = torch.count_nonzero(y)
+
+#     try:
+#         dc = 2. * intersection / float(size_i1 + size_i2)
+#     except ZeroDivisionError:
+#         dc = 0.0
+
+#     return dc
 
 # def dc(x, y):
 #     r"""

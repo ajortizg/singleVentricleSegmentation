@@ -5,6 +5,7 @@ from tqdm import tqdm
 import os
 import pandas as pd
 import configparser
+import shutil
 import os.path as osp
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../../'))
@@ -13,29 +14,22 @@ from utils import plots
 from dataset.singleVentricleDataset import SingleVentricleDataset
 
 
-def save_np_to_nifty(file, saveDir, fileName, hdr_old):
-    # header
-    hdr = nib.nifti1.Nifti1Header()
-    hdr.set_data_shape(file.shape)
-    hdr.set_qform(hdr_old.get_qform())
-    hdr.set_sform(hdr_old.get_sform())
-    hdr.set_zooms(hdr_old.get_zooms())
-    # img
-    ni_img = nib.Nifti1Image(file, affine=None, header=hdr)
-    # save
+def save_nifty(file_nii, saveDir, fileName):
     outputFile = os.path.sep.join([saveDir, fileName])
-    nib.save(ni_img, outputFile)
+    nib.save(file_nii, outputFile)
 
 
 def save_data(patient, saveDir4D, saveDirSegmentations):
     saveDirPatient = plots.createSubDirectory(saveDirSegmentations, patient.name)
-    save_np_to_nifty(patient.nii_data_xyzt, saveDir4D, patient.name + ".nii.gz", patient.nii_header_xyzt)
-    save_np_to_nifty(patient.nii_mask_diastole_xyz, saveDirPatient, patient.name + "_Diastole_Labelmap.nii", patient.hdr_mask_diastole)
-    save_np_to_nifty(patient.nii_mask_systole_xyz, saveDirPatient, patient.name + "_Systole_Labelmap.nii", patient.hdr_mask_systole)
 
-    row = {'Name': patient.name, 'Systole': patient.tSystole, 'Diastole': patient.tDiastole}
-    df_patient = pd.DataFrame(row, index=[0])
-    return df_patient
+    save_nifty(patient.nii_xyzt, saveDir4D, patient.name + ".nii.gz")
+    save_nifty(patient.nii_mask_diastole_load, saveDirPatient, patient.name + "_Diastole_Labelmap.nii")
+    save_nifty(patient.nii_mask_systole_load, saveDirPatient, patient.name + "_Systole_Labelmap.nii")
+
+    # row = {'Name': patient.name, 'Systole': patient.tSystole, 'Diastole': patient.tDiastole, 'original_NT': patient.original_NT}
+    # df_patient = pd.DataFrame(row, index=[0])
+    # return df_patient
+    return patient.df_row
 
 
 if __name__ == "__main__":
@@ -70,8 +64,8 @@ if __name__ == "__main__":
 
     # iterate over all patients
     pbar = tqdm(total=len(dataSet))
-    df_val = pd.DataFrame(columns=['Name', 'Systole', 'Diastole'])
-    df_train = pd.DataFrame(columns=['Name', 'Systole', 'Diastole'])
+    df_val = pd.DataFrame()
+    df_train = pd.DataFrame()
     for index in range(0, len(dataSet)):
         patient = dataSet[index]
         pbar.set_postfix_str(f'P: {patient.name}')
@@ -84,7 +78,6 @@ if __name__ == "__main__":
             df_train = pd.concat([df_train, df])
 
         pbar.update(1)
-
     pbar.close()
 
     # save data base
