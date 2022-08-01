@@ -8,14 +8,14 @@ from loss import loss_func_three
 import csv
 from torch.utils.data import DataLoader
 import nibabel as nib
-import metrics
+from monai.metrics.meandice import compute_meandice
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 from utils import plots
 import utils.transforms as T
 from cnn.dataset import SingleVentricleDataset, DatasetMode, LoadFlowMode
-from cnn import cnn_utils
+import cnn.cnn_utils as utils
 
 
 def save_nifty(mask, save_dir, filename):
@@ -28,75 +28,82 @@ def save_nifty(mask, save_dir, filename):
     nib.save(mt_nii, outputFile)
 
 
+def create_row(pname, mts_cnn_list, mtts_cnn_list, mts_iw_list, mtts_iw_list):
+    loss_cnn, l1_cnn, l2_cnn, l3_cnn = loss_func_three(mts_cnn_list, mtts_cnn_list)
+    loss_iw, l1_iw, l2_iw, l3_iw = loss_func_three(mts_iw_list, mtts_iw_list)
+    row = [pname]
+    row.append('{:.2f}'.format(l1_cnn.item()))
+    row.append('{:.2f}'.format(l2_cnn.item()))
+    row.append('{:.2f}'.format(l3_cnn.item()))
+    row.append('{:.2f}'.format(loss_cnn.item()))
+    row.append('{:.2f}'.format(l1_iw.item()))
+    row.append('{:.2f}'.format(l2_iw.item()))
+    row.append('{:.2f}'.format(l3_iw.item()))
+    row.append('{:.2f}'.format(loss_iw.item()))
+    row.append('{:.3f}'.format(compute_meandice(mtts_cnn_list[0], mts_cnn_list[0]).mean().item()))
+    row.append('{:.3f}'.format(compute_meandice(mts_cnn_list[-1], mtts_cnn_list[-1]).mean().item()))
+    return row
+
+
 if __name__ == "__main__":
     config_eval = configparser.ConfigParser()
     config_eval.read('parser/configCNNEval.ini')
 
-    TRAINED_MODEL_DIR = config_eval.get('DATA', 'TRAINED_MODEL_DIR')
-    MODEL_NAME = config_eval.get('DATA', 'MODEL_NAME')
-    SAVE_IMGS = config_eval.getboolean('DEBUG', 'SAVE_IMGS')
-    SAVE_NIFTI = config_eval.getboolean('DEBUG', 'SAVE_NIFTI')
-    DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
-    NUM_WORKERS = config_eval.getint('PARAMETERS', 'NUM_WORKERS')
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    P = utils.read_eval_params(config_eval)
 
-    FINE_TUNING = config_eval.getboolean('DATA', 'FINE_TUNING')
-    if FINE_TUNING:
+    if P['fine_tuning']:
         config_tl = configparser.ConfigParser()
-        config_tl.read(osp.join(TRAINED_MODEL_DIR, 'config.ini'))
+        config_tl.read(osp.join(P['trained_model_dir'], 'config.ini'))
         pretrained_dir = config_tl.get('DATA', 'PRETRAINED_DIR')
-        PATIENT_NAME = config_tl.get('DATA', 'PATIENT_NAME')
+        patient_name = config_tl.get('DATA', 'PATIENT_NAME')
 
         config_train = configparser.ConfigParser()
         config_train.read(osp.join(pretrained_dir, 'config.ini'))
-
     else:
         config_train = configparser.ConfigParser()
-        config_train.read(osp.join(TRAINED_MODEL_DIR, 'config.ini'))
-
-    DATASET = config_eval.get('DATA', 'DATASET')
+        config_train.read(osp.join(P['trained_model_dir'], 'config.ini'))
 
     data_transf = T.ComposeUnary([T.ToTensor()])
     mask_transf = T.ComposeUnary([T.Round(th=0.5), T.ToTensor()])
-
-    if DATASET == 'train':
-        ds = SingleVentricleDataset(config_train, DatasetMode.TRAIN, LoadFlowMode.PREDICT_OF, data_transf, mask_transf)
+    if P['dataset'] == 'train':
+        ds = SingleVentricleDataset(config_train, DatasetMode.TRAIN, LoadFlowMode.TRAIN_OF, data_transf, mask_transf)
     else:
-        ds = SingleVentricleDataset(config_train, DatasetMode.VAL, LoadFlowMode.PREDICT_OF, data_transf, mask_transf)
-    loader = DataLoader(ds, batch_size=1, shuffle=False, num_workers=NUM_WORKERS, collate_fn=cnn_utils.collate_fn_2)
+        ds = SingleVentricleDataset(config_train, DatasetMode.VAL, LoadFlowMode.TRAIN_OF, data_transf, mask_transf)
+    loader = DataLoader(ds, batch_size=1, shuffle=False, num_workers=P['workers'], collate_fn=utils.collate_fn)
 
     save_dir = plots.createSaveDirectory(config_eval.get('DATA', 'OUTPUT_PATH'), 'EVAL')
-
-    # save config file to save directory
-    conifg_output = osp.join(save_dir, 'config.ini')
-    with open(conifg_output, 'w') as config_file:
-        config_eval.write(config_file)
+    utils.save_config(config_eval, save_dir, 'config.ini')
 
     csv_file = open(osp.join(save_dir, 'loss.csv'), 'w')
     csv_writer = csv.writer(csv_file)
     csv_writer.writerow(['Patient', 'L1-CNN', 'L2-CNN', 'L3-CNN', 'LT-CNN', 'L1-OF', 'L2-OF', 'L3-OF', 'LT-OF', 'dc_0', 'dc_k'])
+    logger = plots.create_logger(save_dir)
 
-    net = torch.load(osp.join(TRAINED_MODEL_DIR, MODEL_NAME), map_location='cpu').to(DEVICE)
-    pbar = tqdm(total=len(ds))
+    net = utils.create_net(config_train, logger).to(device)
+    net = torch.nn.DataParallel(net, device_ids=[0])
+    checkpoint = torch.load(osp.join(P['trained_model_dir'], P['model_name']))
+    net.load_state_dict(checkpoint['model_state_dict'], strict=True)
 
-    save_size = (config_eval.getint('PARAMETERS', 'save_NZ'),
-                 config_eval.getint('PARAMETERS', 'save_NY'),
-                 config_eval.getint('PARAMETERS', 'save_NX'))
+    save_size = (P['save_nz'], P['save_ny'], P['save_nx'])
     mask_posp = T.ComposeUnary([T.ToArray(), T.Resize(size=save_size), T.Round(th=0.5), T.Erode(), T.ToTensor()])
     m0_mk_posp = T.ComposeUnary([T.ToArray(), T.Resize(size=save_size), T.Round(th=0.5), T.ToTensor()])
     img_posp = T.ComposeUnary([T.ToArray(), T.Resize(size=save_size), T.Normalize(), T.ToTensor()])
 
+    pbar = tqdm(total=len(ds))
     net.eval()
     with torch.no_grad():
         for (pnames, imgs4d, m0s, mks, list_times_fwd, list_times_bwd, ff, bf, offsets) in loader:
-            if FINE_TUNING:
-                if pnames[0] != PATIENT_NAME:
+            if P['fine_tuning']:
+                if pnames[0] != patient_name:
                     continue
 
-            imgs4d = imgs4d.to(DEVICE)
-            m0s = m0s.to(DEVICE)
-            mks = mks.to(DEVICE)
-            ff = ff.to(DEVICE)
-            bf = bf.to(DEVICE)
+            imgs4d = imgs4d.to(device)
+            m0s = m0s.to(device)
+            mks = mks.to(device)
+            ff = ff.to(device)
+            bf = bf.to(device)
+
             BS, CH, NZ, NY, NX, NT = imgs4d.shape
             warp = WarpCNN(config_train, NZ, NY, NX)
             mts_cnn_list = [m0s]
@@ -128,28 +135,15 @@ if __name__ == "__main__":
 
             mtts_cnn_list.reverse()
             mtts_iw_list.reverse()
-            loss_cnn, l1_cnn, l2_cnn, l3_cnn = loss_func_three(mts_cnn_list, mtts_cnn_list)
-            loss_iw, l1_iw, l2_iw, l3_iw = loss_func_three(mts_iw_list, mtts_iw_list)
-            row = [pnames[0]]
-            row.append('{:.2f}'.format(l1_cnn.item()))
-            row.append('{:.2f}'.format(l2_cnn.item()))
-            row.append('{:.2f}'.format(l3_cnn.item()))
-            row.append('{:.2f}'.format(loss_cnn.item()))
-            row.append('{:.2f}'.format(l1_iw.item()))
-            row.append('{:.2f}'.format(l2_iw.item()))
-            row.append('{:.2f}'.format(l3_iw.item()))
-            row.append('{:.2f}'.format(loss_iw.item()))
-            row.append('{:.3f}'.format(metrics.dice(mtts_cnn_list[0], mts_cnn_list[0])))
-            row.append('{:.3f}'.format(metrics.dice(mts_cnn_list[-1], mtts_cnn_list[-1])))
-            csv_writer.writerow(row)
+            csv_writer.writerow(create_row(pnames[0], mts_cnn_list, mtts_cnn_list, mts_iw_list, mtts_iw_list))
 
-            if SAVE_IMGS or SAVE_NIFTI:
+            if P['save_imgs'] or P['save_nifti']:
                 patient_dir = plots.createSubDirectory(save_dir, pnames[0])
                 fwd_dir = plots.createSubDirectory(patient_dir, 'fwd')
                 bwd_dir = plots.createSubDirectory(patient_dir, 'bwd')
 
                 for t in range(len(mts_cnn_list)):
-                    if SAVE_IMGS:
+                    if P['save_imgs']:
                         img3d = img_posp(imgs4d[batch_indices, :, :, :, :, list_times_fwd[t][batch_indices]].squeeze())
                         mtt_cnn = mask_posp(mtts_cnn_list[t].squeeze())
                         mtt_iw = mask_posp(mtts_iw_list[t].squeeze())
@@ -177,9 +171,8 @@ if __name__ == "__main__":
                         # plots.save_img_masks_slices(data_t, [mtt_cnn, mtt_iw], bwd_dir, f'im_tt_{init_ts + i}', th=0.5,
                         #                             alphas=[1.0, 1.0], colors=[[0, 1, 0], [0, 0, 1]])
 
-                    if SAVE_NIFTI:
+                    if P['save_nifti']:
                         save_nifty(mts_cnn_list[t], fwd_dir, f'mt_{list_times_fwd[t][batch_indices].item()}.nii')
                         save_nifty(mtts_cnn_list[t], bwd_dir, f'mtt_{list_times_fwd[t][batch_indices].item()}.nii')
-
             pbar.update(1)
     csv_file.close()

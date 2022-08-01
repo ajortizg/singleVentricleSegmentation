@@ -57,7 +57,7 @@ if __name__ == "__main__":
         ds = SingleVentricleDataset(config_train, DatasetMode.TRAIN, LoadFlowMode.PREDICT_OF, data_transf, mask_transf)
     else:
         ds = SingleVentricleDataset(config_train, DatasetMode.VAL, LoadFlowMode.PREDICT_OF, data_transf, mask_transf)
-    loader = DataLoader(ds, batch_size=1, shuffle=False, num_workers=NUM_WORKERS, collate_fn=cnn_utils.collate_fn_2)
+    loader = DataLoader(ds, batch_size=1, shuffle=False, num_workers=NUM_WORKERS, collate_fn=cnn_utils.collate_fn)
 
     save_dir = plots.createSaveDirectory(config_eval.get('DATA', 'OUTPUT_PATH'), 'PREDICT')
 

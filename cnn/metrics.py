@@ -1,6 +1,7 @@
 import torch
 # import numpy as np
 
+
 eps = 1e-10
 
 
@@ -16,13 +17,13 @@ def dice(pred: torch.Tensor, target: torch.Tensor):
     # summation = torch.sum(y_true, dim=axis) + torch.sum(y_pred, dim=axis)
     # return torch.mean((2.0 * intersection + eps) / (summation + eps))
 
-    smooth = 1.0
+    # smooth = 1.0
     num = pred.size(0)
     m1 = pred.view(num, -1)  # Flatten
     m2 = target.view(num, -1)  # Flatten
     intersection = (m1 * m2).sum()
+    return (2.0 * intersection) / (m1.sum() + m2.sum())
 
-    return (2.0 * intersection + smooth) / (m1.sum() + m2.sum() + smooth)
 
 # def dice_2(y_true: torch.Tensor, y_pred: torch.Tensor, axis: list = [1, 2, 3, 4]):
 #     x = torch.where(y_true > 0.5, 1.0, 0.0)

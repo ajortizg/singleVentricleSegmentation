@@ -322,3 +322,27 @@ def merge_img_mask(img, mask, th=0.5, alpha=0.35, color=[1, 1, 0]):
                                 (1 - alpha) + alpha * color[c],
                                 img[:, :, c])
     return img
+
+
+def save_loss(H, save_dir):
+    plt.style.use('ggplot')
+    plt.figure()
+    plt.plot(H['train_loss'], label='train_loss')
+    plt.plot(H['val_loss'], label='val_loss')
+    plt.title('Training Loss on Dataset')
+    plt.xlabel('Epoch #')
+    plt.ylabel('Loss')
+    plt.legend(loc='lower left')
+    plt.savefig(os.path.join(save_dir, 'loss.png'))
+
+
+def save_acc(H, save_dir):
+    plt.style.use('ggplot')
+    plt.figure()
+    plt.plot(H['train_acc'], label='train_acc')
+    plt.plot(H['val_acc'], label='val_acc')
+    plt.title('Accuracy on Dataset')
+    plt.xlabel('Epoch #')
+    plt.ylabel('Acc')
+    plt.legend(loc='lower left')
+    plt.savefig(os.path.join(save_dir, 'acc.png'))

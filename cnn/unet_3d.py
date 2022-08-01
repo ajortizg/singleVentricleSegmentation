@@ -3,6 +3,10 @@ import torch
 import torch.nn as nn
 import os.path as osp
 import torch.nn.functional as F
+import torch.nn.utils.parametrize as P
+import lipschitz as L
+from monai.networks.nets.basic_unet import BasicUNet
+from monai.networks.nets.unet import UNet
 
 
 class UNet3D(nn.Module):
@@ -13,28 +17,14 @@ class UNet3D(nn.Module):
         features_start = config.getint('PARAMETERS', 'FEATURES_START')
         trilinear = config.getboolean('PARAMETERS', 'TRILINEAR')
         padding = config.getint('PARAMETERS', 'PADDING')
-        verbose = config.getboolean('DEBUG', 'VERBOSE')
         kstr = config.get('PARAMETERS', 'KERNEL_SIZE')
         kernel_size = tuple(map(int, kstr.split(',')))
-        self.residual = config.getboolean('PARAMETERS', 'RESIDUAL')
-        self.norm = config.get('PARAMETERS', 'NORM_LAYER')
-        self.act = config.get('PARAMETERS', 'ACTIVATION')
-        self.slope = config.getfloat('PARAMETERS', 'ACTIVATION_SLOPE')
-
-        if verbose:
-            logger.info("\n================CNN===============")
-            logger.info(f"Layers: {num_layers}\
-                \nClasses: {num_classes}\
-                \nInput channels: {input_channels}\
-                \nFeatures start: {features_start}\
-                \nTrilinear interp: {trilinear}\
-                \nPadding: {padding}\
-                \nKernel size: {kernel_size}\
-                \nNorm: {self.norm}\
-                \nAct: {self.act}\
-                \nAct slope: {self.slope}\
-                \nResidual net: {self.residual}")
-            logger.info("==================================")
+        act = config.get('PARAMETERS', 'ACTIVATION')
+        slope = config.getfloat('PARAMETERS', 'ACTIVATION_SLOPE')
+        lipschitz_reg = config.getboolean('PARAMETERS', 'LIPSCHITZ_REGULARIZATION')
+        max_lc = config.getfloat('PARAMETERS', 'MAX_LIPSCHITZ_CONSTANT')
+        power_its = config.getint('PARAMETERS', 'POWER_ITS')
+        power_eps = config.getfloat('PARAMETERS', 'POWER_EPS')
 
         if num_layers < 1:
             raise ValueError(
@@ -42,23 +32,30 @@ class UNet3D(nn.Module):
 
         super().__init__()
         self.num_layers = num_layers
-        layers = [DoubleConv3D(input_channels, features_start, kernel_size, padding, self.norm, self.act, self.slope)]
-
+        in_size = 16
+        layers = [DoubleConv3d(input_channels, features_start, kernel_size, padding, act,
+                               slope, lipschitz_reg, max_lc, power_its, power_eps, in_size)]
         feats = features_start
+
         for _ in range(num_layers - 1):
-            layers.append(Down3D(feats, feats * 2, kernel_size, padding, self.norm, self.act, self.slope))
+            layers.append(Down3d(feats, feats * 2, kernel_size, padding, act, slope, lipschitz_reg, max_lc, power_its, power_eps, in_size))
             feats *= 2
 
         for _ in range(num_layers - 1):
-            layers.append(Up3D(feats, feats // 2, trilinear, kernel_size, padding, self.norm, self.act, self.slope))
+            layers.append(Up3d(feats, feats // 2, trilinear, kernel_size, padding, act, slope, lipschitz_reg, max_lc, power_its, power_eps, in_size))
             feats //= 2
 
-        layers.append(nn.Conv3d(feats, num_classes, kernel_size=1))
+        if lipschitz_reg:
+            layers.append(P.register_parametrization(nn.Conv3d(feats, num_classes, kernel_size=1), 'weight',
+                                                     L.L2LipschitzConv3d(in_size, ks=1, eps=power_eps, iterations=power_its, max_lc=max_lc)))
+        else:
+            layers.append(nn.Conv3d(feats, num_classes, kernel_size=1))
+
         self.layers = nn.ModuleList(layers)
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
-        identity_mask = x[:, 1:2, :, :, :] if self.residual else None
+        identity = x[:, 1:2, :, :, :]
 
         xi = [self.layers[0](x)]
         # Down path
@@ -69,24 +66,28 @@ class UNet3D(nn.Module):
         for i, layer in enumerate(self.layers[self.num_layers: -1]):
             xi[-1] = layer(xi[-1], xi[-2 - i])
 
-        if self.residual:
-            return self.sigmoid(self.layers[-1](xi[-1]) + identity_mask)
-        else:
-            return self.sigmoid(self.layers[-1](xi[-1]))
+        return self.layers[-1](xi[-1]) + identity
 
 
-class DoubleConv3D(nn.Module):
-    def __init__(self, in_ch: int, out_ch: int, kernel_size=(3, 3, 3), padding=1, norm='IN', act='relu', slope=0.2):
+class DoubleConv3d(nn.Module):
+    def __init__(self, in_ch: int, out_ch: int, kernel_size=(3, 3, 3), padding=1, act='relu', slope=0.2,
+                 lipschitz=False, max_lc=1.0, power_its=1, power_eps=1e-8, in_size=8):
         super().__init__()
-
         self.net = nn.Sequential(
-            nn.Conv3d(in_ch, out_ch, kernel_size=kernel_size, padding=padding),
-            nn.InstanceNorm3d(out_ch) if norm == 'IN' else nn.BatchNorm3d(out_ch),
+            P.register_parametrization(
+                nn.Conv3d(in_ch, out_ch, kernel_size=kernel_size, padding=padding),
+                'weight', L.L2LipschitzConv3d(
+                    in_size, ks=kernel_size, padding=padding, eps=power_eps, iterations=power_its, max_lc=max_lc))
+            if lipschitz else nn.Conv3d(in_ch, out_ch, kernel_size=kernel_size, padding=padding),
+            nn.InstanceNorm3d(out_ch),
             self.activation_fn(act, slope),
-            nn.Conv3d(out_ch, out_ch, kernel_size=kernel_size, padding=padding),
-            nn.InstanceNorm3d(out_ch) if norm == 'IN' else nn.BatchNorm3d(out_ch),
-            self.activation_fn(act, slope)
-        )
+            P.register_parametrization(
+                nn.Conv3d(out_ch, out_ch, kernel_size=kernel_size, padding=padding),
+                'weight', L.L2LipschitzConv3d(
+                    in_size, ks=kernel_size, padding=padding, eps=power_eps, iterations=power_its, max_lc=max_lc))
+            if lipschitz else nn.Conv3d(out_ch, out_ch, kernel_size=kernel_size, padding=padding),
+            nn.InstanceNorm3d(out_ch),
+            self.activation_fn(act, slope))
 
     def activation_fn(self, act, slope):
         act_fn = nn.Module
@@ -102,35 +103,44 @@ class DoubleConv3D(nn.Module):
         return self.net(x)
 
 
-class Down3D(nn.Module):
-    def __init__(self, in_ch: int, out_ch: int, kernel_size=(3, 3, 3), padding=1, norm='IN', act='relu', slope=0.2):
+class Down3d(nn.Module):
+    def __init__(self, in_ch: int, out_ch: int, kernel_size=(3, 3, 3), padding=1, act='relu', slope=0.2,
+                 lipschitz=False, max_lc=1.0, power_its=1, power_eps=1e-8, in_size=8):
         super().__init__()
         self.net = nn.Sequential(
             nn.MaxPool3d(kernel_size=2, stride=2),
-            DoubleConv3D(in_ch, out_ch, kernel_size, padding, norm, act, slope)
+            DoubleConv3d(in_ch, out_ch, kernel_size, padding, act, slope, lipschitz, max_lc, power_its, power_eps, in_size)
         )
 
     def forward(self, x):
         return self.net(x)
 
 
-class Up3D(nn.Module):
+class Up3d(nn.Module):
     """Upsampling (by either trilinear interpolation or transpose convolutions) followed by concatenation of feature
     map from contracting path, followed by DoubleConv3D."""
 
-    def __init__(self, in_ch: int, out_ch: int, trilinear: bool = False, kernel_size=(3, 3),
-                 padding=1, norm='IN', act='relu', slope=0.2):
+    def __init__(self, in_ch: int, out_ch: int, trilinear: bool = False, kernel_size=(3, 3), padding=1, act='relu', slope=0.2,
+                 lipschitz=False, max_lc=1.0, power_its=1, power_eps=1e-8, in_size=8):
         super().__init__()
         self.upsample = None
         if trilinear:
             self.upsample = nn.Sequential(
                 nn.Upsample(scale_factor=2, mode="trilinear", align_corners=True),
-                nn.Conv3d(in_ch, in_ch // 2, kernel_size=1)
-            )
+                P.register_parametrization(
+                    nn.Conv3d(in_ch, in_ch // 2, kernel_size=1), 'weight',
+                    L.L2LipschitzConv3d(in_size, ks=kernel_size, eps=power_eps, iterations=power_its, max_lc=max_lc))
+                if lipschitz else nn.Conv3d(in_ch, in_ch // 2, kernel_size=1))
         else:
-            self.upsample = nn.ConvTranspose3d(in_ch, in_ch // 2, kernel_size=2, stride=2)
+            if lipschitz:
+                self.upsample = P.register_parametrization(
+                    nn.ConvTranspose3d(in_ch, in_ch // 2, kernel_size=2, stride=2), 'weight',
+                    L.L2LipschitzConvTranspose3d(in_size, ks=2, stride=2, eps=power_eps, iterations=power_its, max_lc=max_lc))
+            else:
+                self.upsample = nn.ConvTranspose3d(in_ch, in_ch // 2, kernel_size=2, stride=2)
 
-        self.conv = DoubleConv3D(in_ch, out_ch, kernel_size=kernel_size, padding=padding, norm=norm, act=act, slope=slope)
+        self.conv = DoubleConv3d(in_ch, out_ch, kernel_size=kernel_size, padding=padding, act=act, slope=slope,
+                                 lipschitz=lipschitz, max_lc=max_lc, power_its=power_its, power_eps=power_eps, in_size=in_size)
 
     def forward(self, x1, x2):
         x1 = self.upsample(x1)
@@ -150,119 +160,55 @@ class Up3D(nn.Module):
         return self.conv(x)
 
 
-# """ Adapted from: https://github.com/milesial/Pytorch-UNet/blob/master/unet """
+class BasicUnet3d(nn.Module):
+    def __init__(self, config, logger):
+        super().__init__()
+        num_classes = config.getint('PARAMETERS', 'NUM_CLASSES')
+        input_channels = config.getint('PARAMETERS', 'INPUT_CHANNELS')
+        features_start = config.getint('PARAMETERS', 'FEATURES_START')
+        act = config.get('PARAMETERS', 'ACTIVATION')
+        slope = config.getfloat('PARAMETERS', 'ACTIVATION_SLOPE')
+
+        features = [features_start, features_start]
+        for _ in range(2, 5):
+            features.append(features[-1] * 2)
+        features.append(features_start)
+
+        self.unet = BasicUNet(spatial_dims=3, in_channels=input_channels, out_channels=num_classes,
+                              act=("LeakyReLU", {"negative_slope": slope, "inplace": True}),
+                              norm=("instance", {"affine": True}),
+                              features=features)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        identity_mask = x[:, 1:2, :, :, :]
+        x = self.unet(x)
+        return x + identity_mask
 
 
-# class UNet(nn.Module):
-#     def __init__(self, config):
-#         super(UNet, self).__init__()
-#         self.n_classes = config.getint('PARAMETERS', 'NUM_CLASSES')
-#         self.n_channels = config.getint('PARAMETERS', 'INPUT_CHANNELS')
-#         self.trilinear = config.getboolean('PARAMETERS', 'TRILINEAR')
-#         self.residual = config.getboolean('PARAMETERS', 'RESIDUAL')
+class ResUnet3d(nn.Module):
+    def __init__(self, config, logger):
+        super().__init__()
+        num_layers = config.getint('PARAMETERS', 'NUM_LAYERS')
+        num_classes = config.getint('PARAMETERS', 'NUM_CLASSES')
+        input_channels = config.getint('PARAMETERS', 'INPUT_CHANNELS')
+        features_start = config.getint('PARAMETERS', 'FEATURES_START')
+        slope = config.getfloat('PARAMETERS', 'ACTIVATION_SLOPE')
+        num_res_units = config.getint('PARAMETERS', 'NUM_RES_UNITS')
 
-#         self.inc = DoubleConv(self.n_channels, 8)
-#         self.down1 = Down(8, 16)
-#         self.down2 = Down(16, 32)
-#         self.down3 = Down(32, 64)
-#         factor = 2 if self.trilinear else 1
-#         # self.down4 = Down(64, 128 // factor)
-#         self.up1 = Up(64, 32 // factor, self.trilinear)
-#         self.up2 = Up(32, 16 // factor, self.trilinear)
-#         self.up3 = Up(16, 8 // factor, self.trilinear)
-#         # self.up4 = Up(16, 8, bilinear)
-#         self.outc = OutConv(8, self.n_classes)
-#         self.sigmoid = nn.Sigmoid()
+        channels = [features_start]
+        strides = []
+        for _ in range(1, num_layers):
+            channels.append(channels[-1] * 2)
+            strides.append(2)
 
-#     def forward(self, x):
-#         identity_mask = x[:, 1:2, :, :, :] if self.residual else None
+        self.unet = UNet(spatial_dims=3, in_channels=input_channels, out_channels=num_classes, channels=channels,
+                         strides=strides, num_res_units=num_res_units,
+                         act=("LeakyReLU", {"negative_slope": slope, "inplace": True}),
+                         norm=("instance", {"affine": True}))
+        self.sigmoid = nn.Sigmoid()
 
-#         x1 = self.inc(x)
-#         x2 = self.down1(x1)
-#         x3 = self.down2(x2)
-#         x4 = self.down3(x3)
-#         # x5 = self.down4(x4)
-#         x = self.up1(x4, x3)
-#         x = self.up2(x, x2)
-#         x = self.up3(x, x1)
-#         # x = self.up4(x, x1)
-#         logits = self.outc(x)
-
-#         if self.residual:
-#             return self.sigmoid(logits + identity_mask)
-#         else:
-#             return self.sigmoid(logits)
-
-
-# class DoubleConv(nn.Module):
-#     """(convolution => [BN] => ReLU) * 2"""
-
-#     def __init__(self, in_channels, out_channels, mid_channels=None):
-#         super().__init__()
-#         if not mid_channels:
-#             mid_channels = out_channels
-#         self.double_conv = nn.Sequential(
-#             nn.Conv3d(in_channels, mid_channels, kernel_size=3, padding=1, bias=False),
-#             nn.InstanceNorm3d(mid_channels),
-#             nn.ReLU(inplace=True),
-#             nn.Conv3d(mid_channels, out_channels, kernel_size=3, padding=1, bias=False),
-#             nn.InstanceNorm3d(out_channels),
-#             nn.ReLU(inplace=True)
-#         )
-
-#     def forward(self, x):
-#         return self.double_conv(x)
-
-
-# class Down(nn.Module):
-#     """Downscaling with maxpool then double conv"""
-
-#     def __init__(self, in_channels, out_channels):
-#         super().__init__()
-#         self.maxpool_conv = nn.Sequential(
-#             nn.MaxPool3d(kernel_size=2, stride=2),
-#             DoubleConv(in_channels, out_channels)
-#         )
-
-#     def forward(self, x):
-#         return self.maxpool_conv(x)
-
-
-# class Up(nn.Module):
-#     """Upscaling then double conv"""
-
-#     def __init__(self, in_channels, out_channels, bilinear=True):
-#         super().__init__()
-
-#         # if bilinear, use the normal convolutions to reduce the number of channels
-#         if bilinear:
-#             self.up = nn.Upsample(scale_factor=2, mode='trilinear', align_corners=True)
-#             self.conv = DoubleConv(in_channels, out_channels, in_channels // 2)
-#         else:
-#             self.up = nn.ConvTranspose3d(in_channels, in_channels // 2, kernel_size=2, stride=2)
-#             self.conv = DoubleConv(in_channels, out_channels)
-
-#     def forward(self, x1, x2):
-#         x1 = self.up(x1)
-#         # input is CHW
-#         diffZ = x2.size()[2] - x1.size()[2]
-#         diffY = x2.size()[3] - x1.size()[3]
-#         diffX = x2.size()[4] - x1.size()[4]
-
-#         x1 = F.pad(x1, [diffX // 2, diffX - diffX // 2,
-#                         diffY // 2, diffY - diffY // 2,
-#                         diffZ // 2, diffZ - diffZ // 2])
-#         # if you have padding issues, see
-#         # https://github.com/HaiyongJiang/U-Net-Pytorch-Unstructured-Buggy/commit/0e854509c2cea854e247a9c615f175f76fbb2e3a
-#         # https://github.com/xiaopeng-liao/Pytorch-UNet/commit/8ebac70e633bac59fc22bb5195e513d5832fb3bd
-#         x = torch.cat([x2, x1], dim=1)
-#         return self.conv(x)
-
-
-# class OutConv(nn.Module):
-#     def __init__(self, in_channels, out_channels):
-#         super(OutConv, self).__init__()
-#         self.conv = nn.Conv3d(in_channels, out_channels, kernel_size=1)
-
-#     def forward(self, x):
-#         return self.conv(x)
+    def forward(self, x):
+        identity_mask = x[:, 1:2, :, :, :]
+        x = self.unet(x)
+        return x + identity_mask
