@@ -232,6 +232,9 @@ class RandomRotate:
             np.random.shuffle(self.angles_x)
             np.random.shuffle(self.angles_y)
             np.random.shuffle(self.angles_z)
+            print(self.angles_x)
+            print(self.angles_y)
+            print(self.angles_z)
             self.random_angles = False
         else:
             self.angles_x = self.angles_y = self.angles_z = None

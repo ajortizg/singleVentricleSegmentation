@@ -117,16 +117,16 @@ if __name__ == "__main__":
 
                 # Forward mask propagation m0 -> mk
                 mt = warp(mts_cnn_list[-1], ff[:, t, :, :, :, :])
-                mt_cnn = torch.cat((imgs4d[batch_indices, :, :, :, :, list_times_fwd[t + 1][batch_indices]], mt), dim=1)
-                mts_cnn_list.append(net(mt_cnn))
+                mt, mh = net(torch.cat((imgs4d[batch_indices, :, :, :, :, list_times_fwd[t + 1][batch_indices]], mt), dim=1))
+                mts_cnn_list.append(mt)
 
                 mt_iw = warp(mts_iw_list[-1], ff[:, t, :, :, :, :])
                 mts_iw_list.append(mt_iw)
 
                 # Backward mask propagation mk -> m0
                 mtt = warp(mtts_cnn_list[-1], bf[:, t, :, :, :, :])
-                mtt_cnn = torch.cat((imgs4d[batch_indices, :, :, :, :, list_times_bwd[t + 1][batch_indices]], mtt), dim=1)
-                mtts_cnn_list.append(net(mtt_cnn))
+                mtt, mhh = net(torch.cat((imgs4d[batch_indices, :, :, :, :, list_times_bwd[t + 1][batch_indices]], mtt), dim=1))
+                mtts_cnn_list.append(mtt)
 
                 mtt_iw = warp(mtts_iw_list[-1], bf[:, t, :, :, :, :])
                 mtts_iw_list.append(mtt_iw)

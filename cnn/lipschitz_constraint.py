@@ -1,9 +1,8 @@
 import torch
-from torch.autograd import Variable
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-import torch.nn.utils.parametrize as parametrize
+import torch.nn.utils.parametrize as P
 import cnn_utils
 import lipschitz as L
 
@@ -12,20 +11,20 @@ class NetC(nn.Module):
     def __init__(self, in_ch, out_ch, ks, padding, stride, in_size, max_lc=1.):
         super(NetC, self).__init__()
         self.conv = nn.Conv3d(in_ch, out_ch, kernel_size=ks, padding=padding, stride=stride)
-        parametrize.register_parametrization(self.conv, 'weight', L.L2LipschitzConv3d(in_size, ks, padding, stride, max_lc=max_lc))
+        P.register_parametrization(self.conv, 'weight', L.L2LipschitzConv3d(in_size, ks, padding, stride, max_lc=max_lc))
 
     def forward(self, x):
-        return F.elu(self.conv(x))
+        return F.relu(self.conv(x))
 
 
 class NetTC(nn.Module):
     def __init__(self, in_ch, out_ch, ks, padding, stride, in_size, max_lc):
         super(NetTC, self).__init__()
         self.upsample = nn.ConvTranspose3d(in_ch, out_ch, ks, stride, padding)
-        parametrize.register_parametrization(self.upsample, 'weight', L.L2LipschitzConvTranspose3d(in_size, ks, padding, stride, max_lc=max_lc))
+        P.register_parametrization(self.upsample, 'weight', L.L2LipschitzConvTranspose3d(in_size, ks, padding, stride, max_lc=max_lc))
 
     def forward(self, x):
-        return F.elu(self.upsample(x))
+        return F.relu(self.upsample(x))
 
 
 if __name__ == '__main__':
@@ -63,11 +62,11 @@ if __name__ == '__main__':
     optimizer = optim.Adam(net.parameters(), lr=1e-3)
     loss_fn = torch.nn.MSELoss()
 
-    for i in range(10):
+    for i in range(100):
         result = net(input)
         loss = loss_fn(result, target)
 
-        lc = (torch.tensor(L.spectral_norm_conv_transpose3d_2(net.upsample.weight, in_size, ks, padding, stride, 1e-8, 3)))
+        lc = L.spectral_norm_conv_transpose3d_2(net.upsample.weight, in_size, ks, padding, stride, 1e-8, 3)
         print('epoch: ', i, '  loss: ', loss.item(), '  lipschitz_constant: ', lc.item())
         loss.backward()
         optimizer.step()

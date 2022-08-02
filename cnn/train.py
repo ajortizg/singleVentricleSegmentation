@@ -70,7 +70,7 @@ if __name__ == "__main__":
     logger.info('Trainig CNN')
 
     pbar = tqdm(total=P['epochs'])
-    trainer = Trainer(net, pbar, config, device)
+    trainer = Trainer(net, pbar, config, device, writer)
     best_val_loss = 1e10
     best_train_loss = 1e10
     tic = time.time()
@@ -82,7 +82,7 @@ if __name__ == "__main__":
         train_avg = tuple(x / train_steps for x in train_res)
         val_avg = tuple(x / val_steps for x in val_res)
 
-        utils.log(logger, writer, e, train_avg, val_avg, net, opt, schedule_lr, best_train_loss, best_val_loss, save_dir)
+        best_train_loss, best_val_loss = utils.log(logger, writer, e, train_avg, val_avg, net, opt, schedule_lr, best_train_loss, best_val_loss, save_dir)
         H = utils.update_train_history(H, train_avg, val_avg)
 
         schedule_lr.step()

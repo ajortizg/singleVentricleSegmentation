@@ -14,14 +14,17 @@ import utils.transforms as T
 
 
 def create_net(config, logger):
-    NET_TYPE = config.get('PARAMETERS', 'NET')
+    net_type = config.get('PARAMETERS', 'NET')
     net = nn.Module
-    if NET_TYPE == 'unet3d':
+    if net_type == 'unet3d':
         net = UNet3D(config, logger)
-    elif NET_TYPE == 'basic_unet3d':
+    elif net_type == 'basic_unet3d':
         net = BasicUnet3d(config, logger)
-    elif NET_TYPE == 'res_unet3d':
+    elif net_type == 'res_unet3d':
         net = ResUnet3d(config, logger)
+    else:
+        print('Unknown network: ' + net_type)
+        sys.exit()
     return net
 
 
@@ -107,6 +110,8 @@ def log(logger, writer, e, train_avg, val_avg, net, opt, schedule_lr, best_train
         best_val_loss = val_avg[0]
         checkpoint(e, net, opt, val_avg[0], val_avg[-1], save_dir, 'best_val_checkpoint.pth')
         logger.info(f'\t*Best val checkpoint updated with loss: {best_val_loss:,.3f}')
+
+    return best_train_loss, best_val_loss
 
 
 def seeding(seed):

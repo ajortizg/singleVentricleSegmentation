@@ -40,10 +40,12 @@ class UNet3D(nn.Module):
         for _ in range(num_layers - 1):
             layers.append(Down3d(feats, feats * 2, kernel_size, padding, act, slope, lipschitz_reg, max_lc, power_its, power_eps, in_size))
             feats *= 2
+            # in_size //= 2
 
         for _ in range(num_layers - 1):
             layers.append(Up3d(feats, feats // 2, trilinear, kernel_size, padding, act, slope, lipschitz_reg, max_lc, power_its, power_eps, in_size))
             feats //= 2
+            # in_size *= 2
 
         if lipschitz_reg:
             layers.append(P.register_parametrization(nn.Conv3d(feats, num_classes, kernel_size=1), 'weight',
@@ -52,10 +54,9 @@ class UNet3D(nn.Module):
             layers.append(nn.Conv3d(feats, num_classes, kernel_size=1))
 
         self.layers = nn.ModuleList(layers)
-        self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
-        identity = x[:, 1:2, :, :, :]
+        identity = x[:, 1:2, :, :, :].clone()
 
         xi = [self.layers[0](x)]
         # Down path
@@ -66,7 +67,7 @@ class UNet3D(nn.Module):
         for i, layer in enumerate(self.layers[self.num_layers: -1]):
             xi[-1] = layer(xi[-1], xi[-2 - i])
 
-        return self.layers[-1](xi[-1]) + identity
+        return self.layers[-1](xi[-1]) + identity, self.layers[-1](xi[-1])
 
 
 class DoubleConv3d(nn.Module):
@@ -150,11 +151,9 @@ class Up3d(nn.Module):
         diff_h = x2.shape[3] - x1.shape[3]
         diff_w = x2.shape[4] - x1.shape[4]
 
-        x1 = F.pad(x1,
-                   [diff_w // 2, diff_w - diff_w // 2,
-                    diff_h // 2, diff_h - diff_h // 2,
-                    diff_d // 2, diff_d - diff_d // 2]
-                   )
+        x1 = F.pad(x1, [diff_w // 2, diff_w - diff_w // 2,
+                        diff_h // 2, diff_h - diff_h // 2,
+                        diff_d // 2, diff_d - diff_d // 2])
         # Concatenate along the channels axis
         x = torch.cat([x2, x1], dim=1)
         return self.conv(x)
@@ -178,12 +177,11 @@ class BasicUnet3d(nn.Module):
                               act=("LeakyReLU", {"negative_slope": slope, "inplace": True}),
                               norm=("instance", {"affine": True}),
                               features=features)
-        self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
-        identity_mask = x[:, 1:2, :, :, :]
+        identity = x[:, 1:2, :, :, :].clone()
         x = self.unet(x)
-        return x + identity_mask
+        return x + identity, x
 
 
 class ResUnet3d(nn.Module):
@@ -206,9 +204,8 @@ class ResUnet3d(nn.Module):
                          strides=strides, num_res_units=num_res_units,
                          act=("LeakyReLU", {"negative_slope": slope, "inplace": True}),
                          norm=("instance", {"affine": True}))
-        self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
-        identity_mask = x[:, 1:2, :, :, :]
+        identity = x[:, 1:2, :, :, :].clone()
         x = self.unet(x)
-        return x + identity_mask
+        return x + identity, x
