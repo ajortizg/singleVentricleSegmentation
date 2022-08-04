@@ -146,8 +146,8 @@ def save_weights(net: Module, epoch: int, every: int, save_dir: str, filename: s
 def collate_fn(data):
     pnames, imgs4d, m0s, mks, init_ts, final_ts, ff, bf = zip(*data)
 
-    list_times_fwd, list_times_bwd = reduce_times(init_ts, final_ts)
-    ff, bf, offsets = reduce_optical_flow(ff, bf)
+    list_times_fwd, list_times_bwd = collate_times(init_ts, final_ts)
+    ff, bf, offsets = collate_optical_flow(ff, bf)
 
     to_tensor = T.ListToTensor()
     imgs4d = to_tensor(imgs4d)
@@ -160,7 +160,7 @@ def collate_fn(data):
     return (pnames, imgs4d, m0s, mks, list_times_fwd, list_times_bwd, ff, bf, offsets)
 
 
-def reduce_times(init_ts, final_ts):
+def collate_times(init_ts, final_ts):
     init_ts = torch.tensor(init_ts)
     final_ts = torch.tensor(final_ts)
     num_ts = (final_ts - init_ts).max().item()
@@ -178,7 +178,7 @@ def reduce_times(init_ts, final_ts):
     return(list_times_fwd, list_times_bwd)
 
 
-def reduce_optical_flow(off, ofb):
+def collate_optical_flow(off, ofb):
     BS = len(off)
     maxts_flow = max_ts(off)
     NT, NZ, NY, NX, CH = off[0].shape

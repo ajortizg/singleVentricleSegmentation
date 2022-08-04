@@ -93,7 +93,7 @@ if __name__ == "__main__":
     pbar = tqdm(total=len(ds))
     net.eval()
     with torch.no_grad():
-        for (pnames, imgs4d, m0s, mks, list_times_fwd, list_times_bwd, ff, bf, offsets) in loader:
+        for (pnames, imgs4d, m0s, mks, times_fwd, times_bwd, ff, bf, offsets) in loader:
             if P['fine_tuning']:
                 if pnames[0] != patient_name:
                     continue
@@ -106,73 +106,69 @@ if __name__ == "__main__":
 
             BS, CH, NZ, NY, NX, NT = imgs4d.shape
             warp = WarpCNN(config_train, NZ, NY, NX)
-            mts_cnn_list = [m0s]
-            mts_iw_list = [m0s]
-            mtts_cnn_list = [mks]
-            mtts_iw_list = [mks]
+
+            net_out = {'mt': [m0s], 'mtt': [mks]}
+            of_out = {'mt': [m0s], 'mtt': [mks]}
             batch_indices = torch.arange(BS)
             timesteps = ff.shape[1]
+
             for t in range(timesteps):
                 pbar.set_postfix_str(f'P: {pnames[0]}, S: {t+1}/{timesteps}')
 
                 # Forward mask propagation m0 -> mk
-                mt = warp(mts_cnn_list[-1], ff[:, t, :, :, :, :])
-                mt, mh = net(torch.cat((imgs4d[batch_indices, :, :, :, :, list_times_fwd[t + 1][batch_indices]], mt), dim=1))
-                mts_cnn_list.append(mt)
-
-                mt_iw = warp(mts_iw_list[-1], ff[:, t, :, :, :, :])
-                mts_iw_list.append(mt_iw)
+                mt = warp(net_out['mt'][-1], ff[:, t, :, :, :, :])
+                mt, _ = net(torch.cat((imgs4d[batch_indices, :, :, :, :, times_fwd[t + 1][batch_indices]], mt), dim=1))
+                net_out['mt'].append(mt)
+                of_out['mt'].append(warp(of_out['mt'][-1], ff[:, t, :, :, :, :]))
 
                 # Backward mask propagation mk -> m0
-                mtt = warp(mtts_cnn_list[-1], bf[:, t, :, :, :, :])
-                mtt, mhh = net(torch.cat((imgs4d[batch_indices, :, :, :, :, list_times_bwd[t + 1][batch_indices]], mtt), dim=1))
-                mtts_cnn_list.append(mtt)
+                mtt = warp(net_out['mtt'][-1], bf[:, t, :, :, :, :])
+                mtt, _ = net(torch.cat((imgs4d[batch_indices, :, :, :, :, times_bwd[t + 1][batch_indices]], mtt), dim=1))
+                net_out['mtt'].append(mtt)
+                of_out['mtt'].append(warp(of_out['mtt'][-1], bf[:, t, :, :, :, :]))
 
-                mtt_iw = warp(mtts_iw_list[-1], bf[:, t, :, :, :, :])
-                mtts_iw_list.append(mtt_iw)
+            assert(len(net_out['mt']) == len(net_out['mtt']) and len(of_out['mt']) == len(of_out['mtt']))
 
-            assert(len(mtts_cnn_list) == len(mts_cnn_list) and len(mtts_iw_list) == len(mts_iw_list))
-
-            mtts_cnn_list.reverse()
-            mtts_iw_list.reverse()
-            csv_writer.writerow(create_row(pnames[0], mts_cnn_list, mtts_cnn_list, mts_iw_list, mtts_iw_list))
+            net_out['mtt'].reverse()
+            of_out['mtt'].reverse()
+            csv_writer.writerow(create_row(pnames[0], net_out['mt'], net_out['mtt'], of_out['mt'], of_out['mtt']))
 
             if P['save_imgs'] or P['save_nifti']:
                 patient_dir = plots.createSubDirectory(save_dir, pnames[0])
                 fwd_dir = plots.createSubDirectory(patient_dir, 'fwd')
                 bwd_dir = plots.createSubDirectory(patient_dir, 'bwd')
 
-                for t in range(len(mts_cnn_list)):
+                for t in range(len(net_out['mt'])):
                     if P['save_imgs']:
-                        img3d = img_posp(imgs4d[batch_indices, :, :, :, :, list_times_fwd[t][batch_indices]].squeeze())
-                        mtt_cnn = mask_posp(mtts_cnn_list[t].squeeze())
-                        mtt_iw = mask_posp(mtts_iw_list[t].squeeze())
-                        mt_cnn = mask_posp(mts_cnn_list[t].squeeze())
-                        mt_iw = mask_posp(mts_iw_list[t].squeeze())
+                        img3d = img_posp(imgs4d[batch_indices, :, :, :, :, times_fwd[t][batch_indices]].squeeze())
+                        mtt_net = mask_posp(net_out['mtt'][t].squeeze())
+                        mtt_of = mask_posp(of_out['mtt'][t].squeeze())
+                        mt_net = mask_posp(net_out['mt'][t].squeeze())
+                        mt_of = mask_posp(of_out['mt'][t].squeeze())
 
                         if t == 0:
-                            plots.save_img_masks(img3d, [m0_mk_posp(m0s.squeeze()), mtt_cnn, mtt_iw], 'im_m0_m0tt', fwd_dir, th=0.5,
+                            plots.save_img_masks(img3d, [m0_mk_posp(m0s.squeeze()), mtt_net, mtt_of], 'im_m0_m0tt', fwd_dir, th=0.5,
                                                  alphas=[0.3, 1.0, 1.0], colors=[[1, 0.7, 0], [0, 1, 0], [0, 0, 1]])
                             # plots.save_img_masks_slices(data_t, [m0_mk_posp(m0), mtt_cnn, mtt_iw], fwd_dir, 'im_m0_m0tt_slices', th=0.5,
                             #                             alphas=[0.3, 1.0, 1.0], colors=[[1, 0.7, 0], [0, 1, 0], [0, 0, 1]])
-                        elif t == len(mts_cnn_list) - 1:
-                            plots.save_img_masks(img3d, [m0_mk_posp(mks.squeeze()), mt_cnn, mt_iw], 'mk_mkt', bwd_dir, th=0.5,
+                        elif t == len(net_out['mt']) - 1:
+                            plots.save_img_masks(img3d, [m0_mk_posp(mks.squeeze()), mt_net, mt_of], 'mk_mkt', bwd_dir, th=0.5,
                                                  alphas=[0.3, 1.0, 1.0], colors=[[1, 0.7, 0], [0, 1, 0], [0, 0, 1]])
                             # plots.save_img_masks_slices(data_t, [m0_mk_posp(mk), mt_cnn, mt_iw], bwd_dir, 'mk_mkt_slices', th=0.5,
                             #                             alphas=[0.3, 1.0, 1.0], colors=[[1, 0.7, 0], [0, 1, 0], [0, 0, 1]])
 
-                        plots.save_img_masks(img3d, [mt_cnn, mt_iw], f'im_t_{list_times_fwd[t][batch_indices].item()}', fwd_dir, th=0.5,
+                        plots.save_img_masks(img3d, [mt_net, mt_of], f'im_t_{times_fwd[t][batch_indices].item()}', fwd_dir, th=0.5,
                                              alphas=[1.0, 1.0], colors=[[0, 1, 0], [0, 0, 1]])
                         # plots.save_img_masks_slices(data_t, [mt_cnn, mt_iw], fwd_dir, f'im_t_{init_ts + i}', th=0.5,
                         #                             alphas=[1.0, 1.0], colors=[[0, 1, 0], [0, 0, 1]])
 
-                        plots.save_img_masks(img3d, [mtt_cnn, mtt_iw], f'im_tt_{list_times_fwd[t][batch_indices].item()}', bwd_dir, th=0.5,
+                        plots.save_img_masks(img3d, [mtt_net, mtt_of], f'im_tt_{times_fwd[t][batch_indices].item()}', bwd_dir, th=0.5,
                                              alphas=[1.0, 1.0], colors=[[0, 1, 0], [0, 0, 1]])
                         # plots.save_img_masks_slices(data_t, [mtt_cnn, mtt_iw], bwd_dir, f'im_tt_{init_ts + i}', th=0.5,
                         #                             alphas=[1.0, 1.0], colors=[[0, 1, 0], [0, 0, 1]])
 
                     if P['save_nifti']:
-                        save_nifty(mts_cnn_list[t], fwd_dir, f'mt_{list_times_fwd[t][batch_indices].item()}.nii')
-                        save_nifty(mtts_cnn_list[t], bwd_dir, f'mtt_{list_times_fwd[t][batch_indices].item()}.nii')
+                        save_nifty(net_out['mt'][t], fwd_dir, f'mt_{times_fwd[t][batch_indices].item()}.nii')
+                        save_nifty(net_out['mtt'][t], bwd_dir, f'mtt_{times_fwd[t][batch_indices].item()}.nii')
             pbar.update(1)
     csv_file.close()

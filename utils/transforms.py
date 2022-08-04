@@ -212,6 +212,16 @@ class RandomFlipX(FlipBase):
         return f"{self.__class__.__name__}()"
 
 
+class OneOf:
+    def __init__(self, transforms):
+        self.transforms = transforms
+        self.n = len(self.transforms)
+
+    def __call__(self, img4d: np.array, ms: np.array, md: np.array):
+        idx = np.random.randint(self.n)
+        return self.transforms[idx](img4d, ms, md)
+
+
 class RandomRotate:
     def __init__(self, p=0.5, range_x: tuple = (0, 0), range_y: tuple = (0, 0), range_z: tuple = (0, 0), total: int = None, boundary='nearest'):
         self.p = p
@@ -344,6 +354,7 @@ class IntensityScaling:
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}()"
 
+
 class Clip:
     def __init__(self, p, interval: tuple):
         self.p = p
@@ -430,8 +441,6 @@ class Resize:
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}()"
-
-    
 
 
 # class ResizeFlow3d:

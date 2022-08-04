@@ -80,9 +80,7 @@ if __name__ == "__main__":
     clip_interval = tuple(map(float, config.get('DATA_AUGMENTATION', 'CLIP_INTERVAL').split(',')))
 
     transf_tern = T.ComposeTernary(
-        [T.RandomFlipZ(p=flip_prob_z),
-         T.RandomFlipY(p=flip_prob_y),
-         T.RandomFlipX(p=flip_prob_x),
+        [T.OneOf([T.RandomFlipZ(p=flip_prob_z), T.RandomFlipY(p=flip_prob_y), T.RandomFlipX(p=flip_prob_x)]),
          T.RandomRotate(p=prob_rot, range_z=rot_range_z, range_y=rot_range_y, range_x=rot_range_x, total=None, boundary=rot_bdryMode),
          T.ElasticDeformation(p=ed_prob, sigma_range=(ed_sigma_min, ed_sigma_max),
                               points=ed_grid, boundaryMode=ed_bdryMode, usePrefilter=ed_usePrefilter),

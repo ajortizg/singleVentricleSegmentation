@@ -4,14 +4,11 @@ from enum import Enum
 
 from TVL1OF3D import *
 
-cnn_lib_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../cnn'))
-sys.path.append(cnn_lib_path)
-from dataset import SingleVentricleDataset, DatasetMode
-
-import plots
-import transforms as T
-#from utils import plots
-#import utils.transforms as T
+ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../'))
+sys.path.append(ROOT_DIR)
+from cnn.dataset import SingleVentricleDataset, DatasetMode, LoadFlowMode
+from utils import plots
+import utils.transforms as T
 
 
 class OpticalFlowMode(Enum):
@@ -26,24 +23,24 @@ def compute_optical_flow(ds: SingleVentricleDataset, idx: int, mode: OpticalFlow
     NZ, NY, NX, NT = data.shape
 
     patient_dir = plots.createSubDirectory(save_dir, pname)
-    logger.info(f'{idx} - {pname}')
+    logger.info(f'{idx} - {pname} ({data.shape}), ({init_ts}-{final_ts})')
 
     # initialization of optical flow and mask
     u = torch.zeros([NZ, NY, NX, 3]).float().to(device)
     p = torch.zeros([NZ, NY, NX, 3, 3]).float().to(device)
 
-    idxs = None
+    indices = None
     if mode == OpticalFlowMode.FORWARD:
         # mask = m0.to(DEVICE)
-        idxs = torch.arange(init_ts, final_ts + 1, 1)
+        indices = torch.arange(init_ts, final_ts + 1, 1)
     elif mode == OpticalFlowMode.BACKWARD:
         # mask = mk.to(DEVICE)
-        idxs = torch.arange(final_ts, init_ts - 1, -1)
+        indices = torch.arange(final_ts, init_ts - 1, -1)
 
-    for i in range(len(idxs) - 1):
+    for i in range(len(indices) - 1):
         # t0, t1 = t + inc_t, t
-        t0 = idxs[i + 1].item()
-        t1 = idxs[i].item()
+        t0 = indices[i + 1].item()
+        t1 = indices[i].item()
         I0 = data[:, :, :, t0]
         I1 = data[:, :, :, t1]
         # print(f'{t1}->{t0}')
@@ -83,11 +80,11 @@ if __name__ == "__main__":
     with open(conifg_output, 'w') as configfile:
         config.write(configfile)
 
-    data_transf = T.ComposeUnary([T.ToTensor()])
+    img4d_transforms = T.ComposeUnary([T.ToTensor()])
     # mask_transf = T.ComposeUnary([T.ToTensor()])
 
-    train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, load_flow=False, img4d_transforms=data_transf)
-    val_ds = SingleVentricleDataset(config, DatasetMode.VAL, load_flow=False, img4d_transforms=data_transf)
+    train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, LoadFlowMode.NO_LOAD_OF, img4d_transforms)
+    val_ds = SingleVentricleDataset(config, DatasetMode.VAL, LoadFlowMode.NO_LOAD_OF, img4d_transforms)
 
     compute_all_patients = config.get('DATA', 'COMPUTE_ALL_PATIENTS')
 

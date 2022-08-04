@@ -25,6 +25,7 @@ class UNet3D(nn.Module):
         max_lc = config.getfloat('PARAMETERS', 'MAX_LIPSCHITZ_CONSTANT')
         power_its = config.getint('PARAMETERS', 'POWER_ITS')
         power_eps = config.getfloat('PARAMETERS', 'POWER_EPS')
+        self.residual = config.getboolean('PARAMETERS', 'RESIDUAL')
 
         if num_layers < 1:
             raise ValueError(
@@ -56,7 +57,8 @@ class UNet3D(nn.Module):
         self.layers = nn.ModuleList(layers)
 
     def forward(self, x):
-        identity = x[:, 1:2, :, :, :].clone()
+        if self.residual:
+            identity = x[:, 1:2, :, :, :].clone()
 
         xi = [self.layers[0](x)]
         # Down path
@@ -67,7 +69,10 @@ class UNet3D(nn.Module):
         for i, layer in enumerate(self.layers[self.num_layers: -1]):
             xi[-1] = layer(xi[-1], xi[-2 - i])
 
-        return self.layers[-1](xi[-1]) + identity, self.layers[-1](xi[-1])
+        if self.residual:
+            return self.layers[-1](xi[-1]) + identity, self.layers[-1](xi[-1])
+        else:
+            return self.layers[-1](xi[-1]), self.layers[-1](xi[-1])
 
 
 class DoubleConv3d(nn.Module):
@@ -168,8 +173,8 @@ class BasicUnet3d(nn.Module):
         act = config.get('PARAMETERS', 'ACTIVATION')
         slope = config.getfloat('PARAMETERS', 'ACTIVATION_SLOPE')
 
-        features = [features_start, features_start]
-        for _ in range(2, 5):
+        features = [features_start]
+        for _ in range(1, 5):
             features.append(features[-1] * 2)
         features.append(features_start)
 

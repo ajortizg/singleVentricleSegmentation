@@ -60,8 +60,8 @@ if __name__ == "__main__":
     val_ds.save_patients(save_dir, 'val.xlsx')
 
     # Steps per epoch for training and evaluation set
-    train_steps = len(train_ds) / P['batch_size']
-    val_steps = len(val_ds) / P['batch_size']
+    train_steps = len(train_loader)
+    val_steps = len(val_loader)
 
     # History training info
     H = {'train_loss': [], 'val_loss': [], 'train_acc': [], 'val_acc': []}
@@ -93,7 +93,7 @@ if __name__ == "__main__":
 
     plots.save_loss(H, save_dir)
     plots.save_acc(H, save_dir)
-    utils.checkpoint(e, net, opt, train_avg[0], train_avg[4], save_dir, 'weights.pth')
+    utils.checkpoint(e, net, opt, train_avg[0], train_avg[-1], save_dir, 'weights.pth')
     # torch.save(net, osp.join(save_dir, 'model.pth'))
 
     pbar.close()
