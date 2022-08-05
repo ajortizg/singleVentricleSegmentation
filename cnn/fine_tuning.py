@@ -4,7 +4,7 @@ import sys
 from torch.optim import Adam
 from tqdm import tqdm
 from torch.optim.lr_scheduler import StepLR
-from unet_3d import UNet3D
+from unet_3d import UNet3d
 from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
 from torch.utils.tensorboard import SummaryWriter
@@ -59,7 +59,7 @@ if __name__ == "__main__":
     logger = plots.create_logger(save_dir)
 
     # UNet3D model
-    net = UNet3D(config_train, logger).to(DEVICE)
+    net = UNet3d(config_train, logger).to(DEVICE)
     net = torch.nn.DataParallel(net, device_ids=np.arange(NUM_GPUS).tolist())
 
     PRETRAIED_WEIGHTS = osp.join(PRETRAINED_MODEL_DIR, WEIGHTS_FILENAME)

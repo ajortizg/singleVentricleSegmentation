@@ -33,7 +33,7 @@ class UNet3D(nn.Module):
 
         super().__init__()
         self.num_layers = num_layers
-        in_size = 16
+        in_size = 80
         layers = [DoubleConv3d(input_channels, features_start, kernel_size, padding, act,
                                slope, lipschitz_reg, max_lc, power_its, power_eps, in_size)]
         feats = features_start
@@ -41,12 +41,12 @@ class UNet3D(nn.Module):
         for _ in range(num_layers - 1):
             layers.append(Down3d(feats, feats * 2, kernel_size, padding, act, slope, lipschitz_reg, max_lc, power_its, power_eps, in_size))
             feats *= 2
-            # in_size //= 2
+            in_size //= 2
 
         for _ in range(num_layers - 1):
             layers.append(Up3d(feats, feats // 2, trilinear, kernel_size, padding, act, slope, lipschitz_reg, max_lc, power_its, power_eps, in_size))
             feats //= 2
-            # in_size *= 2
+            in_size *= 2
 
         if lipschitz_reg:
             layers.append(P.register_parametrization(nn.Conv3d(feats, num_classes, kernel_size=1), 'weight',

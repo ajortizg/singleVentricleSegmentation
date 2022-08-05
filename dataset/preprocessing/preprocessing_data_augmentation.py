@@ -83,7 +83,7 @@ if __name__ == "__main__":
         [T.OneOf([T.RandomFlipZ(p=flip_prob_z), T.RandomFlipY(p=flip_prob_y), T.RandomFlipX(p=flip_prob_x)]),
          T.RandomRotate(p=prob_rot, range_z=rot_range_z, range_y=rot_range_y, range_x=rot_range_x, total=None, boundary=rot_bdryMode),
          T.ElasticDeformation(p=ed_prob, sigma_range=(ed_sigma_min, ed_sigma_max),
-                              points=ed_grid, boundaryMode=ed_bdryMode, usePrefilter=ed_usePrefilter),
+                              points=ed_grid, boundary_mode=ed_bdryMode, use_prefilter=ed_usePrefilter),
          T.AdditiveGaussianNoise(p=noise_prob, mu=noise_mu, sigma=noise_sigma),
          T.IntensityScaling(p=scaling_prob, scale_range=scaling_range),
          T.Clip(p=clip_prob, interval=clip_interval)])

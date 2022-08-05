@@ -5,7 +5,7 @@ import sys
 import os.path as osp
 import torch.nn as nn
 import os
-from unet_3d import UNet3D, BasicUnet3d, ResUnet3d
+from unet_3d import UNet3d, BasicUnet3d, ResUnet3d
 
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
@@ -17,7 +17,7 @@ def create_net(config, logger):
     net_type = config.get('PARAMETERS', 'NET')
     net = nn.Module
     if net_type == 'unet3d':
-        net = UNet3D(config, logger)
+        net = UNet3d(config, logger)
     elif net_type == 'basic_unet3d':
         net = BasicUnet3d(config, logger)
     elif net_type == 'res_unet3d':

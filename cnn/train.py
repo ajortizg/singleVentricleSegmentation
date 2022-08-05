@@ -4,9 +4,7 @@ import sys
 from torch.optim import Adam
 from tqdm import tqdm
 from torch.optim.lr_scheduler import StepLR
-from unet_3d import UNet3D, BasicUnet3d
 from torch.utils.data import DataLoader
-import matplotlib.pyplot as plt
 from torch.utils.tensorboard import SummaryWriter
 import time
 import numpy as np
