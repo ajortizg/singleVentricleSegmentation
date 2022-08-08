@@ -81,16 +81,3 @@ always use /parser/configPreprocessing.ini
     Save resulting folder to /data/singleVentricleData_prolongLinear_split_xN,
     where N is the number of new patients created per patient.
 
-
-
-## TODOs
-
-### saving
-* nifty header
-* cutting/prolongation: variable tolerance for cutting, prolongation of 4d data and mask: so far both by nearest neighbor
-
-### tests
-* compare u,p on different levels, scaling correct?
-* convergence in number of warpings?
-* influence of smoothing the input images or using ROF-output as input
-* check Moreau identity u = prox_{tau F}(u) + tau prox_{F^{*}/tau}(u/tau) = u
