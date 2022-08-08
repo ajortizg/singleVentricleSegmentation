@@ -5,12 +5,12 @@ import sys
 import os.path as osp
 import torch.nn as nn
 import os
-from unet_3d import UNet3d, BasicUnet3d, ResUnet3d
 
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 import utils.transforms as T
+from cnn.unet_3d import UNet3d, BasicUnet3d, ResUnet3d
 
 
 def create_net(config, logger):
@@ -99,7 +99,8 @@ def log(logger, writer, e, train_avg, val_avg, net, opt, schedule_lr, best_train
     logger.info(log_train)
     logger.info(log_val)
 
-    writer.add_scalar('lr', schedule_lr.get_last_lr()[0], e)
+    # writer.add_scalar('lr', schedule_lr.get_last_lr()[0], e)
+    writer.add_scalar('lr', opt.param_groups[0]['lr'], e)
     writer.add_scalars('acc', {'train': train_avg[-1], 'val': val_avg[-1]}, e)
 
     if train_avg[0] < best_train_loss:

@@ -41,18 +41,18 @@ def save_data(patient: SingleVentriclePatient, saveDir4D: str, saveDirSegmentati
     save_np_to_nifty(patient.nii_mask_diastole_xyz, saveDirPatient, patient.name + "_Diastole_Labelmap.nii", patient.hdr_mask_diastole)
     save_np_to_nifty(patient.nii_mask_systole_xyz, saveDirPatient, patient.name + "_Systole_Labelmap.nii", patient.hdr_mask_systole)
 
+    if patient.full_cycle:
+        for t in range(patient.NT):
+            save_np_to_nifty(patient.nii_masks_xyz[t], saveDirPatient, patient.masks_dirs[t].split('/')[-1], patient.nii_masks_load[t].header)
+
 
 if __name__ == "__main__":
     config = configparser.ConfigParser()
     config.read('parser/configPreprocessing.ini')
 
-    # old: normalize to [0,1]
-    #transf_tern = T.ComposeUnary([T.Normalize()])
-
     ds = SingleVentricleDataset(config, mode='full')
 
     saveDir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'preprocessing_normalization')
-    
 
     print("===========================================================")
     print("Data normalization")
@@ -121,6 +121,13 @@ if __name__ == "__main__":
         newPatient.hdr_mask_systole = patient.hdr_mask_systole
         newPatient.nii_mask_diastole_xyz = patient.nii_mask_diastole_xyz
         newPatient.hdr_mask_diastole = patient.hdr_mask_diastole
+
+        # Save full cycle masks
+        newPatient.full_cycle = patient.full_cycle
+        newPatient.NT = patient.NT
+        newPatient.nii_masks_load = patient.nii_masks_load
+        newPatient.masks_dirs = patient.masks_dirs
+        newPatient.nii_masks_xyz = patient.nii_masks_xyz
 
         save_data(newPatient, saveDir4D, saveDirSegmentations)
         pbar.update(1)

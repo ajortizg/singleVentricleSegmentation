@@ -15,6 +15,7 @@ class DatasetMode(Enum):
     TRAIN = 1
     VAL = 2
     FULL = 3
+    TEST = 4
 
 
 class LoadFlowMode(Enum):
@@ -28,14 +29,16 @@ class SingleVentricleDataset(Dataset):
         self.config = config
         self.mode = mode
         self.flow_mode = flow_mode
-        self.img4d_transforms = img4d_transforms                # transformations applied only on data
-        self.mask_transforms = mask_transforms                  # transformations applied only on masks
+        self.img4d_transforms = img4d_transforms    # transformations applied only on data
+        self.mask_transforms = mask_transforms      # transformations applied only on masks
 
         self.base_path = config.get('DATA', 'BASE_PATH_3D')
         if mode == DatasetMode.TRAIN:
             self.base_path = osp.join(self.base_path, 'train')
         elif mode == DatasetMode.VAL:
             self.base_path = osp.join(self.base_path, 'val')
+        elif mode == DatasetMode.TEST:
+            self.base_path = osp.join(self.base_path, 'test')
 
         self.segmentations_subdir_path = config.get('DATA', 'SEGMENTATIONS_SUBDIR_PATH')
         self.segmentations_path = osp.join(self.base_path, self.segmentations_subdir_path)
@@ -69,16 +72,30 @@ class SingleVentricleDataset(Dataset):
         patient_name = df_row.loc[idx, 'Name']
         tsyst = df_row.loc[idx, 'Systole']
         tdias = df_row.loc[idx, 'Diastole']
+        full_cycle = df_row.loc[idx, 'Full']
 
         # Load 4D nifty [x,y,z,t]
         img4d = nib.load(osp.join(self.volumes_path, patient_name + '.nii.gz'))
         img4d_zyxt = np.swapaxes(img4d.get_fdata(), 0, 2)
 
         # Load segmentations masks
-        mask_syst_zyx, mask_diast_zyx = self.systole_diastole_mask(patient_name)
+        mask_syst_zyx = self.load_mask(patient_name, '_Systole_Labelmap.nii')
+        mask_diast_zyx = self.load_mask(patient_name, '_Diastole_Labelmap.nii')
+
+        # Load whole cycle masks
+        if full_cycle:
+            orig_NT = df_row.loc[idx, 'original_NT']
+            masks = np.empty(shape=(orig_NT, *mask_syst_zyx.shape), dtype=mask_syst_zyx.dtype)
+            for t in range(orig_NT):
+                masks[t] = self.load_mask(patient_name, f'_{t}_Labelmap.nii')
+        else:
+            masks = None
+
         if self.mask_transforms is not None:
             mask_syst_zyx = self.mask_transforms(mask_syst_zyx)
             mask_diast_zyx = self.mask_transforms(mask_diast_zyx)
+            if full_cycle:
+                masks = self.mask_transforms(masks)
 
         if self.img4d_transforms is not None:
             img4d_zyxt = self.img4d_transforms(img4d_zyxt)
@@ -90,7 +107,7 @@ class SingleVentricleDataset(Dataset):
         if self.load_flow:
             ff, bf = self.optflow_for_patient(patient_name, init_ts, final_ts, idx)
 
-        return (patient_name, img4d_zyxt, m0, mk, init_ts, final_ts, ff, bf)
+        return (patient_name, img4d_zyxt, m0, mk, masks, init_ts, final_ts, ff, bf)
 
     def systole_diastole_time(self, idx):
         ts = self.df.iloc[idx]['Systole']
@@ -107,6 +124,9 @@ class SingleVentricleDataset(Dataset):
 
     def get_systole_time(self, idx):
         return self.df.iloc[idx]['Systole']
+
+    def full_cycle(self, idx):
+        return self.df.iloc[idx]['Full']
 
     def get_diastole_time(self, idx):
         return self.df.iloc[idx]['Diastole']

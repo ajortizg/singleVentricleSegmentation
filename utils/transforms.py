@@ -309,9 +309,9 @@ class ElasticDeformation:
             sigma = np.random.uniform(self.sigma_range[0], self.sigma_range[1])
             #points = np.random.uniform(self.points_range[0], self.points_range[1])
             [img4d_d, ms_d, md_d] = ed.deform_random_grid([img4d, ms, md], sigma,
-                                                           points=self.points, mode=self.boundary_mode,
-                                                           prefilter=self.use_prefilter,
-                                                           axis=[(1, 2), (1, 2), (1, 2)])
+                                                          points=self.points, mode=self.boundary_mode,
+                                                          prefilter=self.use_prefilter,
+                                                          axis=[(1, 2), (1, 2), (1, 2)])
             return (img4d_d, ms_d, md_d)
         else:
             return (img4d, ms, md)
@@ -326,13 +326,45 @@ class AdditiveGaussianNoise:
         self.mu = mu
         self.sigma = sigma
 
-    def __call__(self, img4d: np.array, ms: np.array, md: np.array):
+    def __call__(self, x: np.array) -> np.array:
         if np.random.rand() < self.p:
-            noise = np.random.normal(self.mu, self.sigma, size=img4d.shape)
-            img4d_n = img4d + noise
-            return (img4d_n, ms, md)
+            noise = np.random.normal(self.mu, self.sigma, size=x.shape)
+            return x + noise
         else:
-            return (img4d, ms, md)
+            return x
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}()"
+
+
+class GammaCorrection:
+    def __init__(self, p, gamma_range: tuple):
+        self.p = p
+        self.gamma_range = gamma_range
+
+    def __call__(self, x: np.array) -> np.array:
+        if np.random.rand() < self.p:
+            gamma = np.random.uniform(self.gamma_range[0], self.gamma_range[1])
+            return x**gamma
+        else:
+            return x
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}()"
+
+
+class IntensityScalingWithClip:
+    def __init__(self, p, scale_range: tuple, clip_interval: tuple):
+        self.p = p
+        self.scale_range = scale_range
+        self.clip_interval = clip_interval
+
+    def __call__(self, x: np.array) -> np.array:
+        if np.random.rand() < self.p:
+            sigma = np.random.uniform(self.scale_range[0], self.scale_range[1])
+            return np.clip(sigma * x, a_min=self.clip_interval[0], a_max=self.clip_interval[1])
+        else:
+            return x
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}()"
@@ -343,13 +375,12 @@ class IntensityScaling:
         self.p = p
         self.scale_range = scale_range
 
-    def __call__(self, img4d: np.array, ms: np.array, md: np.array):
+    def __call__(self, img4d: np.array):
         if np.random.rand() < self.p:
             sigma = np.random.uniform(self.scale_range[0], self.scale_range[1])
-            img4d_t = sigma * img4d
-            return (img4d_t, ms, md)
+            return sigma * img4d
         else:
-            return (img4d, ms, md)
+            return img4d
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}()"
@@ -360,12 +391,11 @@ class Clip:
         self.p = p
         self.interval = interval
 
-    def __call__(self, img4d: np.array, ms: np.array, md: np.array):
+    def __call__(self, img4d: np.array):
         if np.random.rand() < self.p:
-            img4d_t = np.clip(img4d, a_min=self.interval[0], a_max=self.interval[1])
-            return (img4d_t, ms, md)
+            return np.clip(img4d, a_min=self.interval[0], a_max=self.interval[1])
         else:
-            return (img4d, ms, md)
+            return img4d
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}()"

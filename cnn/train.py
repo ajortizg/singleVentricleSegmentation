@@ -1,9 +1,8 @@
 import torch
 import configparser
 import sys
-from torch.optim import Adam
 from tqdm import tqdm
-from torch.optim.lr_scheduler import StepLR
+import torch.optim as optim
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 import time
@@ -27,14 +26,19 @@ if __name__ == "__main__":
     config = configparser.ConfigParser()
     config.read('parser/configCNNTrain.ini')
 
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     P = utils.read_train_params(config)
 
     # Create train and validation datasets
-    img4d_transforms = T.ComposeUnary([T.ToTensor()])
-    mask_transforms = T.ComposeUnary([T.Round(th=0.5), T.ToTensor()])
-    train_ds = ds.SingleVentricleDataset(config, ds.DatasetMode.TRAIN, ds.LoadFlowMode.TRAIN_OF, img4d_transforms, mask_transforms)
-    val_ds = ds.SingleVentricleDataset(config, ds.DatasetMode.VAL, ds.LoadFlowMode.TRAIN_OF, img4d_transforms, mask_transforms)
+    train_imgs_transforms = T.ComposeUnary([T.IntensityScalingWithClip(p=0.5, scale_range=(0.9, 1.1), clip_interval=(0.0, 1.0)),
+                                            T.ToTensor()])
+    val_imgs_transforms = T.ComposeUnary([T.ToTensor()])
+    mask_transforms = T.ComposeUnary([T.Round(th=0.5),
+                                      T.ToTensor()])
+    train_full_transforms = T.ComposeTernary([T.RandomRotate()])                                      
+
+    train_ds = ds.SingleVentricleDataset(config, ds.DatasetMode.TRAIN, ds.LoadFlowMode.TRAIN_OF, train_imgs_transforms, mask_transforms)
+    val_ds = ds.SingleVentricleDataset(config, ds.DatasetMode.VAL, ds.LoadFlowMode.TRAIN_OF, val_imgs_transforms, mask_transforms)
 
     # Create data loaders
     train_loader = DataLoader(train_ds, batch_size=P['batch_size'], shuffle=True, num_workers=P['workers'], collate_fn=utils.collate_fn)
@@ -43,14 +47,16 @@ if __name__ == "__main__":
     save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'CNN')
     logger = plots.create_logger(save_dir)
     writer = SummaryWriter(log_dir=save_dir)
+    logger.info(f'Using device {device}')
 
     # Create model
     net = utils.create_net(config, logger).to(device)
     summary(net, input_size=(2, 80, 80, 80), batch_size=P['batch_size'])
 
     net = torch.nn.DataParallel(net, device_ids=np.arange(P['gpus']).tolist())
-    opt = Adam(net.parameters(), lr=P['lr'], weight_decay=P['weight_decay'], betas=(P['beta1'], P['beta2']))
-    schedule_lr = StepLR(opt, step_size=P['step_size'], gamma=P['gamma'])
+    opt = optim.Adam(net.parameters(), lr=P['lr'], weight_decay=P['weight_decay'], betas=(P['beta1'], P['beta2']))
+    scheduler = optim.lr_scheduler.StepLR(opt, step_size=P['step_size'], gamma=P['gamma'])
+    # scheduler = optim.lr_scheduler.ReduceLROnPlateau(opt, 'max', patience=3)
 
     utils.save_config(config, save_dir, 'config.ini')
     utils.save_model(net, save_dir, 'net.txt')
@@ -73,18 +79,24 @@ if __name__ == "__main__":
     best_train_loss = 1e10
     tic = time.time()
 
-    for e in range(P['epochs']):
-        train_res = trainer.train_epoch(train_loader, opt)
-        val_res = trainer.val_epoch(val_loader)
+    try:
+        for e in range(P['epochs']):
+            train_res = trainer.train_epoch(train_loader, opt)
+            val_res = trainer.val_epoch(val_loader)
 
-        train_avg = tuple(x / train_steps for x in train_res)
-        val_avg = tuple(x / val_steps for x in val_res)
+            train_avg = tuple(x / train_steps for x in train_res)
+            val_avg = tuple(x / val_steps for x in val_res)
 
-        best_train_loss, best_val_loss = utils.log(logger, writer, e, train_avg, val_avg, net, opt, schedule_lr, best_train_loss, best_val_loss, save_dir)
-        H = utils.update_train_history(H, train_avg, val_avg)
+            best_train_loss, best_val_loss = utils.log(logger, writer, e, train_avg, val_avg, net, opt,
+                                                       scheduler, best_train_loss, best_val_loss, save_dir)
+            H = utils.update_train_history(H, train_avg, val_avg)
 
-        schedule_lr.step()
-        pbar.update(1)
+            scheduler.step(val_avg[-1])
+            pbar.update(1)
+    except KeyboardInterrupt:
+        utils.checkpoint(e, net, opt, train_avg[0], train_avg[-1], save_dir, 'interrupted.pth')
+        logger.info('Saved interrupt')
+        raise
 
     toc = time.time()
     logger.info('\nTotal time taken to train the model: {:.3f}s'.format(toc - tic))

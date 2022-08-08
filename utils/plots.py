@@ -6,6 +6,7 @@ sys.path.append('core')
 import os
 import nibabel as nib
 import torch
+import os.path as osp
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -32,7 +33,7 @@ def createSaveDirectory(OUTPUT_PATH, name):
     saveDir = os.path.sep.join([OUTPUT_PATH, name + "_" + timestr])
     if not os.path.exists(saveDir):
         os.makedirs(saveDir)
-    print("save results to directory: ", saveDir, "\n")
+    # print("save results to directory: ", saveDir, "\n")
     return saveDir
 
 
@@ -43,7 +44,7 @@ def createSubDirectory(saveDir, SUBDIR_PATH):
     return subDir
 
 
-def create_logger(save_dir):
+def create_logger(save_dir) -> logging.Logger:
     logging.basicConfig(filename=os.path.join(save_dir, "console.log"),
                         format='%(asctime)s %(levelname)s %(message)s',
                         datefmt='%H:%M:%S',
@@ -51,6 +52,13 @@ def create_logger(save_dir):
     logger = logging.getLogger()
     logger.addHandler(logging.StreamHandler(sys.stdout))
     return logger
+
+
+def save_config(config, save_dir, filename='config.ini'):
+    # save config file to save directory
+    conifg_output = osp.join(save_dir, filename)
+    with open(conifg_output, 'w') as config_file:
+        config.write(config_file)
 
 
 def printConsoleOutput_Header(title):

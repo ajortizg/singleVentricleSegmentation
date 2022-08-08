@@ -1,12 +1,12 @@
 import sys
-import numpy as np
-import nibabel as nib
 from tqdm import tqdm
 import os
 import pandas as pd
+import glob
 import configparser
 import shutil
 import os.path as osp
+import shutil
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../../'))
 sys.path.append(ROOT_DIR)
@@ -14,78 +14,81 @@ from utils import plots
 from dataset.singleVentricleDataset import SingleVentricleDataset
 
 
-def save_nifty(file_nii, saveDir, fileName):
-    outputFile = os.path.sep.join([saveDir, fileName])
-    nib.save(file_nii, outputFile)
-
-
-def save_data(patient, saveDir4D, saveDirSegmentations):
-    saveDirPatient = plots.createSubDirectory(saveDirSegmentations, patient.name)
-
-    save_nifty(patient.nii_xyzt, saveDir4D, patient.name + ".nii.gz")
-    save_nifty(patient.nii_mask_diastole_load, saveDirPatient, patient.name + "_Diastole_Labelmap.nii")
-    save_nifty(patient.nii_mask_systole_load, saveDirPatient, patient.name + "_Systole_Labelmap.nii")
-
-    # row = {'Name': patient.name, 'Systole': patient.tSystole, 'Diastole': patient.tDiastole, 'original_NT': patient.original_NT}
-    # df_patient = pd.DataFrame(row, index=[0])
-    # return df_patient
-    return patient.df_row
+def copy(patient_name, src_img4d_dir, dst_img4d_dir, dst_segmentations_dir, dset):
+    shutil.copy(src_img4d_dir, dst_img4d_dir)
+    src_segmentation_files = glob.glob(osp.sep.join([dset.segmentations_path, patient_name, '*.nii']))
+    dst_segmentations_dir = plots.createSubDirectory(dst_segmentations_dir, patient_name)
+    [shutil.copy(f, dst_segmentations_dir) for f in src_segmentation_files]
+    return dset.get_row(patient_name)
 
 
 if __name__ == "__main__":
-    plots.printConsoleOutput_Header("preprocessing data: split train and validation dataset")
-
     # load config parser
     config = configparser.ConfigParser()
     config.read('parser/configPreprocessing.ini')
 
     # create save directory
     saveDir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), "preprocessing_split")
+    logger = plots.create_logger(saveDir)
+    logger.info('Preprocessing data: split train, validation and test dataset')
+    logger.info(f'Save directory: {saveDir}')
 
-    # save config file to save directory
-    conifgOutput = os.path.sep.join([saveDir, "config.ini"])
-    with open(conifgOutput, 'w') as configfile:
-        config.write(configfile)
+    plots.save_config(config, saveDir, 'config.ini')
 
-    dataSet = SingleVentricleDataset(config)
+    dset = SingleVentricleDataset(config)
 
-    # load specific patients for validation
+    # load specific patients for validation and testing
     val_patients = set(config.get('SPLIT', 'validation_patients').replace('{', '').replace('}', '').replace('\n', '').split(','))
+    test_patients = set(config.get('SPLIT', 'test_patients').replace('{', '').replace('}', '').replace('\n', '').split(','))
 
     # Paths for training dataset
-    saveDir_train = plots.createSubDirectory(saveDir, 'train')
-    saveDir4D_train = plots.createSubDirectory(saveDir_train, dataSet.volumes_subdir_path)
-    saveDirSegmentations_train = plots.createSubDirectory(saveDir_train, dataSet.segmentations_subdir_path)
+    save_dir_train = plots.createSubDirectory(saveDir, 'train')
+    img4d_dir_train = plots.createSubDirectory(save_dir_train, dset.volumes_subdir_path)
+    segmentations_dir_train = plots.createSubDirectory(save_dir_train, dset.segmentations_subdir_path)
 
     # Paths for validation dataset
-    saveDir_val = plots.createSubDirectory(saveDir, 'val')
-    saveDir4D_val = plots.createSubDirectory(saveDir_val, dataSet.volumes_subdir_path)
-    saveDirSegmentations_val = plots.createSubDirectory(saveDir_val, dataSet.segmentations_subdir_path)
+    save_dir_val = plots.createSubDirectory(saveDir, 'val')
+    img4d_dir_val = plots.createSubDirectory(save_dir_val, dset.volumes_subdir_path)
+    segmentations_dir_val = plots.createSubDirectory(save_dir_val, dset.segmentations_subdir_path)
 
-    # iterate over all patients
-    pbar = tqdm(total=len(dataSet))
+    # Paths for test dataset
+    save_dir_test = plots.createSubDirectory(saveDir, 'test')
+    img4d_dir_test = plots.createSubDirectory(save_dir_test, dset.volumes_subdir_path)
+    segmentations_dir_test = plots.createSubDirectory(save_dir_test, dset.segmentations_subdir_path)
+
+    imgs4d_dir_full = glob.glob(osp.join(dset.volumes_path, '*.nii.gz'))
+    logger.info(f'Found {len(imgs4d_dir_full)} .nii.gz files')
+    pbar = tqdm(total=len(dset))
     df_val = pd.DataFrame()
     df_train = pd.DataFrame()
-    for index in range(0, len(dataSet)):
-        patient = dataSet[index]
-        pbar.set_postfix_str(f'P: {patient.name}')
+    df_test = pd.DataFrame()
 
-        if patient.name in val_patients:
-            df = save_data(patient, saveDir4D_val, saveDirSegmentations_val)
-            df_val = pd.concat([df_val, df])
+    for src_img4d_dir in imgs4d_dir_full:
+        patient_name = src_img4d_dir.split('/')[-1].split('.')[0]
+
+        if patient_name in val_patients:
+            row = copy(patient_name, src_img4d_dir, img4d_dir_val, segmentations_dir_val, dset)
+            df_val = pd.concat([df_val, row])
+
+        elif patient_name in test_patients:
+            row = copy(patient_name, src_img4d_dir, img4d_dir_test, segmentations_dir_test, dset)
+            df_test = pd.concat([df_test, row])
+
         else:
-            df = save_data(patient, saveDir4D_train, saveDirSegmentations_train)
-            df_train = pd.concat([df_train, df])
+            row = copy(patient_name, src_img4d_dir, img4d_dir_train, segmentations_dir_train, dset)
+            df_train = pd.concat([df_train, row])
 
         pbar.update(1)
     pbar.close()
 
-    # save data base
-    print("\n")
-    print("==================================")
-    print("save database to excel file")
-    output_df_file_val = os.path.sep.join([saveDir_val, dataSet.segmentations_filename])
-    df_val.to_excel(output_df_file_val, index=False)
-
-    output_df_file_train = os.path.sep.join([saveDir_train, dataSet.segmentations_filename])
+    output_df_file_train = osp.sep.join([save_dir_train, dset.segmentations_filename])
     df_train.to_excel(output_df_file_train, index=False)
+    logger.info(f'Saved: {output_df_file_train}')
+
+    output_df_file_val = osp.sep.join([save_dir_val, dset.segmentations_filename])
+    df_val.to_excel(output_df_file_val, index=False)
+    logger.info(f'Saved: {output_df_file_val}')
+
+    output_df_file_test = osp.sep.join([save_dir_test, dset.segmentations_filename])
+    df_test.to_excel(output_df_file_test, index=False)
+    logger.info(f'Saved: {output_df_file_test}')

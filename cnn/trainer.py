@@ -46,10 +46,8 @@ class Trainer:
             mk = mk.to(self.device)
             ff = ff.to(self.device)
             bf = bf.to(self.device)
-
             offsets = offsets.to(torch.long)
-            BS = offsets.shape[0]
-            batch_indices = torch.arange(BS)
+            batch_indices = torch.arange(offsets.shape[0])
 
             mts, mtts, mhs, mhhs = self.time_popagation(img4d, m0, mk, times_fwd, times_bwd, ff, bf, batch_indices)
             loss = self.compute_loss(mts, mtts, offsets, batch_indices, mhs, mhhs)
@@ -78,10 +76,8 @@ class Trainer:
                 mk = mk.to(self.device)
                 ff = ff.to(self.device)
                 bf = bf.to(self.device)
-
                 offsets = offsets.to(torch.long)
-                BS = offsets.shape[0]
-                batch_indices = torch.arange(BS)
+                batch_indices = torch.arange(offsets.shape[0])
 
                 mts, mtts, mhs, mhhs = self.time_popagation(img4d, m0, mk, times_fwd, times_bwd, ff, bf, batch_indices)
                 loss = self.compute_loss(mts, mtts, offsets, batch_indices, mhs, mhhs)
@@ -206,7 +202,7 @@ class Trainer:
         l1 = self.loss_fn(m0tt, m0)
 
         # compute l2
-        mk = mtts[-1]
+        mk = mtts[-1, batch_indices]
         mkt = mts[-offsets[batch_indices] - 1, batch_indices]
         l2 = self.loss_fn(mkt, mk)
 

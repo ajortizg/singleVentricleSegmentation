@@ -4,12 +4,16 @@ import torch.nn as nn
 import os.path as osp
 import torch.nn.functional as F
 import torch.nn.utils.parametrize as P
-import lipschitz as L
 from monai.networks.nets.basic_unet import BasicUNet
+import sys
 from monai.networks.nets.unet import UNet
 
+ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
+sys.path.append(ROOT_DIR)
+import cnn.lipschitz as L
 
-class UNet3D(nn.Module):
+
+class UNet3d(nn.Module):
     def __init__(self, config, logger):
         num_layers = config.getint('PARAMETERS', 'NUM_LAYERS')
         num_classes = config.getint('PARAMETERS', 'NUM_CLASSES')
@@ -49,7 +53,8 @@ class UNet3D(nn.Module):
             in_size *= 2
 
         if lipschitz_reg:
-            layers.append(P.register_parametrization(nn.Conv3d(feats, num_classes, kernel_size=1), 'weight',
+            layers.append(P.register_parametrization(nn.Conv3d(feats, num_classes, kernel_size=1),
+                                                     'weight',
                                                      L.L2LipschitzConv3d(in_size, ks=1, eps=power_eps, iterations=power_its, max_lc=max_lc)))
         else:
             layers.append(nn.Conv3d(feats, num_classes, kernel_size=1))
@@ -80,27 +85,25 @@ class DoubleConv3d(nn.Module):
                  lipschitz=False, max_lc=1.0, power_its=1, power_eps=1e-8, in_size=8):
         super().__init__()
         self.net = nn.Sequential(
-            P.register_parametrization(
-                nn.Conv3d(in_ch, out_ch, kernel_size=kernel_size, padding=padding),
-                'weight', L.L2LipschitzConv3d(
-                    in_size, ks=kernel_size, padding=padding, eps=power_eps, iterations=power_its, max_lc=max_lc))
+            P.register_parametrization(nn.Conv3d(in_ch, out_ch, kernel_size=kernel_size, padding=padding),
+                                       'weight',
+                                       L.L2LipschitzConv3d(in_size, ks=kernel_size, padding=padding, eps=power_eps, iterations=power_its, max_lc=max_lc))
             if lipschitz else nn.Conv3d(in_ch, out_ch, kernel_size=kernel_size, padding=padding),
-            nn.InstanceNorm3d(out_ch),
+            # nn.InstanceNorm3d(out_ch),
             self.activation_fn(act, slope),
-            P.register_parametrization(
-                nn.Conv3d(out_ch, out_ch, kernel_size=kernel_size, padding=padding),
-                'weight', L.L2LipschitzConv3d(
-                    in_size, ks=kernel_size, padding=padding, eps=power_eps, iterations=power_its, max_lc=max_lc))
+            P.register_parametrization(nn.Conv3d(out_ch, out_ch, kernel_size=kernel_size, padding=padding),
+                                       'weight',
+                                       L.L2LipschitzConv3d(in_size, ks=kernel_size, padding=padding, eps=power_eps, iterations=power_its, max_lc=max_lc))
             if lipschitz else nn.Conv3d(out_ch, out_ch, kernel_size=kernel_size, padding=padding),
-            nn.InstanceNorm3d(out_ch),
+            # nn.InstanceNorm3d(out_ch),
             self.activation_fn(act, slope))
 
     def activation_fn(self, act, slope):
         act_fn = nn.Module
         if act == 'relu':
-            act_fn = nn.ReLU(inplace=True)
+            act_fn = nn.ReLU()
         elif act == 'leaky_relu':
-            act_fn = nn.LeakyReLU(negative_slope=slope, inplace=True)
+            act_fn = nn.LeakyReLU(negative_slope=slope)
         elif act == 'prelu':
             act_fn = nn.PReLU(num_parameters=1)
         return act_fn
@@ -133,14 +136,15 @@ class Up3d(nn.Module):
         if trilinear:
             self.upsample = nn.Sequential(
                 nn.Upsample(scale_factor=2, mode="trilinear", align_corners=True),
-                P.register_parametrization(
-                    nn.Conv3d(in_ch, in_ch // 2, kernel_size=1), 'weight',
-                    L.L2LipschitzConv3d(in_size, ks=kernel_size, eps=power_eps, iterations=power_its, max_lc=max_lc))
+                P.register_parametrization(nn.Conv3d(in_ch, in_ch // 2, kernel_size=1),
+                                           'weight',
+                                           L.L2LipschitzConv3d(in_size, ks=kernel_size, eps=power_eps, iterations=power_its, max_lc=max_lc))
                 if lipschitz else nn.Conv3d(in_ch, in_ch // 2, kernel_size=1))
         else:
             if lipschitz:
                 self.upsample = P.register_parametrization(
-                    nn.ConvTranspose3d(in_ch, in_ch // 2, kernel_size=2, stride=2), 'weight',
+                    nn.ConvTranspose3d(in_ch, in_ch // 2, kernel_size=2, stride=2),
+                    'weight',
                     L.L2LipschitzConvTranspose3d(in_size, ks=2, stride=2, eps=power_eps, iterations=power_its, max_lc=max_lc))
             else:
                 self.upsample = nn.ConvTranspose3d(in_ch, in_ch // 2, kernel_size=2, stride=2)
@@ -179,8 +183,8 @@ class BasicUnet3d(nn.Module):
         features.append(features_start)
 
         self.unet = BasicUNet(spatial_dims=3, in_channels=input_channels, out_channels=num_classes,
-                              act=("LeakyReLU", {"negative_slope": slope, "inplace": True}),
-                              norm=("instance", {"affine": True}),
+                              act=("LeakyReLU", {"negative_slope": slope, "inplace": False}),
+                              norm=("instance", {"affine": False}),
                               features=features)
 
     def forward(self, x):
@@ -207,8 +211,8 @@ class ResUnet3d(nn.Module):
 
         self.unet = UNet(spatial_dims=3, in_channels=input_channels, out_channels=num_classes, channels=channels,
                          strides=strides, num_res_units=num_res_units,
-                         act=("LeakyReLU", {"negative_slope": slope, "inplace": True}),
-                         norm=("instance", {"affine": True}))
+                         act=("LeakyReLU", {"negative_slope": slope, "inplace": False}),
+                         norm=("instance", {"affine": False}))
 
     def forward(self, x):
         identity = x[:, 1:2, :, :, :].clone()

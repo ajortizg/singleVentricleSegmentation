@@ -40,7 +40,6 @@ def save_np_to_nifty(file, saveDir, fileName, hdr_old):
 
 
 if __name__ == "__main__":
-
     plots.printConsoleOutput_Header("preprocessing data: flipping nifty files")
 
     # load config parser
@@ -66,7 +65,6 @@ if __name__ == "__main__":
     yflip = np.zeros(len(dataSet))
     zflip = np.zeros(len(dataSet))
 
-    #
     saveDir4D = plots.createSubDirectory(saveDir, dataSet.volumes_subdir_path)
     saveDirSegmentations = plots.createSubDirectory(saveDir, dataSet.segmentations_subdir_path)
 
@@ -85,6 +83,13 @@ if __name__ == "__main__":
         save_np_to_nifty(patient.nii_data_xyzt, saveDir4D, patient.name + ".nii.gz", patient.nii_header_xyzt)
         save_np_to_nifty(nii_mask_diastole_xyz_flip, saveDirPatient, patient.name + "_Diastole_Labelmap.nii", patient.hdr_mask_diastole)
         save_np_to_nifty(nii_mask_systole_xyz_flip, saveDirPatient, patient.name + "_Systole_Labelmap.nii", patient.hdr_mask_systole)
+
+        # flip masks for the whole cycle
+        if patient.full_cycle:
+            for t in range(patient.NT):
+                mask_flipped = flip_mask(patient.name, patient.nii_masks_xyz[t], flip_all)
+                mask_filename = patient.masks_dirs[t].split('/')[-1]
+                save_np_to_nifty(mask_flipped, saveDirPatient, mask_filename, patient.nii_masks_load[t].header)
 
         if patient.name in flip_all:
             xflip[index] = 1

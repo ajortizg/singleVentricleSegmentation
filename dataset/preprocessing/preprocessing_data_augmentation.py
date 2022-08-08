@@ -66,27 +66,11 @@ if __name__ == "__main__":
     ed_bdryMode = config.get('DATA_AUGMENTATION', 'ELASTIC_DEFORM_BDRYMODE')
     ed_usePrefilter = config.getboolean('DATA_AUGMENTATION', 'ELASTIC_DEFORM_USE_PREFILTER')
 
-    # Additive gaussian noise
-    noise_prob = config.getfloat('DATA_AUGMENTATION', 'NOISE_PROB')
-    noise_mu = config.getfloat('DATA_AUGMENTATION', 'NOISE_MU')
-    noise_sigma = config.getfloat('DATA_AUGMENTATION', 'NOISE_SIGMA')
-
-    # Intensity scaling
-    scaling_prob = config.getfloat('DATA_AUGMENTATION', 'SCALING_PROB')
-    scaling_range = tuple(map(float, config.get('DATA_AUGMENTATION', 'SCALING_RANGE').split(',')))
-
-    # Clip
-    clip_prob = config.getfloat('DATA_AUGMENTATION', 'CLIP_PROB')
-    clip_interval = tuple(map(float, config.get('DATA_AUGMENTATION', 'CLIP_INTERVAL').split(',')))
-
     transf_tern = T.ComposeTernary(
         [T.OneOf([T.RandomFlipZ(p=flip_prob_z), T.RandomFlipY(p=flip_prob_y), T.RandomFlipX(p=flip_prob_x)]),
          T.RandomRotate(p=prob_rot, range_z=rot_range_z, range_y=rot_range_y, range_x=rot_range_x, total=None, boundary=rot_bdryMode),
          T.ElasticDeformation(p=ed_prob, sigma_range=(ed_sigma_min, ed_sigma_max),
-                              points=ed_grid, boundary_mode=ed_bdryMode, use_prefilter=ed_usePrefilter),
-         T.AdditiveGaussianNoise(p=noise_prob, mu=noise_mu, sigma=noise_sigma),
-         T.IntensityScaling(p=scaling_prob, scale_range=scaling_range),
-         T.Clip(p=clip_prob, interval=clip_interval)])
+                              points=ed_grid, boundary_mode=ed_bdryMode, use_prefilter=ed_usePrefilter)])
 
     train_ds = SingleVentricleDataset(config, mode='train')
     val_ds = SingleVentricleDataset(config, mode='val')
@@ -102,9 +86,6 @@ if __name__ == "__main__":
     logger.info(f'\t* Rot prob: {prob_rot}, with ranges: {rot_range_x}, {rot_range_y}, {rot_range_z}')
     logger.info(
         f'\t* Elastic def prob: {ed_prob}, grid: {ed_grid}, sigma: {ed_sigma_min,ed_sigma_max}, boundary: {ed_bdryMode}, prefilter: {ed_usePrefilter}')
-    logger.info(f'\t* Noise prob: {noise_prob}, mu: {noise_mu}, sigma: {noise_sigma}')
-    logger.info(f'\t* Scaling prob: {scaling_prob}, range: {scaling_range}')
-    logger.info(f'\t* Clip prob: {clip_prob}, interval: {clip_interval}')
     logger.info("===========================================================")
     logger.info('\nsave directory: ' + saveDir)
 

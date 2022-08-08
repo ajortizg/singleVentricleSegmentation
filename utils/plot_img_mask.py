@@ -17,35 +17,39 @@ if __name__ == "__main__":
 
     img4d_transf = T.ComposeUnary([T.Normalize(), T.ToTensor()])
     mask_transf = T.ComposeUnary([T.Round(th=0.5), T.ToTensor()])
-    train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, LoadFlowMode.NO_LOAD_OF, img4d_transf, mask_transf)
-    val_ds = SingleVentricleDataset(config, DatasetMode.VAL, LoadFlowMode.NO_LOAD_OF, img4d_transf, mask_transf)
+    train_ds = SingleVentricleDataset(config, DatasetMode.FULL, LoadFlowMode.NO_LOAD_OF, img4d_transf, mask_transf)
+    # val_ds = SingleVentricleDataset(config, DatasetMode.VAL, LoadFlowMode.NO_LOAD_OF, img4d_transf, mask_transf)
 
     save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'ImageMask')
-
-    conifg_output = os.path.sep.join([save_dir, "config.ini"])
-    with open(conifg_output, 'w') as configfile:
-        config.write(configfile)
+    plots.save_config(config, save_dir, 'config.ini')
 
     erode = T.ComposeUnary([T.ToArray(), T.Erode(th=0.5), T.ToTensor()])
-    pbar = tqdm(total=len(train_ds) + len(val_ds))
-    for ds in [train_ds, val_ds]:
-        for (pname, data, m0, mk, init_ts, final_ts, _, _) in ds:
-            pbar.set_postfix_str(f'{pname}')
+    pbar = tqdm(total=len(train_ds))
+    for ds in [train_ds]:
+        for (pname, data, m0, mk, masks, init_ts, final_ts, _, _) in ds:
+            if masks is not None:
+                print(pname, 'full_cycle')
 
             timesteps = data.shape[3]
             for t in range(timesteps):
                 u = data[:, :, :, t]
                 # uk= data[:, :, :, final_ts]
+                if masks is not None:
+                    patient_dir = plots.createSubDirectory(save_dir, pname)
 
-                patient_dir = plots.createSubDirectory(save_dir, pname)
                 if t == init_ts:
-                    plots.save_img_masks(u, [m0, erode(m0)], f'{pname}_u{t}.png', patient_dir,
-                                         th=0.5, alphas=[0.2, 1.0], colors=[[1, 0.75, 0], [0, 1, 0]])
+                    if masks is not None:
+                        plots.save_img_masks(u, [m0, erode(m0), erode(masks[t])], f'{pname}_t{t}.png', patient_dir,
+                                             th=0.5, alphas=[0.2, 1.0, 1.0], colors=[[1, 0.75, 0], [0, 1, 0], [0, 0, 1]])
                 elif t == final_ts:
-                    plots.save_img_masks(u, [mk, erode(mk)], f'{pname}_u{t}.png', patient_dir,
-                                         th=0.5, alphas=[0.2, 1.0], colors=[[0, 0.75, 1], [1, 0, 0]])
+                    if masks is not None:
+                        plots.save_img_masks(u, [mk, erode(mk), erode(masks[t])], f'{pname}_t{t}.png', patient_dir,
+                                             th=0.5, alphas=[0.2, 1.0, 1.0], colors=[[0, 0.75, 1], [1, 0, 0], [0, 0, 1]])
                 else:
-                    plots.save_img_masks(u, [], f'{pname}_u{t}.png', patient_dir, th=None, alphas=None, colors=None)
+                    if masks is not None:
+                        plots.save_img_masks(u, [erode(masks[t])], f'{pname}_t{t}.png', patient_dir, th=0.5, alphas=[1.0], colors=[[0, 0, 1]])
+                    # else:
+                    #     plots.save_img_masks(u, [], f'{pname}_u{t}.png', patient_dir, th=None, alphas=None, colors=None)
 
                 # plots.save_img_masks_slices(u0, [m0, erode(m0)], patient_dir, 'm0', 0.5, alphas=[0.2, 1.0], colors=[[1, 0.75, 0], [0, 1, 0]])
                 # plots.save_img_masks_slices(uk, [mk, erode(mk)], patient_dir, 'mk', 0.5, alphas=[0.2, 1.0], colors=[[0, 0.75, 1], [1, 0, 0]])
