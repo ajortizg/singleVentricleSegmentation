@@ -176,6 +176,7 @@ class BasicUnet3d(nn.Module):
         features_start = config.getint('PARAMETERS', 'FEATURES_START')
         act = config.get('PARAMETERS', 'ACTIVATION')
         slope = config.getfloat('PARAMETERS', 'ACTIVATION_SLOPE')
+        self.residual = config.getboolean('PARAMETERS', 'RESIDUAL')
 
         features = [features_start]
         for _ in range(1, 5):
@@ -188,9 +189,15 @@ class BasicUnet3d(nn.Module):
                               features=features)
 
     def forward(self, x):
-        identity = x[:, 1:2, :, :, :].clone()
+        if self.residual:
+            identity = x[:, 1:2, :, :, :].clone()
+
         x = self.unet(x)
-        return x + identity, x
+
+        if self.residual:
+            return x + identity, x
+        else:
+            return x, x
 
 
 class ResUnet3d(nn.Module):
@@ -202,6 +209,7 @@ class ResUnet3d(nn.Module):
         features_start = config.getint('PARAMETERS', 'FEATURES_START')
         slope = config.getfloat('PARAMETERS', 'ACTIVATION_SLOPE')
         num_res_units = config.getint('PARAMETERS', 'NUM_RES_UNITS')
+        self.residual = config.getboolean('PARAMETERS', 'RESIDUAL')
 
         channels = [features_start]
         strides = []
@@ -215,6 +223,12 @@ class ResUnet3d(nn.Module):
                          norm=("instance", {"affine": False}))
 
     def forward(self, x):
-        identity = x[:, 1:2, :, :, :].clone()
+        if self.residual:
+            identity = x[:, 1:2, :, :, :].clone()
+
         x = self.unet(x)
-        return x + identity, x
+
+        if self.residual:
+            return x + identity, x
+        else:
+            return x, x

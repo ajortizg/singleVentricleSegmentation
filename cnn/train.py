@@ -11,6 +11,7 @@ import os.path as osp
 import cnn_utils as utils
 import os
 from torchsummary import summary
+from basic_unet import BasicUNet3d
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
@@ -21,7 +22,7 @@ from cnn.trainer import Trainer
 
 
 if __name__ == "__main__":
-    utils.seeding(42)
+    # utils.seeding(42)
 
     config = configparser.ConfigParser()
     config.read('parser/configCNNTrain.ini')
@@ -30,15 +31,22 @@ if __name__ == "__main__":
     P = utils.read_train_params(config)
 
     # Create train and validation datasets
-    train_imgs_transforms = T.ComposeUnary([T.IntensityScalingWithClip(p=0.5, scale_range=(0.9, 1.1), clip_interval=(0.0, 1.0)),
-                                            T.ToTensor()])
-    val_imgs_transforms = T.ComposeUnary([T.ToTensor()])
-    mask_transforms = T.ComposeUnary([T.Round(th=0.5),
-                                      T.ToTensor()])
-    train_full_transforms = T.ComposeTernary([T.RandomRotate()])                                      
+    train_transforms = T.ComposeFull([T.MutiplicativeScaling(0.5, scale_range=(0.9, 1.1), clip_interval=(0.0, 1.0)),
+                                      T.AdditiveScaling(p=0.3, mean=0.0, std=0.25, clip_interval=(0.0, 1.0)),
+                                      T.GammaScaling(p=0.3, gamma_range=(0.9, 1.1)),
+                                      T.AdditiveGaussianNoise(p=0.2, mu=0, sigma=0.03, clip_interval=(0.0, 1.0)),
+                                      T.RandomVerticalFlip(0.5),
+                                      T.RandomHorizontalFlip(0.5),
+                                      T.RandomDepthFlip(0.5),
+                                      T.BinarizeMasks(th=0.5),
+                                      T.ToTensorFull()])
+    val_transforms = T.ComposeFull([T.BinarizeMasks(th=0.5),
+                                    T.ToTensorFull()])
 
-    train_ds = ds.SingleVentricleDataset(config, ds.DatasetMode.TRAIN, ds.LoadFlowMode.TRAIN_OF, train_imgs_transforms, mask_transforms)
-    val_ds = ds.SingleVentricleDataset(config, ds.DatasetMode.VAL, ds.LoadFlowMode.TRAIN_OF, val_imgs_transforms, mask_transforms)
+    train_ds = ds.SingleVentricleDataset(config, ds.DatasetMode.TRAIN, ds.LoadFlowMode.TRAIN_VAL_OF,
+                                         full_transforms=train_transforms)
+    val_ds = ds.SingleVentricleDataset(config, ds.DatasetMode.VAL, ds.LoadFlowMode.TRAIN_VAL_OF,
+                                       full_transforms=val_transforms)
 
     # Create data loaders
     train_loader = DataLoader(train_ds, batch_size=P['batch_size'], shuffle=True, num_workers=P['workers'], collate_fn=utils.collate_fn)
@@ -52,11 +60,15 @@ if __name__ == "__main__":
     # Create model
     net = utils.create_net(config, logger).to(device)
     summary(net, input_size=(2, 80, 80, 80), batch_size=P['batch_size'])
-
     net = torch.nn.DataParallel(net, device_ids=np.arange(P['gpus']).tolist())
+    if P['pretrained']:
+        checkpoint_file = P['checkpoint_file']
+        checkpoint = torch.load(checkpoint_file)
+        net.load_state_dict(checkpoint['model_state_dict'], strict=True)
+        logger.info(f'Use pretrained weights: {checkpoint_file}')
+
     opt = optim.Adam(net.parameters(), lr=P['lr'], weight_decay=P['weight_decay'], betas=(P['beta1'], P['beta2']))
     scheduler = optim.lr_scheduler.StepLR(opt, step_size=P['step_size'], gamma=P['gamma'])
-    # scheduler = optim.lr_scheduler.ReduceLROnPlateau(opt, 'max', patience=3)
 
     utils.save_config(config, save_dir, 'config.ini')
     utils.save_model(net, save_dir, 'net.txt')
@@ -91,7 +103,7 @@ if __name__ == "__main__":
                                                        scheduler, best_train_loss, best_val_loss, save_dir)
             H = utils.update_train_history(H, train_avg, val_avg)
 
-            scheduler.step(val_avg[-1])
+            scheduler.step()
             pbar.update(1)
     except KeyboardInterrupt:
         utils.checkpoint(e, net, opt, train_avg[0], train_avg[-1], save_dir, 'interrupted.pth')

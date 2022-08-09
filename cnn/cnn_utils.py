@@ -47,7 +47,9 @@ def read_train_params(config):
         'epochs': config.getint('PARAMETERS', 'NUM_EPOCHS'),
         'loss_lambda': config.getfloat('PARAMETERS', 'LOSS_LAMBDA'),
         'gpus': config.getint('PARAMETERS', 'NUM_GPUS'),
-        'workers': config.getint('PARAMETERS', 'NUM_WORKERS')
+        'workers': config.getint('PARAMETERS', 'NUM_WORKERS'),
+        'pretrained': config.getboolean('PARAMETERS', 'PRETRAINED'),
+        'checkpoint_file': config.get('PARAMETERS', 'CHECKPOINT_FILE')
     }
     return params
 
@@ -145,7 +147,7 @@ def save_weights(net: Module, epoch: int, every: int, save_dir: str, filename: s
 
 
 def collate_fn(data):
-    pnames, imgs4d, m0s, mks, init_ts, final_ts, ff, bf = zip(*data)
+    pnames, imgs4d, m0s, mks, masks, init_ts, final_ts, ff, bf = zip(*data)
 
     list_times_fwd, list_times_bwd = collate_times(init_ts, final_ts)
     ff, bf, offsets = collate_optical_flow(ff, bf)
@@ -158,7 +160,13 @@ def collate_fn(data):
     m0s.unsqueeze_(1)
     mks.unsqueeze_(1)
 
-    return (pnames, imgs4d, m0s, mks, list_times_fwd, list_times_bwd, ff, bf, offsets)
+    # print(masks)
+
+    # if masks is not None:
+    #     masks = to_tensor(masks)
+    #     masks.unsqueeze_(1)
+
+    return (pnames, imgs4d, m0s, mks, masks, list_times_fwd, list_times_bwd, ff, bf, offsets)
 
 
 def collate_times(init_ts, final_ts):

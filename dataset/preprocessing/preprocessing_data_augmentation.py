@@ -66,11 +66,10 @@ if __name__ == "__main__":
     ed_bdryMode = config.get('DATA_AUGMENTATION', 'ELASTIC_DEFORM_BDRYMODE')
     ed_usePrefilter = config.getboolean('DATA_AUGMENTATION', 'ELASTIC_DEFORM_USE_PREFILTER')
 
-    transf_tern = T.ComposeTernary(
-        [T.OneOf([T.RandomFlipZ(p=flip_prob_z), T.RandomFlipY(p=flip_prob_y), T.RandomFlipX(p=flip_prob_x)]),
-         T.RandomRotate(p=prob_rot, range_z=rot_range_z, range_y=rot_range_y, range_x=rot_range_x, total=None, boundary=rot_bdryMode),
-         T.ElasticDeformation(p=ed_prob, sigma_range=(ed_sigma_min, ed_sigma_max),
-                              points=ed_grid, boundary_mode=ed_bdryMode, use_prefilter=ed_usePrefilter)])
+    transf_tern = T.ComposeTernary([
+        T.RandomRotate(p=prob_rot, range_z=rot_range_z, range_y=rot_range_y, range_x=rot_range_x, total=None, boundary=rot_bdryMode),
+        T.ElasticDeformation(p=ed_prob, sigma_range=(ed_sigma_min, ed_sigma_max), points=ed_grid, boundary_mode=ed_bdryMode, use_prefilter=ed_usePrefilter)
+    ])
 
     train_ds = SingleVentricleDataset(config, mode='train')
     val_ds = SingleVentricleDataset(config, mode='val')

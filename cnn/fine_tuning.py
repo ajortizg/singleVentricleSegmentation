@@ -52,7 +52,7 @@ if __name__ == "__main__":
     # Create validation dataset and loader
     img4d_transforms = T.ComposeUnary([T.ToTensor()])
     mask_transforms = T.ComposeUnary([T.Round(th=0.5), T.ToTensor()])
-    train_ds = ds.SingleVentricleDataset(config_train, ds.DatasetMode.VAL, ds.LoadFlowMode.TRAIN_OF, img4d_transforms, mask_transforms)
+    train_ds = ds.SingleVentricleDataset(config_train, ds.DatasetMode.VAL, ds.LoadFlowMode.TRAIN_VAL_OF, img4d_transforms, mask_transforms)
     train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS, collate_fn=cnn_utils.collate_fn)
 
     save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'FT')

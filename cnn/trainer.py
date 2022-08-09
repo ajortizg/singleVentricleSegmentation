@@ -39,7 +39,7 @@ class Trainer:
         total_loss = (0.0, 0.0, 0.0, 0.0, 0.0)
         total_acc = 0
 
-        for i, (pnames, img4d, m0, mk, times_fwd, times_bwd, ff, bf, offsets) in enumerate(train_loader):
+        for i, (pnames, img4d, m0, mk, _, times_fwd, times_bwd, ff, bf, offsets) in enumerate(train_loader):
             self.pbar.set_postfix_str(f'Train: {i+1}/{len(train_loader)}')
             img4d = img4d.to(self.device)
             m0 = m0.to(self.device)
@@ -69,7 +69,7 @@ class Trainer:
         total_acc = 0
 
         with torch.no_grad():
-            for i, (pnames, img4d, m0, mk, times_fwd, times_bwd, ff, bf, offsets) in enumerate(val_loader):
+            for i, (pnames, img4d, m0, mk, _, times_fwd, times_bwd, ff, bf, offsets) in enumerate(val_loader):
                 self.pbar.set_postfix_str(f'Val: {i+1}/{len(val_loader)}')
                 img4d = img4d.to(self.device)
                 m0 = m0.to(self.device)
@@ -88,7 +88,7 @@ class Trainer:
                     self.plot_imgs(mts, mtts, offsets, batch_indices, 'val')
         return (*total_loss, total_acc)
 
-    def train_patient(self, imgs4d, m0s, mks, list_times_fwd, list_times_bwd, ff, bf, offsets, opt):
+    def train_patient(self, imgs4d, m0s, mks, _, list_times_fwd, list_times_bwd, ff, bf, offsets, opt):
         offsets = offsets.to(torch.long)
         BS = offsets.shape[0]
         batch_indices = torch.arange(BS)

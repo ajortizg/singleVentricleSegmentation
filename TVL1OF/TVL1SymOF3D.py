@@ -157,9 +157,9 @@ class TVL1SymOpticalFlow3D:
             Ic_pyramid.append(prolongationOp_cuda.forward(Ic_pyramid[s - 1]))
             Ir_pyramid.append(prolongationOp_cuda.forward(Ir_pyramid[s - 1]))
             u_pyramid.append(torch.zeros([meshInfo_pyramid[s].getNZ(), meshInfo_pyramid[s].getNY(),
-                      meshInfo_pyramid[s].getNX(), 3]).float().to(self.DEVICE))
+                                          meshInfo_pyramid[s].getNX(), 3]).float().to(self.DEVICE))
             p_pyramid.append(torch.zeros([meshInfo_pyramid[s].getNZ(), meshInfo_pyramid[s].getNY(),
-                      meshInfo_pyramid[s].getNX(), 3, 3]).float().to(self.DEVICE))
+                                          meshInfo_pyramid[s].getNX(), 3, 3]).float().to(self.DEVICE))
 
         return Il_pyramid, Ic_pyramid, Ir_pyramid, u_pyramid, p_pyramid, meshInfo_pyramid
 
@@ -176,7 +176,13 @@ class TVL1SymOpticalFlow3D:
         for s in range(self.NUM_SCALES - 1, -1, -1):
 
             # Compute the optical flow at scale s
-            u_pyramid[s], p_pyramid[s] = self.computeOnSingleStep(s, Il_pyramid[s], Ic_pyramid[s], Ir_pyramid[s], u_pyramid[s], p_pyramid[s], meshInfo_pyramid[s])
+            u_pyramid[s], p_pyramid[s] = self.computeOnSingleStep(
+                s, Il_pyramid[s],
+                Ic_pyramid[s],
+                Ir_pyramid[s],
+                u_pyramid[s],
+                p_pyramid[s],
+                meshInfo_pyramid[s])
 
             # save step
             self.saveSingleStepToFile(s, Il_pyramid[s], Ic_pyramid[s], Ir_pyramid[s], u_pyramid[s], p_pyramid[s], meshInfo_pyramid[s])
@@ -224,7 +230,7 @@ class TVL1SymOpticalFlow3D:
         tangents2 = torch.zeros([meshInfo.getNZ(), meshInfo.getNY(), meshInfo.getNX(), 3]).float().to(self.DEVICE)
         if self.useAnisotropicDifferentialOp:
             anistropicNablaOp = opticalFlow.AnisotropicNabla3D(meshInfo, self.anisotropicDifferentialOp_alpha, self.anisotropicDifferentialOp_beta)
-            #TODO for Il or Ir?
+            # TODO for Il or Ir?
             scalars, normals, tangents1, tangents2 = anistropicNablaOp.computeTangentVecs(Ic_grad)
 
         z = u
@@ -316,40 +322,43 @@ class TVL1SymOpticalFlow3D:
         saveDirStep = os.path.sep.join([self.saveDir, f"it{step}"])
         if not os.path.exists(saveDirStep):
             os.makedirs(saveDirStep)
-        
-        #save original images
+
+        # save original images
         save3D_torch_to_nifty(Il, saveDirStep, f"Il.nii")
         save_slices(Il, f"Il_it{step}.png", saveDirStep)
         save3D_torch_to_nifty(Ic, saveDirStep, f"Ic.nii")
         save_slices(Ic, f"Ic_it{step}.png", saveDirStep)
         save3D_torch_to_nifty(Ir, saveDirStep, f"Ir.nii")
         save_slices(Ir, f"Ir_it{step}.png", saveDirStep)
-        
-        #save warped images
+
+        # save warped images
         warpingOp = opticalFlow.Warping3D(meshInfo, self.InterpolationTypeCuda, self.BoundaryTypeCuda)
         Il_warped = warpingOp.forward(Il, -u)
         save_slices(Il_warped, f"Il_warped_it{step}.png", saveDirStep)
         Ir_warped = warpingOp.forward(Ir, u)
         save_slices(Ir_warped, f"Ir_warped_it{step}.png", saveDirStep)
 
-        #save warping error
+        # save warping error
         save_single_zslices(Ic, saveDirStep, "IcSlices", 1., 0)
         save_single_zslices(Ir_warped, saveDirStep, "IrWarpedSlices", 1., 0)
         diff = torch.abs(Ir_warped - Ic)
         save_slices(diff, f"Diff_Irwarped_to_Ic_it{step}.png", saveDirStep)
         save_single_zslices(diff, saveDirStep, "Diff_Irwarped_to_Ic_Slices", 1., 0)
-        #test
+        # test
         # print("norm of diff = ", diff.norm().item())
         # numZSlices = diff.shape[0]
         # for z in range(numZSlices):
         #     print(" norm of diff(z=", z, ") = ", diff[z, :, :].norm().item())
 
-
-        #save flow
+        # save flow
         plotOpticalFlow3D(u.cpu().detach().numpy(), "u", saveDirStep, step)
         flowName = f"flow_it{step}.pt"
         fileNameFlow = os.path.join(saveDirStep, flowName)
         torch.save(u, fileNameFlow)
+
+        flowName = f'flow_it{step}.npy'
+        fileNameFlow = os.path.join(saveDirStep, flowName)
+        np.save(fileNameFlow, u.cpu().detach().numpy())
 
         # Median filter pag 12. paper
         if self.USE_MEDIAN_FILTER:
@@ -360,7 +369,11 @@ class TVL1SymOpticalFlow3D:
             fileNameFlow = os.path.join(saveDirStep, flowName)
             torch.save(torch.from_numpy(uf).to(self.DEVICE), fileNameFlow)
 
-        #save dual variable
+            flowName = f"flow_m_it{step}.npy"
+            fileNameFlow = os.path.join(saveDirStep, flowName)
+            np.save(fileNameFlow, uf)
+
+        # save dual variable
         dualName = f"dual_it{step}.pt"
         fileNameDual = os.path.join(saveDirStep, dualName)
         torch.save(p, fileNameDual)

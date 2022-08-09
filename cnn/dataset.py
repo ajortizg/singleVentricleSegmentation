@@ -20,17 +20,19 @@ class DatasetMode(Enum):
 
 class LoadFlowMode(Enum):
     NO_LOAD_OF = 1
-    TRAIN_OF = 2
-    PREDICT_OF = 3
+    TRAIN_VAL_OF = 2
+    TEST_OF = 3
 
 
 class SingleVentricleDataset(Dataset):
-    def __init__(self, config, mode, flow_mode, img4d_transforms=None, mask_transforms=None):
+    def __init__(self, config, mode, flow_mode, img4d_transforms=None, mask_transforms=None, flow_transforms=None, full_transforms=None):
         self.config = config
         self.mode = mode
         self.flow_mode = flow_mode
         self.img4d_transforms = img4d_transforms    # transformations applied only on data
         self.mask_transforms = mask_transforms      # transformations applied only on masks
+        self.flow_transforms = flow_transforms      # transformations applied only on optical flow
+        self.full_transforms = full_transforms      # transformations applied on img, mask and optical flow
 
         self.base_path = config.get('DATA', 'BASE_PATH_3D')
         if mode == DatasetMode.TRAIN:
@@ -59,7 +61,7 @@ class SingleVentricleDataset(Dataset):
         if self.flow_mode != LoadFlowMode.NO_LOAD_OF:
             self.load_flow = True
             use_filtered_flow = config.getboolean('PARAMETERS', 'USE_MEDIAN_FILTERED_FLOW')
-            self.flow_name = 'flow_m_it0.pt' if use_filtered_flow else 'flow_it0.pt'
+            self.flow_name = 'flow_m_it0.npy' if use_filtered_flow else 'flow_it0.npy'
             self.flow_level = 'it0'
             self.fwdof_dir = osp.sep.join([config.get('DATA', 'BASE_PATH_3D'), 'optical_flow', 'forward'])
             self.bwdof_dir = osp.sep.join([config.get('DATA', 'BASE_PATH_3D'), 'optical_flow', 'backward'])
@@ -74,7 +76,7 @@ class SingleVentricleDataset(Dataset):
         tdias = df_row.loc[idx, 'Diastole']
         full_cycle = df_row.loc[idx, 'Full']
 
-        # Load 4D nifty [x,y,z,t]
+        # Load 4D nifty
         img4d = nib.load(osp.join(self.volumes_path, patient_name + '.nii.gz'))
         img4d_zyxt = np.swapaxes(img4d.get_fdata(), 0, 2)
 
@@ -91,21 +93,32 @@ class SingleVentricleDataset(Dataset):
         else:
             masks = None
 
-        if self.mask_transforms is not None:
-            mask_syst_zyx = self.mask_transforms(mask_syst_zyx)
-            mask_diast_zyx = self.mask_transforms(mask_diast_zyx)
-            if full_cycle:
-                masks = self.mask_transforms(masks)
-
-        if self.img4d_transforms is not None:
-            img4d_zyxt = self.img4d_transforms(img4d_zyxt)
-
         m0, mk, init_ts, final_ts = self.prepare_masks(tsyst, tdias, mask_syst_zyx, mask_diast_zyx)
 
-        # Load optical flow if needed
+        # Load optical flow
         ff, bf = None, None
         if self.load_flow:
             ff, bf = self.optflow_for_patient(patient_name, init_ts, final_ts, idx)
+
+        # Full transforms
+        if self.full_transforms is not None:
+            img4d_zyxt, m0, mk, ff, bf = self.full_transforms(img4d_zyxt, m0, mk, ff, bf)
+
+        # Mask transformations
+        if self.mask_transforms is not None:
+            m0 = self.mask_transforms(m0)
+            mk = self.mask_transforms(mk)
+            if full_cycle:
+                masks = self.mask_transforms(masks)
+
+        # Image transformations
+        if self.img4d_transforms is not None:
+            img4d_zyxt = self.img4d_transforms(img4d_zyxt)
+
+        # Optical flow transformation
+        if self.flow_transforms is not None:
+            ff = self.flow_transforms(ff)
+            bf = self.flow_transforms(bf)
 
         return (patient_name, img4d_zyxt, m0, mk, masks, init_ts, final_ts, ff, bf)
 
@@ -156,18 +169,18 @@ class SingleVentricleDataset(Dataset):
         for i in range(len(times_fwd)):
             fwd_file = osp.sep.join([fwd_patient_dir, f'time{times_fwd[i]}', self.flow_level, self.flow_name])
             bwd_file = osp.sep.join([bwd_patient_dir, f'time{times_bwd[i]}', self.flow_level, self.flow_name])
-            fwd_flows.append(torch.load(fwd_file, map_location='cpu'))
-            bwd_flows.append(torch.load(bwd_file, map_location='cpu'))
+            fwd_flows.append(np.load(fwd_file))
+            bwd_flows.append(np.load(bwd_file))
 
-        fwd_t = torch.stack([x.float() for x in fwd_flows], dim=0)
-        bwd_t = torch.stack([x.float() for x in bwd_flows], dim=0)
+        fwd_t = np.stack([x for x in fwd_flows], axis=0)
+        bwd_t = np.stack([x for x in bwd_flows], axis=0)
         return (fwd_t, bwd_t)
 
     def create_timeline(self, init_ts, final_ts, original_NT):
-        if self.flow_mode == LoadFlowMode.TRAIN_OF:
+        if self.flow_mode == LoadFlowMode.TRAIN_VAL_OF:
             times_fwd = np.arange(init_ts, final_ts, 1)
             times_bwd = np.arange(final_ts, init_ts, -1)
-        elif self.flow_mode == LoadFlowMode.PREDICT_OF:
+        elif self.flow_mode == LoadFlowMode.TEST_OF:
             times_fwd = np.concatenate((np.arange(init_ts, original_NT, 1), np.arange(0, init_ts)))
             times_bwd = np.concatenate((np.arange(final_ts, -1, -1), np.arange(original_NT - 1, final_ts, -1)))
         return (times_fwd, times_bwd)

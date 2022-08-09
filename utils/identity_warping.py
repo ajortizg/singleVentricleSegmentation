@@ -18,7 +18,7 @@ from cnn.cnn_utils import collate_fn
 
 
 if __name__ == "__main__":
-    save_imgs = True
+    save_imgs = False
     save_size = (16, 200, 200)
 
     plots.printConsoleOutput_Header('Identity warping')
@@ -28,32 +28,34 @@ if __name__ == "__main__":
     cuda_availabe = config.get('DEVICE', 'CUDA_AVAILABLE')
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-    img4d_transforms = T.ComposeUnary([T.ToTensor()])
-    mask_transforms = T.ComposeUnary([T.Round(th=0.5), T.ToTensor()])
-    train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, LoadFlowMode.TRAIN_OF, img4d_transforms, mask_transforms)
-    val_ds = SingleVentricleDataset(config, DatasetMode.VAL, LoadFlowMode.TRAIN_OF, img4d_transforms, mask_transforms)
-    train_loader = DataLoader(train_ds, batch_size=1, shuffle=False, num_workers=8, collate_fn=collate_fn)
-    val_loader = DataLoader(val_ds, batch_size=1, shuffle=False, num_workers=8, collate_fn=collate_fn)
+    transforms = T.ComposeFull([T.RandomRotateFull(p=1.0, range_z=(145,145)),
+                                T.BinarizeMasks(th=0.5),
+                                T.ToTensorFull()])
+
+    train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, LoadFlowMode.TRAIN_VAL_OF, full_transforms=transforms)
+    val_ds = SingleVentricleDataset(config, DatasetMode.VAL, LoadFlowMode.TRAIN_VAL_OF, full_transforms=transforms)
+    test_ds = SingleVentricleDataset(config, DatasetMode.TEST, LoadFlowMode.TRAIN_VAL_OF, full_transforms=transforms)
+
+    train_loader = DataLoader(train_ds, batch_size=1, shuffle=False, num_workers=16, collate_fn=collate_fn)
+    val_loader = DataLoader(val_ds, batch_size=1, shuffle=False, num_workers=16, collate_fn=collate_fn)
+    test_loader = DataLoader(test_ds, batch_size=1, shuffle=False, num_workers=16, collate_fn=collate_fn)
 
     save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'Warping')
-
-    # save config file to save directory
-    conifg_output = osp.join(save_dir, 'config.ini')
-    with open(conifg_output, 'w') as config_file:
-        config.write(config_file)
+    plots.save_config(config, save_dir, filename='config.ini')
 
     csv_file = open(osp.join(save_dir, 'accuracy.csv'), 'w')
     writer = csv.writer(csv_file)
     writer.writerow(['Patient', 'dc_0', 'dc_k'])
-    pbar = tqdm(total=len(train_ds) + len(val_ds))
+    pbar = tqdm(total=len(train_ds) + len(val_ds) + len(test_ds))
 
     mask_posp = T.ComposeUnary([T.ToArray(), T.Resize(size=save_size), T.Round(th=0.5), T.Erode(), T.ToTensor()])
     m0_mk_posp = T.ComposeUnary([T.ToArray(), T.Resize(size=save_size), T.Round(th=0.5), T.ToTensor()])
     img_posp = T.ComposeUnary([T.ToArray(), T.Resize(size=save_size), T.Normalize(), T.ToTensor()])
+    mt_mtt_posp = T.ComposeUnary([T.ToArray(), T.Resize(size=save_size), T.ToTensor()])
     acc = {'0': [], 'k': []}
 
-    for loader in [train_loader, val_loader]:
-        for (pnames, imgs4d, m0s, mks, times_fwd, times_bwd, ff, bf, offsets) in loader:
+    for loader in [train_loader, val_loader, test_loader]:
+        for (pnames, imgs4d, m0s, mks, _, times_fwd, times_bwd, ff, bf, offsets) in loader:
             imgs4d = imgs4d.to(device)
             m0s = m0s.to(device)
             mks = mks.to(device)
@@ -87,8 +89,10 @@ if __name__ == "__main__":
 
             if save_imgs:
                 patient_dir = plots.createSubDirectory(save_dir, pnames[0])
-                # fwd_dir = plots.createSubDirectory(patient_dir, 'fwd')
-                # bwd_dir = plots.createSubDirectory(patient_dir, 'bwd')
+                # mt_dir = plots.createSubDirectory(patient_dir, 'mt')
+                # mt_slices_dir = plots.createSubDirectory(mt_dir, 'zslices')
+                # mtt_dir = plots.createSubDirectory(patient_dir, 'mtt')
+                # mtt_slices_dir = plots.createSubDirectory(mtt_dir, 'zslices')
 
                 for t in range(len(out['mt'])):
                     img3d = img_posp(imgs4d[batch_indices, :, :, :, :, times_fwd[t][batch_indices]].squeeze())
@@ -100,15 +104,21 @@ if __name__ == "__main__":
                                              th=0.5, alphas=[0.3, 1.0], colors=[[1, 0.7, 0], [0, 0, 1]])
                     elif t == len(out['mt']) - 1:
                         plots.save_img_masks(img3d, [m0_mk_posp(mks.squeeze()), mt], 'mk_mkt', patient_dir,
-                                             th=0.5, alphas=[0.3, 1.0], colors=[[1, 0.7, 0], [0, 0, 1]])
+                                             th=0.5, alphas=[0.3, 1.0], colors=[[1, 0.7, 0], [0, 1, 0]])
 
                     plots.save_img_masks(img3d,
                                          [mt, mtt],
                                          f'im_t_{times_fwd[t][batch_indices].item()}', patient_dir,
-                                         th=0.5, alphas=[1.0, 1.0], colors=[[0, 0, 1], [0, 1, 0]])
+                                         th=0.5, alphas=[1.0, 1.0], colors=[[0, 1, 0], [0, 0, 1]])
 
-                    # plots.save_img_masks(img3d, [mtt], f'im_tt_{times_fwd[t][batch_indices].item()}',
-                                        #  bwd_dir, th=0.5, alphas=[1.0], colors=[[0, 0, 1]])
+                    # mt = mt_mtt_posp(out['mt'][t].squeeze())
+                    # mtt = mt_mtt_posp(out['mtt'][t].squeeze())
+
+                    # plots.save_slices(mt, f'mt_{times_fwd[t][batch_indices].item()}.png', mt_dir)
+                    # plots.save_single_zslices(mt, mt_slices_dir, str(times_fwd[t][batch_indices].item()))
+
+                    # plots.save_slices(mtt, f'mtt_{times_fwd[t][batch_indices].item()}.png', mtt_dir)
+                    # plots.save_single_zslices(mtt, mtt_slices_dir, str(times_fwd[t][batch_indices].item()))
 
             pbar.update(1)
     writer.writerow(['mean', '{:.3f}'.format(np.array(acc['0']).mean()), '{:.3f}'.format(np.array(acc['k']).mean())])

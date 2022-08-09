@@ -67,9 +67,9 @@ if __name__ == "__main__":
     data_transf = T.ComposeUnary([T.ToTensor()])
     mask_transf = T.ComposeUnary([T.Round(th=0.5), T.ToTensor()])
     if P['dataset'] == 'train':
-        ds = SingleVentricleDataset(config_train, DatasetMode.TRAIN, LoadFlowMode.TRAIN_OF, data_transf, mask_transf)
+        ds = SingleVentricleDataset(config_train, DatasetMode.TRAIN, LoadFlowMode.TRAIN_VAL_OF, data_transf, mask_transf)
     else:
-        ds = SingleVentricleDataset(config_train, DatasetMode.VAL, LoadFlowMode.TRAIN_OF, data_transf, mask_transf)
+        ds = SingleVentricleDataset(config_train, DatasetMode.VAL, LoadFlowMode.TRAIN_VAL_OF, data_transf, mask_transf)
     loader = DataLoader(ds, batch_size=1, shuffle=False, num_workers=P['workers'], collate_fn=utils.collate_fn)
 
     save_dir = plots.createSaveDirectory(config_eval.get('DATA', 'OUTPUT_PATH'), 'EVAL')
