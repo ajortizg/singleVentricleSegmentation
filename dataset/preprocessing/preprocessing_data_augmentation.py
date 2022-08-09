@@ -34,25 +34,31 @@ def save_data(patient: SingleVentriclePatient, saveDir4D: str, saveDirSegmentati
     save_np_to_nifty(patient.nii_mask_diastole_xyz, saveDirPatient, patient.name + "_Diastole_Labelmap.nii", patient.hdr_mask_diastole)
     save_np_to_nifty(patient.nii_mask_systole_xyz, saveDirPatient, patient.name + "_Systole_Labelmap.nii", patient.hdr_mask_systole)
 
-    row = {'Name': patient.name, 'Systole': patient.tSystole, 'Diastole': patient.tDiastole}
-    df_patient = pd.DataFrame(row, index=[0])
-    return df_patient
+    # row = {'Name': patient.name, 'Systole': patient.tSystole, 'Diastole': patient.tDiastole}
+    # df_patient = pd.DataFrame(row, index=[0])
+    # return df_patient
+    return patient.df_row
 
 
 if __name__ == "__main__":
     config = configparser.ConfigParser()
     config.read('parser/configPreprocessing.ini')
 
+    N = config.getint('DATA_AUGMENTATION', 'CREATE_NEW')
+
+    # Flip
     flip_prob_z = config.getfloat('DATA_AUGMENTATION', 'FLIP_Z_PROB')
     flip_prob_y = config.getfloat('DATA_AUGMENTATION', 'FLIP_Y_PROB')
     flip_prob_x = config.getfloat('DATA_AUGMENTATION', 'FLIP_X_PROB')
 
+    # Rotation
     prob_rot = config.getfloat('DATA_AUGMENTATION', 'ROT_PROB')
     rot_range_z = tuple(map(float, config.get('DATA_AUGMENTATION', 'ROT_Z_RANGE').split(',')))
     rot_range_y = tuple(map(float, config.get('DATA_AUGMENTATION', 'ROT_Y_RANGE').split(',')))
     rot_range_x = tuple(map(float, config.get('DATA_AUGMENTATION', 'ROT_X_RANGE').split(',')))
     rot_bdryMode = config.get('DATA_AUGMENTATION', 'ROT_DEFORM_BDRYMODE')
 
+    # Elastic deformation
     ed_prob = config.getfloat('DATA_AUGMENTATION', 'ELASTIC_DEFORM_PROB')
     ed_grid = config.getint('DATA_AUGMENTATION', 'ELASTIC_DEFORM_GRID')
     ed_sigma_min = config.getfloat('DATA_AUGMENTATION', 'ELASTIC_DEFORM_SIGMA_MIN')
@@ -60,16 +66,11 @@ if __name__ == "__main__":
     ed_bdryMode = config.get('DATA_AUGMENTATION', 'ELASTIC_DEFORM_BDRYMODE')
     ed_usePrefilter = config.getboolean('DATA_AUGMENTATION', 'ELASTIC_DEFORM_USE_PREFILTER')
 
-    N = config.getint('DATA_AUGMENTATION', 'CREATE_NEW')
-
     transf_tern = T.ComposeTernary(
-        [T.RandomFlipZ(p=flip_prob_z),
-         T.RandomFlipY(p=flip_prob_y),
-         T.RandomFlipX(p=flip_prob_x),
-         T.RandomRotate(p=prob_rot, range_z=rot_range_z, range_y=rot_range_y, range_x=rot_range_x, total=N, boundary=rot_bdryMode),
-         T.ElasticDeformation(
-             p=ed_prob, sigma_range=(ed_sigma_min, ed_sigma_max),
-             points=ed_grid, boundaryMode=ed_bdryMode, usePrefilter=ed_usePrefilter)])
+        [T.OneOf([T.RandomFlipZ(p=flip_prob_z), T.RandomFlipY(p=flip_prob_y), T.RandomFlipX(p=flip_prob_x)]),
+         T.RandomRotate(p=prob_rot, range_z=rot_range_z, range_y=rot_range_y, range_x=rot_range_x, total=None, boundary=rot_bdryMode),
+         T.ElasticDeformation(p=ed_prob, sigma_range=(ed_sigma_min, ed_sigma_max),
+                              points=ed_grid, boundary_mode=ed_bdryMode, use_prefilter=ed_usePrefilter)])
 
     train_ds = SingleVentricleDataset(config, mode='train')
     val_ds = SingleVentricleDataset(config, mode='val')
@@ -85,7 +86,8 @@ if __name__ == "__main__":
     logger.info(f'\t* Rot prob: {prob_rot}, with ranges: {rot_range_x}, {rot_range_y}, {rot_range_z}')
     logger.info(
         f'\t* Elastic def prob: {ed_prob}, grid: {ed_grid}, sigma: {ed_sigma_min,ed_sigma_max}, boundary: {ed_bdryMode}, prefilter: {ed_usePrefilter}')
-    logger.info('save directory: ' + saveDir)
+    logger.info("===========================================================")
+    logger.info('\nsave directory: ' + saveDir)
 
     # train paths
     saveDir_train = plots.createSubDirectory(saveDir, 'train')
@@ -102,8 +104,8 @@ if __name__ == "__main__":
     with open(conifg_output, 'w') as configfile:
         config.write(configfile)
 
-    df_train = pd.DataFrame(columns=['Name', 'Systole', 'Diastole'])
-    df_val = pd.DataFrame(columns=['Name', 'Systole', 'Diastole'])
+    df_train = pd.DataFrame()
+    df_val = pd.DataFrame()
     pbar = tqdm(total=len(train_ds) + (len(val_ds)))
     logger.info(f'Found {len(train_ds)} training patientes')
     logger.info(f'Found {len(val_ds)} validation patients')
@@ -120,17 +122,19 @@ if __name__ == "__main__":
 
         # Generate new data
         for i in range(N):
-            vol_t, ms_t, md_t = transf_tern(patient.nii_data_zyxt,
-                                            patient.nii_mask_systole,
-                                            patient.nii_mask_diastole)
+            img4d_t, ms_t, md_t = transf_tern(patient.nii_data_zyxt,
+                                              patient.nii_mask_systole,
+                                              patient.nii_mask_diastole)
 
             newPatient = SingleVentriclePatient()
             newPatient.name = patient.name + f'_A_{i}'
             newPatient.tSystole = patient.tSystole
             newPatient.tDiastole = patient.tDiastole
+            newPatient.df_row = patient.df_row
+            newPatient.df_row.loc[index, 'Name'] = newPatient.name
 
             # save new images with header
-            newPatient.nii_data_xyzt = np.swapaxes(vol_t, 0, 2)
+            newPatient.nii_data_xyzt = np.swapaxes(img4d_t, 0, 2)
             newPatient.nii_header_xyzt = patient.nii_header_xyzt
 
             # save new masks with header

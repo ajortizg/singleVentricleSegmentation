@@ -12,10 +12,10 @@ class ComposeTernary:
 
     # vol is 4D tensor with shape(NZ, NY, NX, NT)
     # ms and md are the systole and diastole mask with shape(NZ, NY, NX)
-    def __call__(self, vol, ms, md):
+    def __call__(self, img4d, ms, md):
         for t in self.transforms:
-            vol, ms, md = t(vol, ms, md)
-        return (vol, ms, md)
+            img4d, ms, md = t(img4d, ms, md)
+        return (img4d, ms, md)
 
     def __repr__(self) -> str:
         format_string = self.__class__.__name__ + "("
@@ -88,6 +88,19 @@ class Normalize:
         return f"{self.__class__.__name__}()"
 
 
+class PercentileClip:
+    def __init__(self, q1, q2):
+        self.q1 = q1
+        self.q2 = q2
+
+    def __call__(self, x: np.array) -> np.array:
+        low, high = np.percentile(x, (self.q1, self.q2))
+        return np.clip(x, low, high)
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}()"
+
+
 class BinaryClosing:
     def __init__(self):
         pass
@@ -126,13 +139,13 @@ class PadTime:
     def __init__(self, maxt=40):
         self.maxt = maxt
 
-    def __call__(self, vol: torch.Tensor) -> torch.Tensor:
-        *_, NT = vol.shape
+    def __call__(self, img4d: torch.Tensor) -> torch.Tensor:
+        *_, NT = img4d.shape
         diff_t = self.maxt - NT
-        return F.pad(vol, [0, diff_t,
-                           0, 0,
-                           0, 0,
-                           0, 0])
+        return F.pad(img4d, [0, diff_t,
+                             0, 0,
+                             0, 0,
+                             0, 0])
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}()"
@@ -156,11 +169,11 @@ class FlipBase:
 
     # vol is 4D tensor with shape(NZ, NY, NX, NT)
     # ms and md are the systole and diastole mask with shape(NZ, NY, NX)
-    def flip(self, vol: np.array, ms: np.array, md: np.array, axis: int):
-        vol_n = np.zeros(vol.shape)
-        *_, NT = vol.shape
+    def flip(self, img4d: np.array, ms: np.array, md: np.array, axis: int):
+        vol_n = np.zeros(img4d.shape)
+        *_, NT = img4d.shape
         for t in range(NT):
-            vol_n[:, :, :, t] = np.flip(vol[:, :, :, t], axis).copy()
+            vol_n[:, :, :, t] = np.flip(img4d[:, :, :, t], axis).copy()
         ms_n = np.flip(ms, axis).copy()
         md_n = np.flip(md, axis).copy()
         return (vol_n, ms_n, md_n)
@@ -170,8 +183,8 @@ class RandomFlipZ(FlipBase):
     def __init__(self, p=0.5):
         super().__init__(p)
 
-    def __call__(self, vol: np.array, ms: np.array, md: np.array):
-        return super().flip(vol, ms, md, 0) if np.random.rand() < self.p else (vol, ms, md)
+    def __call__(self, img4d: np.array, ms: np.array, md: np.array):
+        return super().flip(img4d, ms, md, 0) if np.random.rand() < self.p else (img4d, ms, md)
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}()"
@@ -181,8 +194,8 @@ class RandomFlipY(FlipBase):
     def __init__(self, p=0.5):
         super().__init__(p)
 
-    def __call__(self, vol: np.array, ms: np.array, md: np.array):
-        return super().flip(vol, ms, md, 2) if np.random.rand() < self.p else (vol, ms, md)
+    def __call__(self, img4d: np.array, ms: np.array, md: np.array):
+        return super().flip(img4d, ms, md, 2) if np.random.rand() < self.p else (img4d, ms, md)
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}()"
@@ -192,11 +205,21 @@ class RandomFlipX(FlipBase):
     def __init__(self, p=0.5):
         super().__init__(p)
 
-    def __call__(self, vol: np.array, ms: np.array, md: np.array):
-        return super().flip(vol, ms, md, 1) if np.random.rand() < self.p else (vol, ms, md)
+    def __call__(self, img4d: np.array, ms: np.array, md: np.array):
+        return super().flip(img4d, ms, md, 1) if np.random.rand() < self.p else (img4d, ms, md)
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}()"
+
+
+class OneOf:
+    def __init__(self, transforms):
+        self.transforms = transforms
+        self.n = len(self.transforms)
+
+    def __call__(self, img4d: np.array, ms: np.array, md: np.array):
+        idx = np.random.randint(self.n)
+        return self.transforms[idx](img4d, ms, md)
 
 
 class RandomRotate:
@@ -219,12 +242,15 @@ class RandomRotate:
             np.random.shuffle(self.angles_x)
             np.random.shuffle(self.angles_y)
             np.random.shuffle(self.angles_z)
+            print(self.angles_x)
+            print(self.angles_y)
+            print(self.angles_z)
             self.random_angles = False
         else:
             self.angles_x = self.angles_y = self.angles_z = None
             self.random_angles = True
 
-    def __call__(self, vol: np.array, ms: np.array, md: np.array):
+    def __call__(self, img4d: np.array, ms: np.array, md: np.array):
         angx = angy = angz = 0
         if np.random.rand() < self.p:
             if self.random_angles:
@@ -242,7 +268,7 @@ class RandomRotate:
                     np.random.shuffle(self.angles_y)
                     np.random.shuffle(self.angles_z)
 
-            NZ, NY, NX, NT = vol.shape
+            NZ, NY, NX, NT = img4d.shape
             CZ, CY, CX = NZ // 2, NY // 2, NX // 2
 
             # Rotation about the image center
@@ -256,39 +282,120 @@ class RandomRotate:
             tz = CZ - Rot[2, 0] * CX - Rot[2, 1] * CY - Rot[2, 2] * CZ
             offset = np.array([tx, ty, tz])
 
-            vol_rot = np.zeros(shape=(NX, NY, NZ, NT))
+            img4d_rot = np.zeros(shape=(NX, NY, NZ, NT))
             for t in range(NT):
-                vol_rot[:, :, :, t] = ndimage.affine_transform(np.swapaxes(vol[:, :, :, t], 0, 2),
-                                                               matrix=Rot, offset=offset, order=3, mode=self.boundary)
+                img4d_rot[:, :, :, t] = ndimage.affine_transform(np.swapaxes(img4d[:, :, :, t], 0, 2),
+                                                                 matrix=Rot, offset=offset, order=3, mode=self.boundary)
             ms_rot = ndimage.affine_transform(np.swapaxes(ms, 0, 2), matrix=Rot, offset=offset, order=3, mode=self.boundary)
             md_rot = ndimage.affine_transform(np.swapaxes(md, 0, 2), matrix=Rot, offset=offset, order=3, mode=self.boundary)
-            return (np.swapaxes(vol_rot, 0, 2), np.swapaxes(ms_rot, 0, 2), np.swapaxes(md_rot, 0, 2))
+            return (np.swapaxes(img4d_rot, 0, 2), np.swapaxes(ms_rot, 0, 2), np.swapaxes(md_rot, 0, 2))
         else:
-            return (vol, ms, md)
+            return (img4d, ms, md)
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}()"
 
 
 class ElasticDeformation:
-    def __init__(self, p, sigma_range, points, boundaryMode, usePrefilter):
+    def __init__(self, p, sigma_range, points, boundary_mode, use_prefilter):
         self.p = p
         self.sigma_range = sigma_range
         self.points = points
-        self.boundaryMode = boundaryMode
-        self.usePrefilter = usePrefilter
+        self.boundary_mode = boundary_mode
+        self.use_prefilter = use_prefilter
 
-    def __call__(self, vol: np.array, ms: np.array, md: np.array):
+    def __call__(self, img4d: np.array, ms: np.array, md: np.array):
         if np.random.rand() < self.p:
             sigma = np.random.uniform(self.sigma_range[0], self.sigma_range[1])
             #points = np.random.uniform(self.points_range[0], self.points_range[1])
-            [vol_d, ms_d, md_d] = (ed.deform_random_grid([vol, ms, md], sigma,
-                                   points=self.points, mode=self.boundaryMode,
-                                   prefilter=self.usePrefilter,
-                                   axis=[(0, 1, 2), (0, 1, 2), (0, 1, 2)]))
-            return (vol_d, ms_d, md_d)
+            [img4d_d, ms_d, md_d] = ed.deform_random_grid([img4d, ms, md], sigma,
+                                                          points=self.points, mode=self.boundary_mode,
+                                                          prefilter=self.use_prefilter,
+                                                          axis=[(1, 2), (1, 2), (1, 2)])
+            return (img4d_d, ms_d, md_d)
         else:
-            return (vol, ms, md)
+            return (img4d, ms, md)
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}()"
+
+
+class AdditiveGaussianNoise:
+    def __init__(self, p, mu, sigma):
+        self.p = p
+        self.mu = mu
+        self.sigma = sigma
+
+    def __call__(self, x: np.array) -> np.array:
+        if np.random.rand() < self.p:
+            noise = np.random.normal(self.mu, self.sigma, size=x.shape)
+            return x + noise
+        else:
+            return x
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}()"
+
+
+class GammaCorrection:
+    def __init__(self, p, gamma_range: tuple):
+        self.p = p
+        self.gamma_range = gamma_range
+
+    def __call__(self, x: np.array) -> np.array:
+        if np.random.rand() < self.p:
+            gamma = np.random.uniform(self.gamma_range[0], self.gamma_range[1])
+            return x**gamma
+        else:
+            return x
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}()"
+
+
+class IntensityScalingWithClip:
+    def __init__(self, p, scale_range: tuple, clip_interval: tuple):
+        self.p = p
+        self.scale_range = scale_range
+        self.clip_interval = clip_interval
+
+    def __call__(self, x: np.array) -> np.array:
+        if np.random.rand() < self.p:
+            sigma = np.random.uniform(self.scale_range[0], self.scale_range[1])
+            return np.clip(sigma * x, a_min=self.clip_interval[0], a_max=self.clip_interval[1])
+        else:
+            return x
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}()"
+
+
+class IntensityScaling:
+    def __init__(self, p, scale_range: tuple):
+        self.p = p
+        self.scale_range = scale_range
+
+    def __call__(self, img4d: np.array):
+        if np.random.rand() < self.p:
+            sigma = np.random.uniform(self.scale_range[0], self.scale_range[1])
+            return sigma * img4d
+        else:
+            return img4d
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}()"
+
+
+class Clip:
+    def __init__(self, p, interval: tuple):
+        self.p = p
+        self.interval = interval
+
+    def __call__(self, img4d: np.array):
+        if np.random.rand() < self.p:
+            return np.clip(img4d, a_min=self.interval[0], a_max=self.interval[1])
+        else:
+            return img4d
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}()"

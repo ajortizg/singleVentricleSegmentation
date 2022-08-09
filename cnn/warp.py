@@ -85,7 +85,7 @@ class WarpCNN:
     def __call__(self, m, u):
         meshInfo = opticalFlow.MeshInfo3D(self.NZ, self.NY, self.NX, self.LZ, self.LY, self.LX)
         warpingOp = opticalFlow.WarpingCNN3D(meshInfo, self.interp, self.boundary)
-        mw = warpingOp.forward(m, u)
+        mw = warpingOp.forward(m.contiguous(), u.contiguous())
         return mw
 
     def getMeshLength(self, config, NZ, NY, NX):

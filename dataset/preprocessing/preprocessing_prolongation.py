@@ -98,7 +98,6 @@ if __name__ == "__main__":
     use_th = config.getboolean('PROLONGATION', 'USE_TH')
     bin_th = config.getfloat('PROLONGATION', 'BIN_TH')
     time_pad = config.getint('PROLONGATION', 'PAD_TIME')
-
     time_padder = T.PadTime(maxt=time_pad)
 
     # create save directory
@@ -171,13 +170,22 @@ if __name__ == "__main__":
 
         # save as nifty
         saveDirPatient = plots.createSubDirectory(saveDirSegmentations, patient.name)
-        save_torch_to_nifty(
-            prolongation_4d, saveDir4D, patient.name + ".nii.gz", patient.nii_header_xyzt,
-            zooms=(zoomX * patient.NX / NX_prolong, zoomY * patient.NY / NY_prolong, zoomZ * patient.NZ / NZ_prolong, zoomT / time_pad))
+        save_torch_to_nifty(prolongation_4d, saveDir4D, patient.name + ".nii.gz", patient.nii_header_xyzt,
+                            zooms=(zoomX * patient.NX / NX_prolong, zoomY * patient.NY / NY_prolong, zoomZ * patient.NZ / NZ_prolong, zoomT / time_pad))
         save_torch_to_nifty(prolongation_diastole, saveDirPatient, patient.name + "_Diastole_Labelmap.nii", patient.hdr_mask_diastole,
                             zooms=(zoomX * patient.NX / NX_prolong, zoomY * patient.NY / NY_prolong, zoomZ * patient.NZ / NZ_prolong))
         save_torch_to_nifty(prolongation_systole, saveDirPatient, patient.name + "_Systole_Labelmap.nii", patient.hdr_mask_systole,
                             zooms=(zoomX * patient.NX / NX_prolong, zoomY * patient.NY / NY_prolong, zoomZ * patient.NZ / NZ_prolong))
+
+        if patient.full_cycle:
+            for t in range(patient.NT):
+                mask = torch.from_numpy(patient.nii_masks_zyx[t]).float().to(DEVICE)
+                mask_prolongated = prolongationOp.forward(mask)
+                if use_th:
+                    mask_prolongated = torch.where(mask_prolongated > bin_th, 1.0, 0.0)
+                mask_filename = patient.masks_dirs[t].split('/')[-1]
+                save_torch_to_nifty(mask_prolongated, saveDirPatient, mask_filename, patient.nii_masks_load[t].header,
+                                    zooms=(zoomX * patient.NX / NX_prolong, zoomY * patient.NY / NY_prolong, zoomZ * patient.NZ / NZ_prolong))
 
         #
         xprolongfac[index] = NX_prolong / patient.NX
