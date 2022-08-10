@@ -121,13 +121,15 @@ def read_eval_params(config):
     return params
 
 
-def checkpoint(e, net, opt, loss, acc, save_dir, filename):
+def checkpoint(e, net, opt, train_res, val_res, save_dir, filename):
     torch.save({
         'epoch': e,
         'model_state_dict': net.state_dict(),
         'optimizer_state_dict': opt.state_dict(),
-        'loss': loss,
-        'acc': acc
+        'train_loss': train_res[0],
+        'train_acc': train_res[-1],
+        'val_loss': val_res[0],
+        'val_acc': val_res[-1]
     }, osp.join(save_dir, filename))
 
 
@@ -158,11 +160,11 @@ def log(logger, writer, e, train_avg, val_avg, net, opt, schedule_lr, best_train
 
     if train_avg[0] < best_train_loss:
         best_train_loss = train_avg[0]
-        checkpoint(e, net, opt, train_avg[0], train_avg[-1], save_dir, 'best_train_checkpoint.pth')
+        checkpoint(e, net, opt, train_avg, val_avg, save_dir, 'best_train_checkpoint.pth')
         logger.info(f'\t*Best train checkpoint updated with loss: {best_train_loss:,.3f}')
     if val_avg[0] < best_val_loss:
         best_val_loss = val_avg[0]
-        checkpoint(e, net, opt, val_avg[0], val_avg[-1], save_dir, 'best_val_checkpoint.pth')
+        checkpoint(e, net, opt, train_avg, val_avg, save_dir, 'best_val_checkpoint.pth')
         logger.info(f'\t*Best val checkpoint updated with loss: {best_val_loss:,.3f}')
 
     return best_train_loss, best_val_loss

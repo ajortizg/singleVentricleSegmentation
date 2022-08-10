@@ -298,7 +298,10 @@ class GammaScaling:
     def __call__(self, img4d: np.array, ms: np.array, md: np.array, ff: np.array, bf: np.array):
         if np.random.rand() < self.p:
             gamma = np.random.uniform(self.gamma_range[0], self.gamma_range[1])
-            img4d = img4d**gamma
+            # print(gamma, np.min(img4d), np.max(img4d), np.isnan(img4d).any())
+            img4d = np.float_power(img4d, gamma)
+            # img4d = img4d**gamma
+
         return (img4d, ms, md, ff, bf)
 
     def __repr__(self) -> str:
@@ -352,13 +355,17 @@ class ToTensorFull:
 
 
 class RandomRotate:
-    def __init__(self, p=0.5, range_x: tuple = (0, 0), range_y: tuple = (0, 0), range_z: tuple = (0, 0), total: int = None, boundary='nearest'):
+    def __init__(self, p=0.5, range_x: tuple = (0, 0),
+                 range_y: tuple = (0, 0),
+                 range_z: tuple = (0, 0),
+                 total: int = None, boundary='nearest', clip_interval: tuple = (0.0, 1.0)):
         self.p = p
         self.range_x = range_x
         self.range_y = range_y
         self.range_z = range_z
         self.total = total
         self.boundary = boundary
+        self.clip_interval = clip_interval
 
         self.i = 1
         if self.total:
@@ -419,6 +426,7 @@ class RandomRotate:
             img4d_rot = np.zeros_like(img4d)
             for t in range(NT):
                 img4d_rot[:, :, :, t] = ndimage.map_coordinates(img4d[:, :, :, t], new_coords, order=3, mode='constant')
+            img4d_rot = np.clip(img4d_rot, self.clip_interval[0], self.clip_interval[1])
 
             # Rotate optical flow (of shape [timesteps,NZ,NY,NX,3])
             ff_rot = np.zeros_like(ff)
@@ -432,6 +440,7 @@ class RandomRotate:
 
             ff_rot = self.rotate_of(ff_rot, R)
             bf_rot = self.rotate_of(bf_rot, R)
+
             return (img4d_rot, ms_rot, md_rot, ff_rot, bf_rot)
         else:
             return (img4d, ms, md, ff, bf)
@@ -458,13 +467,14 @@ class RandomRotate:
 
 
 class ElasticDeformation:
-    def __init__(self, p, sigma_range, points, boundary, prefilter, axis):
+    def __init__(self, p, sigma_range, points, boundary, prefilter, axis, clip_interval):
         self.p = p
         self.sigma_range = sigma_range
         self.points = points
         self.boundary = boundary
         self.prefilter = prefilter
         self.axis_str = axis
+        self.clip_interval = clip_interval
 
     def __call__(self, img4d: np.array, ms: np.array, md: np.array, ff: np.array, bf: np.array):
         if np.random.rand() < self.p:
@@ -478,7 +488,7 @@ class ElasticDeformation:
                                                                       points=self.points, mode=self.boundary,
                                                                       prefilter=self.prefilter,
                                                                       axis=axis)
-
+            img4d_d = np.clip(img4d_d, self.clip_interval[0], self.clip_interval[1])
             return (img4d_d, ms_d, md_d, ff_d, bf_d)
         else:
             return (img4d, ms, md, ff, bf)

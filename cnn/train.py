@@ -31,14 +31,14 @@ if __name__ == "__main__":
 
     # Create train and validation datasets
     train_transforms = T.ComposeFull([
-        T.RandomRotate(P['rot_prob'], P['rot_range_x'], P['rot_range_y'], P['rot_range_z'], boundary=P['rot_boundary']),
-        T.ElasticDeformation(P['ed_prob'], P['ed_sigma_range'], P['ed_grid'], P['ed_boundary'], P['ed_prefilter'], P['ed_axis']),
+        T.RandomRotate(P['rot_prob'], P['rot_range_x'], P['rot_range_y'], P['rot_range_z'], boundary=P['rot_boundary'], clip_interval=P['clip_interval']),
+        T.ElasticDeformation(P['ed_prob'], P['ed_sigma_range'], P['ed_grid'], P['ed_boundary'], P['ed_prefilter'], P['ed_axis'], P['clip_interval']),
         T.RandomVerticalFlip(P['vflip_prob']),
         T.RandomHorizontalFlip(P['hflip_prob']),
         T.RandomDepthFlip(P['dflip_prob']),
+        T.GammaScaling(P['gamma_scaling_prob'], P['gamma_scaling_range']),
         T.MutiplicativeScaling(P['mult_scaling_prob'], P['gamma_scaling_range'], P['clip_interval']),
         T.AdditiveScaling(P['add_scaling_prob'], P['add_scaling_mean'], P['add_scaling_std'], P['clip_interval']),
-        T.GammaScaling(P['gamma_scaling_prob'], P['gamma_scaling_range']),
         T.AdditiveGaussianNoise(P['noise_prob'], P['noise_mu'], P['noise_std'], P['clip_interval']),
         T.BinarizeMasks(th=0.5),
         T.ToTensorFull()
@@ -94,31 +94,26 @@ if __name__ == "__main__":
     best_train_loss = 1e10
     tic = time.time()
 
-    try:
-        for e in range(P['epochs']):
-            train_res = trainer.train_epoch(train_loader, opt)
-            val_res = trainer.val_epoch(val_loader)
+    for e in range(P['epochs']):
+        train_res = trainer.train_epoch(train_loader, opt)
+        val_res = trainer.val_epoch(val_loader)
 
-            train_avg = tuple(x / train_steps for x in train_res)
-            val_avg = tuple(x / val_steps for x in val_res)
+        train_avg = tuple(x / train_steps for x in train_res)
+        val_avg = tuple(x / val_steps for x in val_res)
 
-            best_train_loss, best_val_loss = utils.log(logger, writer, e, train_avg, val_avg, net, opt,
-                                                       scheduler, best_train_loss, best_val_loss, save_dir)
-            H = utils.update_train_history(H, train_avg, val_avg)
+        best_train_loss, best_val_loss = utils.log(logger, writer, e, train_avg, val_avg, net, opt,
+                                                   scheduler, best_train_loss, best_val_loss, save_dir)
+        H = utils.update_train_history(H, train_avg, val_avg)
 
-            scheduler.step()
-            pbar.update(1)
-    except KeyboardInterrupt:
-        utils.checkpoint(e, net, opt, train_avg[0], train_avg[-1], save_dir, 'interrupted.pth')
-        logger.info('Saved interrupt')
-        raise
+        scheduler.step()
+        pbar.update(1)
 
     toc = time.time()
     logger.info('\nTotal time taken to train the model: {:.3f}s'.format(toc - tic))
 
     plots.save_loss(H, save_dir)
     plots.save_acc(H, save_dir)
-    utils.checkpoint(e, net, opt, train_avg[0], train_avg[-1], save_dir, 'weights.pth')
+    utils.checkpoint(e, net, opt, train_avg, val_avg, save_dir, 'checkpoint.pth')
     # torch.save(net, osp.join(save_dir, 'model.pth'))
 
     pbar.close()

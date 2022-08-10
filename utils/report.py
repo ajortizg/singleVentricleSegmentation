@@ -5,6 +5,7 @@ from glob import glob
 import plots
 import time
 import pandas as pd
+import torch
 
 
 class TrainingReport:
@@ -31,6 +32,10 @@ class TrainingReport:
             config = configparser.ConfigParser()
             config.read(osp.join(dir, 'config.ini'))
 
+            best_train_loss, best_train_acc, *_ = self.read_checkpoint(dir, 'best_train_checkpoint.pth')
+            *_, best_val_loss, best_val_acc = self.read_checkpoint(dir, 'best_val_checkpoint.pth')
+            train_loss, train_acc, val_loss, val_acc = self.read_checkpoint(dir, 'checkpoint.pth')
+
             data_items = self.clean_data_dict(dict(config.items('DATA')))
             param_items = dict(config.items('PARAMETERS'))
             da_items = dict(config.items('DATA_AUGMENTATION'))
@@ -42,9 +47,25 @@ class TrainingReport:
             df_warping = pd.DataFrame(warping_items, index=[i])
             df_da = pd.DataFrame(da_items, index=[i])
 
-            df_row = df_data.join([df_param, df_warping, df_da])
+            metrics_row = pd.DataFrame({'best_train_loss': f'{best_train_loss:,.3f}', 'best_train_acc': f'{best_train_acc:,.3f}',
+                                        'best_val_loss': f'{best_val_loss:,.3f}', 'best_val_acc': f'{best_val_acc:,.3f}',
+                                        'train_loss': f'{train_loss:,.3f}', 'train_acc': f'{train_acc:,.3f}',
+                                        'val_loss': f'{val_loss:,.3f}', 'val_acc': f'{val_acc:,.3f}'}, index=[i])
+
+            df_row = df_data.join([df_param, df_warping, df_da, metrics_row])
             df = pd.concat([df_row, df])
         df.to_excel(osp.join(save_dir, filename), index=False)
+
+    def read_checkpoint(self, dir, filename):
+        try:
+            checkpoint = torch.load(osp.join(dir, filename))
+            train_loss = checkpoint['train_loss']
+            train_acc = checkpoint['train_acc']
+            val_loss = checkpoint['val_loss']
+            val_acc = checkpoint['val_acc']
+            return (train_loss, train_acc, val_loss, val_acc)
+        except FileNotFoundError:
+            return (0, 0, 0, 0)
 
     def clean_data_dict(self, data_items):
         data_items.pop('volumes_subdir_path')

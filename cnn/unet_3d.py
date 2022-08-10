@@ -52,13 +52,14 @@ class UNet3d(nn.Module):
             feats //= 2
             in_size *= 2
 
+        out_conv = nn.Conv3d(feats, num_classes, kernel_size=1)
         if lipschitz_reg:
-            layers.append(P.register_parametrization(nn.Conv3d(feats, num_classes, kernel_size=1),
-                                                     'weight',
-                                                     L.L2LipschitzConv3d(in_size, ks=1, eps=power_eps, iterations=power_its, max_lc=max_lc)))
-        else:
-            layers.append(nn.Conv3d(feats, num_classes, kernel_size=1))
+            out_conv = P.register_parametrization(
+                out_conv,
+                'weight',
+                L.L2LipschitzConv3d(in_size, ks=1, eps=power_eps, iterations=power_its, max_lc=max_lc))
 
+        layers.append(out_conv)
         self.layers = nn.ModuleList(layers)
 
     def forward(self, x):
@@ -84,21 +85,33 @@ class DoubleConv3d(nn.Module):
     def __init__(self, in_ch: int, out_ch: int, kernel_size=(3, 3, 3), padding=1, act='relu', slope=0.2,
                  lipschitz=False, max_lc=1.0, power_its=1, power_eps=1e-8, in_size=8):
         super().__init__()
-        self.net = nn.Sequential(
-            P.register_parametrization(nn.Conv3d(in_ch, out_ch, kernel_size=kernel_size, padding=padding),
-                                       'weight',
-                                       L.L2LipschitzConv3d(in_size, ks=kernel_size, padding=padding, eps=power_eps, iterations=power_its, max_lc=max_lc))
-            if lipschitz else nn.Conv3d(in_ch, out_ch, kernel_size=kernel_size, padding=padding),
-            nn.InstanceNorm3d(out_ch),
-            self.activation_fn(act, slope),
-            P.register_parametrization(nn.Conv3d(out_ch, out_ch, kernel_size=kernel_size, padding=padding),
-                                       'weight',
-                                       L.L2LipschitzConv3d(in_size, ks=kernel_size, padding=padding, eps=power_eps, iterations=power_its, max_lc=max_lc))
-            if lipschitz else nn.Conv3d(out_ch, out_ch, kernel_size=kernel_size, padding=padding),
-            nn.InstanceNorm3d(out_ch),
-            self.activation_fn(act, slope))
+        conv1 = nn.Conv3d(in_ch, out_ch, kernel_size=kernel_size, padding=padding)
+        conv2 = nn.Conv3d(out_ch, out_ch, kernel_size=kernel_size, padding=padding)
 
-    def activation_fn(self, act, slope):
+        if lipschitz:
+            conv1 = P.register_parametrization(
+                conv1,
+                'weight',
+                L.L2LipschitzConv3d(in_size, ks=kernel_size, padding=padding, eps=power_eps, iterations=power_its, max_lc=max_lc)
+            )
+            conv2 = P.register_parametrization(
+                conv2,
+                'weight',
+                L.L2LipschitzConv3d(in_size, ks=kernel_size, padding=padding, eps=power_eps, iterations=power_its, max_lc=max_lc)
+            )
+            self.net = nn.Sequential(conv1,
+                                     self.activation(act, slope),
+                                     conv2,
+                                     self.activation(act, slope))
+        else:
+            self.net = nn.Sequential(conv1,
+                                     nn.InstanceNorm3d(out_ch),
+                                     self.activation(act, slope),
+                                     conv2,
+                                     nn.InstanceNorm3d(out_ch),
+                                     self.activation(act, slope))
+
+    def activation(self, act, slope):
         act_fn = nn.Module
         if act == 'relu':
             act_fn = nn.ReLU()
@@ -134,20 +147,26 @@ class Up3d(nn.Module):
         super().__init__()
         self.upsample = None
         if trilinear:
-            self.upsample = nn.Sequential(
-                nn.Upsample(scale_factor=2, mode="trilinear", align_corners=True),
-                P.register_parametrization(nn.Conv3d(in_ch, in_ch // 2, kernel_size=1),
-                                           'weight',
-                                           L.L2LipschitzConv3d(in_size, ks=kernel_size, eps=power_eps, iterations=power_its, max_lc=max_lc))
-                if lipschitz else nn.Conv3d(in_ch, in_ch // 2, kernel_size=1))
-        else:
+            conv = nn.Conv3d(in_ch, in_ch // 2, kernel_size=1)
+            ups = nn.Upsample(scale_factor=2, mode="trilinear", align_corners=True)
+
             if lipschitz:
-                self.upsample = P.register_parametrization(
-                    nn.ConvTranspose3d(in_ch, in_ch // 2, kernel_size=2, stride=2),
+                conv = P.register_parametrization(
+                    conv,
                     'weight',
-                    L.L2LipschitzConvTranspose3d(in_size, ks=2, stride=2, eps=power_eps, iterations=power_its, max_lc=max_lc))
-            else:
-                self.upsample = nn.ConvTranspose3d(in_ch, in_ch // 2, kernel_size=2, stride=2)
+                    L.L2LipschitzConv3d(in_size, ks=kernel_size, eps=power_eps, iterations=power_its, max_lc=max_lc)
+                )
+            self.upsample = nn.Sequential(ups, conv)
+        else:
+            conv_trans = nn.ConvTranspose3d(in_ch, in_ch // 2, kernel_size=2, stride=2)
+
+            if lipschitz:
+                conv_trans = P.register_parametrization(
+                    conv_trans,
+                    'weight',
+                    L.L2LipschitzConvTranspose3d(in_size, ks=2, stride=2, eps=power_eps, iterations=power_its, max_lc=max_lc)
+                )
+            self.upsample = conv_trans
 
         self.conv = DoubleConv3d(in_ch, out_ch, kernel_size=kernel_size, padding=padding, act=act, slope=slope,
                                  lipschitz=lipschitz, max_lc=max_lc, power_its=power_its, power_eps=power_eps, in_size=in_size)
