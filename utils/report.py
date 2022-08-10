@@ -15,7 +15,7 @@ class TrainingReport:
         self.filtered_dirs = []
 
     def filter(self, root_dir):
-        experiment_dirs = sorted(glob(osp.join(root_dir, 'CNN_*')))
+        experiment_dirs = sorted(glob(osp.join(root_dir, 'CNN_*')), reverse=True)
         for exp_dir in experiment_dirs:
             dt = datetime.strptime(exp_dir.split(osp.sep)[-1].split('_')[-1], self.str_fmt)
             if dt >= self.from_dt and dt <= self.to_dt:
@@ -65,9 +65,9 @@ if __name__ == "__main__":
     root_dir = 'results'
     report_dir = plots.createSubDirectory(root_dir, 'reports')
 
-    from_dt = datetime(year=2022, month=8, day=9, hour=18, minute=32)
-    to_dt = datetime(year=2022, month=8, day=10, hour=21, minute=48)
-    
+    from_dt = datetime(year=2022, month=8, day=9, hour=14, minute=40)
+    to_dt = datetime(year=2022, month=8, day=11, hour=21, minute=48)
+
     report = TrainingReport(from_dt, to_dt)
     report.filter('results')
     report.create(report_dir, f'report_{time.strftime(report.str_fmt)}.xlsx')

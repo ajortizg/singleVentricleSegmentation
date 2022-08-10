@@ -31,7 +31,8 @@ if __name__ == "__main__":
 
     # Create train and validation datasets
     train_transforms = T.ComposeFull([
-        T.RandomRotateFull(P['rot_prob'], P['rot_range_x'], P['rot_range_y'], P['rot_range_z'], boundary=P['rot_boundary']),
+        T.RandomRotate(P['rot_prob'], P['rot_range_x'], P['rot_range_y'], P['rot_range_z'], boundary=P['rot_boundary']),
+        T.ElasticDeformation(P['ed_prob'], P['ed_sigma_range'], P['ed_grid'], P['ed_boundary'], P['ed_prefilter'], P['ed_axis']),
         T.RandomVerticalFlip(P['vflip_prob']),
         T.RandomHorizontalFlip(P['hflip_prob']),
         T.RandomDepthFlip(P['dflip_prob']),

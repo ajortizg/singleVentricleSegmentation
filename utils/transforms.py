@@ -351,7 +351,7 @@ class ToTensorFull:
         return f"{self.__class__.__name__}()"
 
 
-class RandomRotateFull:
+class RandomRotate:
     def __init__(self, p=0.5, range_x: tuple = (0, 0), range_y: tuple = (0, 0), range_z: tuple = (0, 0), total: int = None, boundary='nearest'):
         self.p = p
         self.range_x = range_x
@@ -461,24 +461,30 @@ class RandomRotateFull:
 
 
 class ElasticDeformation:
-    def __init__(self, p, sigma_range, points, boundary_mode, use_prefilter):
+    def __init__(self, p, sigma_range, points, boundary, prefilter, axis):
         self.p = p
         self.sigma_range = sigma_range
         self.points = points
-        self.boundary_mode = boundary_mode
-        self.use_prefilter = use_prefilter
+        self.boundary = boundary
+        self.prefilter = prefilter
+        self.axis_str = axis
 
-    def __call__(self, img4d: np.array, ms: np.array, md: np.array):
+    def __call__(self, img4d: np.array, ms: np.array, md: np.array, ff: np.array, bf: np.array):
         if np.random.rand() < self.p:
             sigma = np.random.uniform(self.sigma_range[0], self.sigma_range[1])
-            # points = np.random.uniform(self.points_range[0], self.points_range[1])
-            [img4d_d, ms_d, md_d] = ed.deform_random_grid([img4d, ms, md], sigma,
-                                                          points=self.points, mode=self.boundary_mode,
-                                                          prefilter=self.use_prefilter,
-                                                          axis=[(1, 2), (1, 2), (1, 2)])
-            return (img4d_d, ms_d, md_d)
+            if self.axis_str == 'zyx':
+                axis = [(0, 1, 2), (0, 1, 2), (0, 1, 2), (1, 2, 3), (1, 2, 3)]
+            else:
+                axis = [(1, 2), (1, 2), (1, 2), (2, 3), (2, 3)]
+
+            [img4d_d, ms_d, md_d, ff_d, bf_d] = ed.deform_random_grid([img4d, ms, md, ff, bf], sigma,
+                                                                      points=self.points, mode=self.boundary,
+                                                                      prefilter=self.prefilter,
+                                                                      axis=axis)
+
+            return (img4d_d, ms_d, md_d, ff_d, bf_d)
         else:
-            return (img4d, ms, md)
+            return (img4d, ms, md, ff, bf)
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}()"

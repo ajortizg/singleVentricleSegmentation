@@ -42,6 +42,7 @@ def read_train_params(config):
     mult_scaling_range = tuple(map(float, config.get('DATA_AUGMENTATION', 'MULT_SCALING_RANGE').split(',')))
     clip_interval = tuple(map(float, config.get('DATA_AUGMENTATION', 'CLIP_INTERVAL').split(',')))
     gamma_scaling_range = tuple(map(float, config.get('DATA_AUGMENTATION', 'GAMMA_SCALING_RANGE').split(',')))
+    ed_sigma_range = gamma_scaling_range = tuple(map(float, config.get('DATA_AUGMENTATION', 'ED_SIGMA_RANGE').split(',')))
 
     params = {
         'batch_size': config.getint('PARAMETERS', 'BATCH_SIZE'),
@@ -87,6 +88,14 @@ def read_train_params(config):
         'noise_prob': config.getfloat('DATA_AUGMENTATION', 'NOISE_PROB'),
         'noise_mu': config.getfloat('DATA_AUGMENTATION', 'NOISE_MU'),
         'noise_std': config.getfloat('DATA_AUGMENTATION', 'NOISE_STD'),
+
+        # Elastic deformation
+        'ed_prob': config.getfloat('DATA_AUGMENTATION', 'ED_PROB'),
+        'ed_grid': config.getint('DATA_AUGMENTATION', 'ED_GRID'),
+        'ed_sigma_range': ed_sigma_range,
+        'ed_boundary': config.get('DATA_AUGMENTATION', 'ED_BOUNDARY'),
+        'ed_prefilter': config.getboolean('DATA_AUGMENTATION', 'ED_USE_PREFILTER'),
+        'ed_axis': config.get('DATA_AUGMENTATION', 'ED_AXIS'),
 
         # Clip
         'clip_interval': clip_interval

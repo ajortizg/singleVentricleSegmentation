@@ -68,7 +68,7 @@ if __name__ == "__main__":
 
     transf_tern = T.ComposeTernary([
         T.RandomRotate(p=prob_rot, range_z=rot_range_z, range_y=rot_range_y, range_x=rot_range_x, total=None, boundary=rot_bdryMode),
-        T.ElasticDeformation(p=ed_prob, sigma_range=(ed_sigma_min, ed_sigma_max), points=ed_grid, boundary_mode=ed_bdryMode, use_prefilter=ed_usePrefilter)
+        T.ElasticDeformation(p=ed_prob, sigma_range=(ed_sigma_min, ed_sigma_max), points=ed_grid, boundary=ed_bdryMode, prefilter=ed_usePrefilter)
     ])
 
     train_ds = SingleVentricleDataset(config, mode='train')

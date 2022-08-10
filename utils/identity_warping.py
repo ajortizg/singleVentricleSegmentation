@@ -28,7 +28,7 @@ if __name__ == "__main__":
     cuda_availabe = config.get('DEVICE', 'CUDA_AVAILABLE')
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-    transforms = T.ComposeFull([T.RandomRotateFull(p=1.0, range_z=(20, 340), range_x=(20, 340), range_y=(20, 340)),
+    transforms = T.ComposeFull([T.ElasticDeformation(1.0, (2, 2), 10, 'nearest', False),
                                 T.BinarizeMasks(th=0.5),
                                 T.ToTensorFull()])
 
@@ -36,9 +36,9 @@ if __name__ == "__main__":
     val_ds = SingleVentricleDataset(config, DatasetMode.VAL, LoadFlowMode.TRAIN_VAL_OF, full_transforms=transforms)
     test_ds = SingleVentricleDataset(config, DatasetMode.TEST, LoadFlowMode.TRAIN_VAL_OF, full_transforms=transforms)
 
-    train_loader = DataLoader(train_ds, batch_size=1, shuffle=False, num_workers=16, collate_fn=collate_fn)
-    val_loader = DataLoader(val_ds, batch_size=1, shuffle=False, num_workers=16, collate_fn=collate_fn)
-    test_loader = DataLoader(test_ds, batch_size=1, shuffle=False, num_workers=16, collate_fn=collate_fn)
+    train_loader = DataLoader(train_ds, batch_size=1, shuffle=False, num_workers=8, collate_fn=collate_fn)
+    val_loader = DataLoader(val_ds, batch_size=1, shuffle=False, num_workers=8, collate_fn=collate_fn)
+    test_loader = DataLoader(test_ds, batch_size=1, shuffle=False, num_workers=8, collate_fn=collate_fn)
 
     save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'Warping')
     plots.save_config(config, save_dir, filename='config.ini')
