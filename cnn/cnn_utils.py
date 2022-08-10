@@ -36,6 +36,13 @@ def save_config(config, save_dir, filename='config.ini'):
 
 
 def read_train_params(config):
+    rot_range_x = tuple(map(float, config.get('DATA_AUGMENTATION', 'ROT_X_RANGE').split(',')))
+    rot_range_z = tuple(map(float, config.get('DATA_AUGMENTATION', 'ROT_Z_RANGE').split(',')))
+    rot_range_y = tuple(map(float, config.get('DATA_AUGMENTATION', 'ROT_Y_RANGE').split(',')))
+    mult_scaling_range = tuple(map(float, config.get('DATA_AUGMENTATION', 'MULT_SCALING_RANGE').split(',')))
+    clip_interval = tuple(map(float, config.get('DATA_AUGMENTATION', 'CLIP_INTERVAL').split(',')))
+    gamma_scaling_range = tuple(map(float, config.get('DATA_AUGMENTATION', 'GAMMA_SCALING_RANGE').split(',')))
+
     params = {
         'batch_size': config.getint('PARAMETERS', 'BATCH_SIZE'),
         'lr': config.getfloat('PARAMETERS', 'LR'),
@@ -49,8 +56,42 @@ def read_train_params(config):
         'gpus': config.getint('PARAMETERS', 'NUM_GPUS'),
         'workers': config.getint('PARAMETERS', 'NUM_WORKERS'),
         'pretrained': config.getboolean('PARAMETERS', 'PRETRAINED'),
-        'checkpoint_file': config.get('PARAMETERS', 'CHECKPOINT_FILE')
+        'checkpoint_file': config.get('PARAMETERS', 'CHECKPOINT_FILE'),
+
+        # Flip
+        'vflip_prob': config.getfloat('DATA_AUGMENTATION', 'VERTICAL_FLIP_PROB'),
+        'hflip_prob': config.getfloat('DATA_AUGMENTATION', 'HORIZONTAL_FLIP_PROB'),
+        'dflip_prob': config.getfloat('DATA_AUGMENTATION', 'DEPTH_FLIP_PROB'),
+
+        # Rotation
+        'rot_prob': config.getfloat('DATA_AUGMENTATION', 'ROT_PROB'),
+        'rot_boundary': config.get('DATA_AUGMENTATION', 'ROT_BOUNDARY'),
+        'rot_range_x': rot_range_x,
+        'rot_range_y': rot_range_y,
+        'rot_range_z': rot_range_z,
+
+        # Multiplicative scaling
+        'mult_scaling_prob': config.getfloat('DATA_AUGMENTATION', 'MULT_SCALING_PROB'),
+        'mult_scaling_range': mult_scaling_range,
+
+        # Additive scaling
+        'add_scaling_prob': config.getfloat('DATA_AUGMENTATION', 'ADD_SCALING_PROB'),
+        'add_scaling_mean': config.getfloat('DATA_AUGMENTATION', 'ADD_SCALING_MEAN'),
+        'add_scaling_std': config.getfloat('DATA_AUGMENTATION', 'ADD_SCALING_STD'),
+
+        # Gamma scaling
+        'gamma_scaling_prob': config.getfloat('DATA_AUGMENTATION', 'GAMMA_SCALING_PROB'),
+        'gamma_scaling_range': gamma_scaling_range,
+
+        # Gaussian noise
+        'noise_prob': config.getfloat('DATA_AUGMENTATION', 'NOISE_PROB'),
+        'noise_mu': config.getfloat('DATA_AUGMENTATION', 'NOISE_MU'),
+        'noise_std': config.getfloat('DATA_AUGMENTATION', 'NOISE_STD'),
+
+        # Clip
+        'clip_interval': clip_interval
     }
+
     return params
 
 

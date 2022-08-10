@@ -351,80 +351,6 @@ class ToTensorFull:
         return f"{self.__class__.__name__}()"
 
 
-class RandomRotate:
-    def __init__(self, p=0.5, range_x: tuple = (0, 0), range_y: tuple = (0, 0), range_z: tuple = (0, 0), total: int = None, boundary='nearest'):
-        self.p = p
-        self.range_x = range_x
-        self.range_y = range_y
-        self.range_z = range_z
-        self.total = total
-        self.boundary = boundary
-
-        self.i = 1
-        if self.total:
-            step_x = abs(self.range_x[1] - self.range_x[0]) / self.total
-            step_y = abs(self.range_y[1] - self.range_y[0]) / self.total
-            step_z = abs(self.range_z[1] - self.range_z[0]) / self.total
-            self.angles_x = np.linspace(self.range_x[0] + step_x, self.range_x[1] - step_x, self.total)
-            self.angles_y = np.linspace(self.range_y[0] + step_y, self.range_y[1] - step_y, self.total)
-            self.angles_z = np.linspace(self.range_z[0] + step_z, self.range_z[1] - step_z, self.total)
-            np.random.shuffle(self.angles_x)
-            np.random.shuffle(self.angles_y)
-            np.random.shuffle(self.angles_z)
-            print(self.angles_x)
-            print(self.angles_y)
-            print(self.angles_z)
-            self.random_angles = False
-        else:
-            self.angles_x = self.angles_y = self.angles_z = None
-            self.random_angles = True
-
-    def __call__(self, img4d: np.array, ms: np.array, md: np.array):
-        angx = angy = angz = 0
-        if np.random.rand() < self.p:
-            if self.random_angles:
-                angx = np.random.uniform(self.range_x[0], self.range_x[1])
-                angy = np.random.uniform(self.range_y[0], self.range_y[1])
-                angz = np.random.uniform(self.range_z[0], self.range_z[1])
-            else:
-                angx = self.angles_x[self.i]
-                angy = self.angles_y[self.i]
-                angz = self.angles_z[self.i]
-                self.i += 1
-                if self.i >= self.total:
-                    self.i = 0
-                    np.random.shuffle(self.angles_x)
-                    np.random.shuffle(self.angles_y)
-                    np.random.shuffle(self.angles_z)
-
-            NZ, NY, NX, NT = img4d.shape
-            CZ, CY, CX = NZ // 2, NY // 2, NX // 2
-
-            # Rotation about the image center
-            Rx = rotx(angx)
-            Ry = roty(angy)
-            Rz = rotz(angz)
-            Rot = Rz @ Ry @ Rx
-            Rot = Rot.T
-            tx = CX - Rot[0, 0] * CX - Rot[0, 1] * CY - Rot[0, 2] * CZ
-            ty = CY - Rot[1, 0] * CX - Rot[1, 1] * CY - Rot[1, 2] * CZ
-            tz = CZ - Rot[2, 0] * CX - Rot[2, 1] * CY - Rot[2, 2] * CZ
-            offset = np.array([tx, ty, tz])
-
-            img4d_rot = np.zeros(shape=(NX, NY, NZ, NT))
-            for t in range(NT):
-                img4d_rot[:, :, :, t] = ndimage.affine_transform(np.swapaxes(img4d[:, :, :, t], 0, 2),
-                                                                 matrix=Rot, offset=offset, order=3, mode=self.boundary)
-            ms_rot = ndimage.affine_transform(np.swapaxes(ms, 0, 2), matrix=Rot, offset=offset, order=3, mode=self.boundary)
-            md_rot = ndimage.affine_transform(np.swapaxes(md, 0, 2), matrix=Rot, offset=offset, order=3, mode=self.boundary)
-            return (np.swapaxes(img4d_rot, 0, 2), np.swapaxes(ms_rot, 0, 2), np.swapaxes(md_rot, 0, 2))
-        else:
-            return (img4d, ms, md)
-
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}()"
-
-
 class RandomRotateFull:
     def __init__(self, p=0.5, range_x: tuple = (0, 0), range_y: tuple = (0, 0), range_z: tuple = (0, 0), total: int = None, boundary='nearest'):
         self.p = p
@@ -445,9 +371,6 @@ class RandomRotateFull:
             np.random.shuffle(self.angles_x)
             np.random.shuffle(self.angles_y)
             np.random.shuffle(self.angles_z)
-            print(self.angles_x)
-            print(self.angles_y)
-            print(self.angles_z)
             self.random_angles = False
         else:
             self.angles_x = self.angles_y = self.angles_z = None
@@ -514,7 +437,7 @@ class RandomRotateFull:
             return (img4d, ms, md, ff, bf)
 
     def rotate_of(self, of, R):
-        R = R.T # TODO! why?? check this
+        R = R.T  # TODO! why?? check this
         x = of[:, :, :, :, 0].copy()
         y = of[:, :, :, :, 1].copy()
         z = of[:, :, :, :, 2].copy()
@@ -527,12 +450,11 @@ class RandomRotateFull:
         zz, yy, xx = np.meshgrid(np.arange(NZ), np.arange(NY), np.arange(NX), indexing="ij")
         # grid = np.stack((xx, yy, zz), axis=0)
 
-        grid_t = np.zeros((3, NZ, NY, NX))
-        grid_t[0, :, :, :] = (rot[0, 0] * xx + rot[0, 1] * yy + rot[0, 2] * zz) + offset[0]
-        grid_t[1, :, :, :] = (rot[1, 0] * xx + rot[1, 1] * yy + rot[1, 2] * zz) + offset[1]
-        grid_t[2, :, :, :] = (rot[2, 0] * xx + rot[2, 1] * yy + rot[2, 2] * zz) + offset[2]
-
-        return np.array([grid_t[2, :, :, :], grid_t[1, :, :, :], grid_t[0, :, :, :]])
+        # grid_t = np.zeros((3, NZ, NY, NX))
+        xx_t = (rot[0, 0] * xx + rot[0, 1] * yy + rot[0, 2] * zz) + offset[0]
+        yy_t = (rot[1, 0] * xx + rot[1, 1] * yy + rot[1, 2] * zz) + offset[1]
+        zz_t = (rot[2, 0] * xx + rot[2, 1] * yy + rot[2, 2] * zz) + offset[2]
+        return np.array([zz_t, yy_t, xx_t])
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}()"
@@ -739,6 +661,80 @@ def rot2d(deg):
 #                 x_t.append(x[b])
 
 #         return x_t
+
+#     def __repr__(self) -> str:
+#         return f"{self.__class__.__name__}()"
+
+
+# class RandomRotate:
+#     def __init__(self, p=0.5, range_x: tuple = (0, 0), range_y: tuple = (0, 0), range_z: tuple = (0, 0), total: int = None, boundary='nearest'):
+#         self.p = p
+#         self.range_x = range_x
+#         self.range_y = range_y
+#         self.range_z = range_z
+#         self.total = total
+#         self.boundary = boundary
+
+#         self.i = 1
+#         if self.total:
+#             step_x = abs(self.range_x[1] - self.range_x[0]) / self.total
+#             step_y = abs(self.range_y[1] - self.range_y[0]) / self.total
+#             step_z = abs(self.range_z[1] - self.range_z[0]) / self.total
+#             self.angles_x = np.linspace(self.range_x[0] + step_x, self.range_x[1] - step_x, self.total)
+#             self.angles_y = np.linspace(self.range_y[0] + step_y, self.range_y[1] - step_y, self.total)
+#             self.angles_z = np.linspace(self.range_z[0] + step_z, self.range_z[1] - step_z, self.total)
+#             np.random.shuffle(self.angles_x)
+#             np.random.shuffle(self.angles_y)
+#             np.random.shuffle(self.angles_z)
+#             print(self.angles_x)
+#             print(self.angles_y)
+#             print(self.angles_z)
+#             self.random_angles = False
+#         else:
+#             self.angles_x = self.angles_y = self.angles_z = None
+#             self.random_angles = True
+
+#     def __call__(self, img4d: np.array, ms: np.array, md: np.array):
+#         angx = angy = angz = 0
+#         if np.random.rand() < self.p:
+#             if self.random_angles:
+#                 angx = np.random.uniform(self.range_x[0], self.range_x[1])
+#                 angy = np.random.uniform(self.range_y[0], self.range_y[1])
+#                 angz = np.random.uniform(self.range_z[0], self.range_z[1])
+#             else:
+#                 angx = self.angles_x[self.i]
+#                 angy = self.angles_y[self.i]
+#                 angz = self.angles_z[self.i]
+#                 self.i += 1
+#                 if self.i >= self.total:
+#                     self.i = 0
+#                     np.random.shuffle(self.angles_x)
+#                     np.random.shuffle(self.angles_y)
+#                     np.random.shuffle(self.angles_z)
+
+#             NZ, NY, NX, NT = img4d.shape
+#             CZ, CY, CX = NZ // 2, NY // 2, NX // 2
+
+#             # Rotation about the image center
+#             Rx = rotx(angx)
+#             Ry = roty(angy)
+#             Rz = rotz(angz)
+#             Rot = Rz @ Ry @ Rx
+#             Rot = Rot.T
+#             tx = CX - Rot[0, 0] * CX - Rot[0, 1] * CY - Rot[0, 2] * CZ
+#             ty = CY - Rot[1, 0] * CX - Rot[1, 1] * CY - Rot[1, 2] * CZ
+#             tz = CZ - Rot[2, 0] * CX - Rot[2, 1] * CY - Rot[2, 2] * CZ
+#             offset = np.array([tx, ty, tz])
+
+#             img4d_rot = np.zeros(shape=(NX, NY, NZ, NT))
+#             for t in range(NT):
+#                 img4d_rot[:, :, :, t] = ndimage.affine_transform(np.swapaxes(img4d[:, :, :, t], 0, 2),
+#                                                                  matrix=Rot, offset=offset, order=3, mode=self.boundary)
+#             ms_rot = ndimage.affine_transform(np.swapaxes(ms, 0, 2), matrix=Rot, offset=offset, order=3, mode=self.boundary)
+#             md_rot = ndimage.affine_transform(np.swapaxes(md, 0, 2), matrix=Rot, offset=offset, order=3, mode=self.boundary)
+#             return (np.swapaxes(img4d_rot, 0, 2), np.swapaxes(ms_rot, 0, 2), np.swapaxes(md_rot, 0, 2))
+#         else:
+#             return (img4d, ms, md)
 
 #     def __repr__(self) -> str:
 #         return f"{self.__class__.__name__}()"

@@ -18,7 +18,7 @@ from cnn.cnn_utils import collate_fn
 
 
 if __name__ == "__main__":
-    save_imgs = False
+    save_imgs = True
     save_size = (16, 200, 200)
 
     plots.printConsoleOutput_Header('Identity warping')
@@ -28,7 +28,7 @@ if __name__ == "__main__":
     cuda_availabe = config.get('DEVICE', 'CUDA_AVAILABLE')
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-    transforms = T.ComposeFull([T.RandomRotateFull(p=1.0, range_z=(145,145)),
+    transforms = T.ComposeFull([T.RandomRotateFull(p=1.0, range_z=(20, 340), range_x=(20, 340), range_y=(20, 340)),
                                 T.BinarizeMasks(th=0.5),
                                 T.ToTensorFull()])
 

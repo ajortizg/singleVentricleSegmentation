@@ -11,7 +11,6 @@ import os.path as osp
 import cnn_utils as utils
 import os
 from torchsummary import summary
-from basic_unet import BasicUNet3d
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
@@ -31,15 +30,18 @@ if __name__ == "__main__":
     P = utils.read_train_params(config)
 
     # Create train and validation datasets
-    train_transforms = T.ComposeFull([T.MutiplicativeScaling(0.5, scale_range=(0.9, 1.1), clip_interval=(0.0, 1.0)),
-                                      T.AdditiveScaling(p=0.3, mean=0.0, std=0.25, clip_interval=(0.0, 1.0)),
-                                      T.GammaScaling(p=0.3, gamma_range=(0.9, 1.1)),
-                                      T.AdditiveGaussianNoise(p=0.2, mu=0, sigma=0.03, clip_interval=(0.0, 1.0)),
-                                      T.RandomVerticalFlip(0.5),
-                                      T.RandomHorizontalFlip(0.5),
-                                      T.RandomDepthFlip(0.5),
-                                      T.BinarizeMasks(th=0.5),
-                                      T.ToTensorFull()])
+    train_transforms = T.ComposeFull([
+        T.RandomRotateFull(P['rot_prob'], P['rot_range_x'], P['rot_range_y'], P['rot_range_z'], boundary=P['rot_boundary']),
+        T.RandomVerticalFlip(P['vflip_prob']),
+        T.RandomHorizontalFlip(P['hflip_prob']),
+        T.RandomDepthFlip(P['dflip_prob']),
+        T.MutiplicativeScaling(P['mult_scaling_prob'], P['gamma_scaling_range'], P['clip_interval']),
+        T.AdditiveScaling(P['add_scaling_prob'], P['add_scaling_mean'], P['add_scaling_std'], P['clip_interval']),
+        T.GammaScaling(P['gamma_scaling_prob'], P['gamma_scaling_range']),
+        T.AdditiveGaussianNoise(P['noise_prob'], P['noise_mu'], P['noise_std'], P['clip_interval']),
+        T.BinarizeMasks(th=0.5),
+        T.ToTensorFull()
+    ])
     val_transforms = T.ComposeFull([T.BinarizeMasks(th=0.5),
                                     T.ToTensorFull()])
 
@@ -56,6 +58,7 @@ if __name__ == "__main__":
     logger = plots.create_logger(save_dir)
     writer = SummaryWriter(log_dir=save_dir)
     logger.info(f'Using device {device}')
+    logger.info(P)
 
     # Create model
     net = utils.create_net(config, logger).to(device)

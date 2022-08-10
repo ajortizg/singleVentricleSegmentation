@@ -89,13 +89,13 @@ class DoubleConv3d(nn.Module):
                                        'weight',
                                        L.L2LipschitzConv3d(in_size, ks=kernel_size, padding=padding, eps=power_eps, iterations=power_its, max_lc=max_lc))
             if lipschitz else nn.Conv3d(in_ch, out_ch, kernel_size=kernel_size, padding=padding),
-            # nn.InstanceNorm3d(out_ch),
+            nn.InstanceNorm3d(out_ch),
             self.activation_fn(act, slope),
             P.register_parametrization(nn.Conv3d(out_ch, out_ch, kernel_size=kernel_size, padding=padding),
                                        'weight',
                                        L.L2LipschitzConv3d(in_size, ks=kernel_size, padding=padding, eps=power_eps, iterations=power_its, max_lc=max_lc))
             if lipschitz else nn.Conv3d(out_ch, out_ch, kernel_size=kernel_size, padding=padding),
-            # nn.InstanceNorm3d(out_ch),
+            nn.InstanceNorm3d(out_ch),
             self.activation_fn(act, slope))
 
     def activation_fn(self, act, slope):
