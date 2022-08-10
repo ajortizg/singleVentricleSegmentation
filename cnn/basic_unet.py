@@ -4,25 +4,35 @@ import torch.nn.functional as F
 
 
 class BasicUNet3d(nn.Module):
-    def __init__(self, n_channels, n_classes, bilinear=False):
+    def __init__(self, config, logger):
         super(BasicUNet3d, self).__init__()
-        self.n_channels = n_channels
-        self.n_classes = n_classes
-        self.bilinear = bilinear
 
-        self.inc = DoubleConv(n_channels, 16)
-        self.down1 = Down(16, 32)
-        self.down2 = Down(32, 64)
-        self.down3 = Down(64, 128)
+        n_classes = config.getint('PARAMETERS', 'NUM_CLASSES')
+        n_channels = config.getint('PARAMETERS', 'INPUT_CHANNELS')
+        features_start = config.getint('PARAMETERS', 'FEATURES_START')
+        bilinear = config.getboolean('PARAMETERS', 'TRILINEAR')
+        self.residual = config.getboolean('PARAMETERS', 'RESIDUAL')
+
+        feats = [features_start]
+        for i in range(4):
+            feats.append(feats[-1] * 2)
+
+        self.inc = DoubleConv(n_channels, feats[0])
+        self.down1 = Down(feats[0], feats[1])
+        self.down2 = Down(feats[1], feats[2])
+        self.down3 = Down(feats[2], feats[3])
         factor = 2 if bilinear else 1
-        self.down4 = Down(128, 256 // factor)
-        self.up1 = Up(256, 128 // factor, bilinear)
-        self.up2 = Up(128, 64 // factor, bilinear)
-        self.up3 = Up(64, 32 // factor, bilinear)
-        self.up4 = Up(32, 16, bilinear)
-        self.outc = OutConv(16, n_classes)
+        self.down4 = Down(feats[3], feats[4] // factor)
+        self.up1 = Up(feats[4], feats[3] // factor, bilinear)
+        self.up2 = Up(feats[3], feats[2] // factor, bilinear)
+        self.up3 = Up(feats[2], feats[1] // factor, bilinear)
+        self.up4 = Up(feats[1], feats[0], bilinear)
+        self.outc = OutConv(feats[0], n_classes)
 
     def forward(self, x):
+        if self.residual:
+            identity = x[:, 1:2, :, :, :].clone()
+
         x1 = self.inc(x)
         x2 = self.down1(x1)
         x3 = self.down2(x2)
@@ -33,7 +43,11 @@ class BasicUNet3d(nn.Module):
         x = self.up3(x, x2)
         x = self.up4(x, x1)
         logits = self.outc(x)
-        return torch.sigmoid(logits), logits
+
+        if self.residual:
+            return logits + identity, logits
+        else:
+            return logits, logits
 
 
 class DoubleConv(nn.Module):
@@ -44,10 +58,10 @@ class DoubleConv(nn.Module):
         if not mid_channels:
             mid_channels = out_channels
         self.double_conv = nn.Sequential(
-            nn.Conv3d(in_channels, mid_channels, kernel_size=3, padding=1, bias=False),
+            nn.Conv3d(in_channels, mid_channels, kernel_size=3, padding=1),
             nn.InstanceNorm3d(mid_channels),
             nn.ReLU(),
-            nn.Conv3d(mid_channels, out_channels, kernel_size=3, padding=1, bias=False),
+            nn.Conv3d(mid_channels, out_channels, kernel_size=3, padding=1),
             nn.InstanceNorm3d(out_channels),
             nn.ReLU()
         )

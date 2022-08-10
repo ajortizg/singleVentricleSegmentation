@@ -168,39 +168,7 @@ class Up3d(nn.Module):
         return self.conv(x)
 
 
-class BasicUnet3d(nn.Module):
-    def __init__(self, config, logger):
-        super().__init__()
-        num_classes = config.getint('PARAMETERS', 'NUM_CLASSES')
-        input_channels = config.getint('PARAMETERS', 'INPUT_CHANNELS')
-        features_start = config.getint('PARAMETERS', 'FEATURES_START')
-        act = config.get('PARAMETERS', 'ACTIVATION')
-        slope = config.getfloat('PARAMETERS', 'ACTIVATION_SLOPE')
-        self.residual = config.getboolean('PARAMETERS', 'RESIDUAL')
-
-        features = [features_start]
-        for _ in range(1, 5):
-            features.append(features[-1] * 2)
-        features.append(features_start)
-
-        self.unet = BasicUNet(spatial_dims=3, in_channels=input_channels, out_channels=num_classes,
-                              act=("LeakyReLU", {"negative_slope": slope, "inplace": False}),
-                              norm=("instance", {"affine": False}),
-                              features=features)
-
-    def forward(self, x):
-        if self.residual:
-            identity = x[:, 1:2, :, :, :].clone()
-
-        x = self.unet(x)
-
-        if self.residual:
-            return x + identity, x
-        else:
-            return x, x
-
-
-class ResUnet3d(nn.Module):
+class ResUNet3d(nn.Module):
     def __init__(self, config, logger):
         super().__init__()
         num_layers = config.getint('PARAMETERS', 'NUM_LAYERS')
@@ -232,3 +200,35 @@ class ResUnet3d(nn.Module):
             return x + identity, x
         else:
             return x, x
+
+
+# class BasicUnet3d(nn.Module):
+#     def __init__(self, config, logger):
+#         super().__init__()
+#         num_classes = config.getint('PARAMETERS', 'NUM_CLASSES')
+#         input_channels = config.getint('PARAMETERS', 'INPUT_CHANNELS')
+#         features_start = config.getint('PARAMETERS', 'FEATURES_START')
+#         act = config.get('PARAMETERS', 'ACTIVATION')
+#         slope = config.getfloat('PARAMETERS', 'ACTIVATION_SLOPE')
+#         self.residual = config.getboolean('PARAMETERS', 'RESIDUAL')
+
+#         features = [features_start]
+#         for _ in range(1, 5):
+#             features.append(features[-1] * 2)
+#         features.append(features_start)
+
+#         self.unet = BasicUNet(spatial_dims=3, in_channels=input_channels, out_channels=num_classes,
+#                               act=("LeakyReLU", {"negative_slope": slope, "inplace": False}),
+#                               norm=("instance", {"affine": False}),
+#                               features=features)
+
+#     def forward(self, x):
+#         if self.residual:
+#             identity = x[:, 1:2, :, :, :].clone()
+
+#         x = self.unet(x)
+
+#         if self.residual:
+#             return x + identity, x
+#         else:
+#             return x, x

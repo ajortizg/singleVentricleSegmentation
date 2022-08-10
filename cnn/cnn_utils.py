@@ -10,7 +10,8 @@ import os
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 import utils.transforms as T
-from cnn.unet_3d import UNet3d, BasicUnet3d, ResUnet3d
+from cnn.unet_3d import UNet3d, ResUNet3d
+from cnn.basic_unet import BasicUNet3d
 
 
 def create_net(config, logger):
@@ -19,9 +20,9 @@ def create_net(config, logger):
     if net_type == 'unet3d':
         net = UNet3d(config, logger)
     elif net_type == 'basic_unet3d':
-        net = BasicUnet3d(config, logger)
+        net = BasicUNet3d(config, logger)
     elif net_type == 'res_unet3d':
-        net = ResUnet3d(config, logger)
+        net = ResUNet3d(config, logger)
     else:
         print('Unknown network: ' + net_type)
         sys.exit()
@@ -37,12 +38,12 @@ def save_config(config, save_dir, filename='config.ini'):
 
 def read_train_params(config):
     rot_range_x = tuple(map(float, config.get('DATA_AUGMENTATION', 'ROT_X_RANGE').split(',')))
-    rot_range_z = tuple(map(float, config.get('DATA_AUGMENTATION', 'ROT_Z_RANGE').split(',')))
     rot_range_y = tuple(map(float, config.get('DATA_AUGMENTATION', 'ROT_Y_RANGE').split(',')))
+    rot_range_z = tuple(map(float, config.get('DATA_AUGMENTATION', 'ROT_Z_RANGE').split(',')))
     mult_scaling_range = tuple(map(float, config.get('DATA_AUGMENTATION', 'MULT_SCALING_RANGE').split(',')))
     clip_interval = tuple(map(float, config.get('DATA_AUGMENTATION', 'CLIP_INTERVAL').split(',')))
     gamma_scaling_range = tuple(map(float, config.get('DATA_AUGMENTATION', 'GAMMA_SCALING_RANGE').split(',')))
-    ed_sigma_range = gamma_scaling_range = tuple(map(float, config.get('DATA_AUGMENTATION', 'ED_SIGMA_RANGE').split(',')))
+    ed_sigma_range = tuple(map(float, config.get('DATA_AUGMENTATION', 'ED_SIGMA_RANGE').split(',')))
 
     params = {
         'batch_size': config.getint('PARAMETERS', 'BATCH_SIZE'),

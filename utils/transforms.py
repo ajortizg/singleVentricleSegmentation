@@ -448,9 +448,6 @@ class RandomRotate:
 
     def generate_rotation_grid(self, rot, offset, NZ, NY, NX):
         zz, yy, xx = np.meshgrid(np.arange(NZ), np.arange(NY), np.arange(NX), indexing="ij")
-        # grid = np.stack((xx, yy, zz), axis=0)
-
-        # grid_t = np.zeros((3, NZ, NY, NX))
         xx_t = (rot[0, 0] * xx + rot[0, 1] * yy + rot[0, 2] * zz) + offset[0]
         yy_t = (rot[1, 0] * xx + rot[1, 1] * yy + rot[1, 2] * zz) + offset[1]
         zz_t = (rot[2, 0] * xx + rot[2, 1] * yy + rot[2, 2] * zz) + offset[2]
@@ -519,24 +516,6 @@ class Erode:
         return f"{self.__class__.__name__}()"
 
 
-# class Resize:
-#     def __init__(self, size: tuple[int, int, int]):
-#         self.size = size
-
-#     def __call__(self, vol: torch.Tensor, ms: torch.Tensor, md: torch.Tensor):
-#         NZ, NY, NX, NT = vol.shape
-#         nsize = (1, 1, NZ, NY, NX)
-#         ms_i = F.interpolate(ms.reshape(nsize), size=self.size, align_corners=True, mode='trilinear').squeeze()
-#         md_i = F.interpolate(md.reshape(nsize), size=self.size, align_corners=True, mode='trilinear').squeeze()
-#         vol_i = torch.zeros(size=(*self.size, NT), dtype=vol.dtype, device=vol.device)
-#         for t in range(NT):
-#             vol_i[:, :, :, t] = F.interpolate(vol[:, :, :, t].reshape(nsize), size=self.size, align_corners=True, mode='trilinear').squeeze()
-#         return (vol_i, ms_i, md_i)
-
-#     def __repr__(self) -> str:
-#         return f"{self.__class__.__name__}()"
-
-
 class Resize:
     def __init__(self, size: tuple[int, int, int], boundary='mirror'):
         self.size = size
@@ -560,22 +539,6 @@ class Resize:
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}()"
-
-
-# class ResizeFlow3d:
-#     def __init__(self, size: tuple[int, int, int]):
-#         self.size = size
-
-#     def __call__(self, uvw: torch.Tensor):
-#         NZ, NY, NX, C = uvw.shape
-#         nsize = (1, 1, NZ, NY, NX)
-#         uvw_i = torch.zeros(size=(*self.size, C), dtype=uvw.dtype, device=uvw.device)
-#         for c in range(C):
-#             uvw_i[:, :, :, c] = F.interpolate(uvw[:, :, :, c].reshape(nsize), size=self.size, align_corners=True, mode='trilinear').squeeze()
-#         return uvw_i
-
-#     def __repr__(self) -> str:
-#         return f"{self.__class__.__name__}()"
 
 
 def rotx(deg):
@@ -741,6 +704,39 @@ def rot2d(deg):
 #             return (np.swapaxes(img4d_rot, 0, 2), np.swapaxes(ms_rot, 0, 2), np.swapaxes(md_rot, 0, 2))
 #         else:
 #             return (img4d, ms, md)
+
+#     def __repr__(self) -> str:
+#         return f"{self.__class__.__name__}()"
+
+
+# class Resize:
+#     def __init__(self, size: tuple[int, int, int]):
+#         self.size = size
+
+#     def __call__(self, vol: torch.Tensor, ms: torch.Tensor, md: torch.Tensor):
+#         NZ, NY, NX, NT = vol.shape
+#         nsize = (1, 1, NZ, NY, NX)
+#         ms_i = F.interpolate(ms.reshape(nsize), size=self.size, align_corners=True, mode='trilinear').squeeze()
+#         md_i = F.interpolate(md.reshape(nsize), size=self.size, align_corners=True, mode='trilinear').squeeze()
+#         vol_i = torch.zeros(size=(*self.size, NT), dtype=vol.dtype, device=vol.device)
+#         for t in range(NT):
+#             vol_i[:, :, :, t] = F.interpolate(vol[:, :, :, t].reshape(nsize), size=self.size, align_corners=True, mode='trilinear').squeeze()
+#         return (vol_i, ms_i, md_i)
+
+#     def __repr__(self) -> str:
+#         return f"{self.__class__.__name__}()"
+
+# class ResizeFlow3d:
+#     def __init__(self, size: tuple[int, int, int]):
+#         self.size = size
+
+#     def __call__(self, uvw: torch.Tensor):
+#         NZ, NY, NX, C = uvw.shape
+#         nsize = (1, 1, NZ, NY, NX)
+#         uvw_i = torch.zeros(size=(*self.size, C), dtype=uvw.dtype, device=uvw.device)
+#         for c in range(C):
+#             uvw_i[:, :, :, c] = F.interpolate(uvw[:, :, :, c].reshape(nsize), size=self.size, align_corners=True, mode='trilinear').squeeze()
+#         return uvw_i
 
 #     def __repr__(self) -> str:
 #         return f"{self.__class__.__name__}()"

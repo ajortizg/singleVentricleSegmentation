@@ -59,7 +59,6 @@ if __name__ == "__main__":
     logger = plots.create_logger(save_dir)
     writer = SummaryWriter(log_dir=save_dir)
     logger.info(f'Using device {device}')
-    logger.info(P)
 
     # Create model
     net = utils.create_net(config, logger).to(device)
