@@ -349,6 +349,7 @@ def save_acc(H, save_dir):
     plt.figure()
     plt.plot(H['train_acc'], label='train_acc')
     plt.plot(H['val_acc'], label='val_acc')
+    plt.plot(H['test_acc'], label='test_acc')
     plt.title('Accuracy on Dataset')
     plt.xlabel('Epoch #')
     plt.ylabel('Acc')

@@ -31,7 +31,7 @@ if __name__ == "__main__":
 
     # Create train and validation datasets
     train_transforms = T.ComposeFull([
-        T.RandomRotate(P['rot_prob'], P['rot_range_x'], P['rot_range_y'], P['rot_range_z'], boundary=P['rot_boundary'], clip_interval=P['clip_interval']),
+        T.RandomRotateTorch(P['rot_prob'], P['rot_range_x'], P['rot_range_y'], P['rot_range_z'], boundary=P['rot_boundary'], clip_interval=P['clip_interval']),
         T.ElasticDeformation(P['ed_prob'], P['ed_sigma_range'], P['ed_grid'], P['ed_boundary'], P['ed_prefilter'], P['ed_axis'], P['clip_interval']),
         T.RandomVerticalFlip(P['vflip_prob']),
         T.RandomHorizontalFlip(P['hflip_prob']),
@@ -84,9 +84,10 @@ if __name__ == "__main__":
     # Steps per epoch for training and evaluation set
     train_steps = len(train_loader)
     val_steps = len(val_loader)
+    test_stepps = len(test_loader)
 
     # History training info
-    H = {'train_loss': [], 'val_loss': [], 'train_acc': [], 'val_acc': []}
+    H = {'train_loss': [], 'val_loss': [], 'train_acc': [], 'val_acc': [], 'test_acc': []}
 
     logger.info('Save directory: ' + save_dir)
     logger.info('Trainig CNN')
@@ -100,14 +101,15 @@ if __name__ == "__main__":
     for e in range(P['epochs']):
         train_res = trainer.train_epoch(train_loader, opt)
         val_res = trainer.val_epoch(val_loader)
-        trainer.test_epoch(test_loader)
+        test_acc = trainer.test_epoch(test_loader, test_ds)
 
         train_avg = tuple(x / train_steps for x in train_res)
         val_avg = tuple(x / val_steps for x in val_res)
+        test_acc_avg = test_acc / test_stepps
 
-        best_train_loss, best_val_loss = utils.log(logger, writer, e, train_avg, val_avg, net, opt,
+        best_train_loss, best_val_loss = utils.log(logger, writer, e, train_avg, val_avg, test_acc_avg, net, opt,
                                                    scheduler, best_train_loss, best_val_loss, save_dir)
-        H = utils.update_train_history(H, train_avg, val_avg)
+        H = utils.update_train_history(H, train_avg, val_avg, test_acc_avg)
 
         scheduler.step()
         pbar.update(1)
@@ -117,7 +119,7 @@ if __name__ == "__main__":
 
     plots.save_loss(H, save_dir)
     plots.save_acc(H, save_dir)
-    utils.checkpoint(e, net, opt, train_avg, val_avg, save_dir, 'checkpoint.pth')
+    utils.checkpoint(e, net, opt, train_avg, val_avg, test_acc_avg, save_dir, 'checkpoint.pth')
     # torch.save(net, osp.join(save_dir, 'model.pth'))
 
     pbar.close()

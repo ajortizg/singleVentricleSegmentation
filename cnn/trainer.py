@@ -39,7 +39,7 @@ class Trainer:
         total_loss = (0.0, 0.0, 0.0, 0.0, 0.0)
         total_acc = 0
 
-        for i, (pnames, img4d, m0, mk, _, times_fwd, times_bwd, ff, bf, offsets) in enumerate(train_loader):
+        for i, (_, img4d, m0, mk, _, times_fwd, times_bwd, ff, bf, offsets) in enumerate(train_loader):
             self.pbar.set_postfix_str(f'Train: {i+1}/{len(train_loader)}')
             img4d = img4d.to(self.device)
             m0 = m0.to(self.device)
@@ -88,12 +88,43 @@ class Trainer:
                     self.plot_imgs(mts, mtts, offsets, batch_indices, 'val')
         return (*total_loss, total_acc)
 
-    def test_epoch(self, test_loader):
+    def test_epoch(self, test_loader, test_ds):
         self.net.eval()
+        total_acc = 0
 
         with torch.no_grad():
-            for i, (pnames, img4d, m0, mk, masks, times_fwd, times_bwd, ff, bf, offsets) in enumerate(test_loader):
-                print('test: ', masks.shape)
+            for i, (_, img4d, _, _, masks, times_fwd, times_bwd, ff, bf, _) in enumerate(test_loader):
+                self.pbar.set_postfix_str(f'Test: {i+1}/{len(test_loader)}')
+                times_fwd, _ = test_ds.create_timeline(times_fwd[0], times_bwd[0], masks.shape[-1])
+                img4d = img4d.to(self.device)
+                masks = masks.to(self.device)
+                ff = ff.to(self.device)
+                # bf = bf.to(self.device)
+
+                BS, NZ, NY, NX, _, timesteps = ff.shape
+                warp = WarpCNN(self.config, NZ, NY, NX)
+                mts = torch.empty(size=(timesteps, BS, 1, NZ, NY, NX), dtype=img4d.dtype, device=self.device)
+                mts[0] = masks[..., times_fwd[0]]
+                masks_gt = torch.empty_like(mts)
+                masks_gt[0] = masks[..., times_fwd[0]]
+
+                for t in range(timesteps - 1):
+                    # Forward mask propagation
+                    mt = warp(mts[t], ff[..., t])
+                    x = torch.cat((img4d[..., times_fwd[t + 1]], mt), dim=1)
+                    mts[t + 1], _ = self.net(x)
+                    masks_gt[t + 1] = masks[..., times_fwd[t + 1]]
+
+                # Compute accuracy
+                mts.swapaxes_(0, 1).squeeze_(0)
+                mts = torch.where(mts > 0.5, 1.0, 0.0)
+                masks_gt.swapaxes_(0, 1).squeeze_(0)
+                acc = compute_meandice(mts, masks_gt).mean()
+                total_acc += acc.item()
+
+                if np.random.rand() < self.display_prob:
+                    self.plot_test_imgs(mts, masks_gt, 'test')
+        return total_acc
 
     def train_patient(self, imgs4d, m0s, mks, _, list_times_fwd, list_times_bwd, ff, bf, offsets, opt):
         offsets = offsets.to(torch.long)
@@ -170,6 +201,17 @@ class Trainer:
         acck = compute_meandice(mkt, mk).mean()
         dc = 0.5 * (acc0 + acck)
         return dc
+
+    def plot_test_imgs(self, mts, gts, tag):
+        b = np.random.randint(mts.shape[0])
+        mt = mts[b]
+        gt = gts[b]
+        mt = mt.swapaxes_(0, 1)
+        gt = gt.swapaxes_(0, 1)
+        error = torch.abs(gt - mt)
+        self.writer.add_images(f'{tag}/gt', gt)
+        self.writer.add_images(f'{tag}/est', mt)
+        self.writer.add_images(f'{tag}/error', error)
 
     def plot_imgs(self, mts, mtts, offsets, batch_indices, tag):
         m0 = mts[0, batch_indices]

@@ -28,9 +28,10 @@ if __name__ == "__main__":
     cuda_availabe = config.get('DEVICE', 'CUDA_AVAILABLE')
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-    transforms = T.ComposeFull([T.ElasticDeformation(1.0, (0.5, 2.0), 10, 'nearest', False, 'zyx', (0.0, 1.0)),
-                                T.BinarizeMasks(th=0.5),
-                                T.ToTensorFull()])
+    transforms = T.ComposeFull(
+        [T.RandomRotateTorch(1.0, range_z=(20, 340), range_x=(20, 340), range_y=(20, 340)),
+         T.BinarizeMasks(th=0.5),
+         T.ToTensorFull()])
     test_mask_transforms = T.ComposeUnary([T.Round(0.5), T.ToTensor()])
 
     train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, LoadFlowMode.TRAIN_VAL_OF, full_transforms=transforms)
