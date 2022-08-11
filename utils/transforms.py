@@ -5,6 +5,8 @@ import elasticdeform as ed
 import cv2
 from scipy import ndimage
 
+from opticalFlow_cuda_ext import opticalFlow
+
 
 class ComposeTernary:
     def __init__(self, transforms):
@@ -428,7 +430,7 @@ class RandomRotate:
                 img4d_rot[..., t] = ndimage.map_coordinates(img4d[..., t], new_coords, order=3, mode=self.boundary)
             img4d_rot = np.clip(img4d_rot, self.clip_interval[0], self.clip_interval[1])
 
-            # Rotate optical flow (of shape [NZ,NY,NX,3,timesteps])
+            # Rotate optical flow (of shape [timesteps,NZ,NY,NX,3]), new: [NZ,NY,NX,3,NT])
             ff_rot = np.zeros_like(ff)
             bf_rot = np.zeros_like(bf)
 
@@ -461,6 +463,123 @@ class RandomRotate:
         yy_t = (rot[1, 0] * xx + rot[1, 1] * yy + rot[1, 2] * zz) + offset[1]
         zz_t = (rot[2, 0] * xx + rot[2, 1] * yy + rot[2, 2] * zz) + offset[2]
         return np.array([zz_t, yy_t, xx_t])
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}()"
+
+
+#TODO: check
+class RandomRotateGPU:
+    def __init__(self, config, p, range_x, range_y, range_z, total, interp, boundary, clip_interval):
+        self.config = config
+        self.p = p
+        self.range_x = range_x
+        self.range_y = range_y
+        self.range_z = range_z
+        self.total = total
+        self.interp = interp
+        self.boundary = boundary
+        self.clip_interval = clip_interval
+
+        self.i = 1
+        if self.total:
+            step_x = abs(self.range_x[1] - self.range_x[0]) / self.total
+            step_y = abs(self.range_y[1] - self.range_y[0]) / self.total
+            step_z = abs(self.range_z[1] - self.range_z[0]) / self.total
+            self.angles_x = np.linspace(self.range_x[0] + step_x, self.range_x[1] - step_x, self.total)
+            self.angles_y = np.linspace(self.range_y[0] + step_y, self.range_y[1] - step_y, self.total)
+            self.angles_z = np.linspace(self.range_z[0] + step_z, self.range_z[1] - step_z, self.total)
+            np.random.shuffle(self.angles_x)
+            np.random.shuffle(self.angles_y)
+            np.random.shuffle(self.angles_z)
+            self.random_angles = False
+        else:
+            self.angles_x = self.angles_y = self.angles_z = None
+            self.random_angles = True
+
+    def __call__(self, img4d: np.array, ms: np.array, md: np.array, ff: np.array, bf: np.array):
+        angx = angy = angz = 0
+        if np.random.rand() < self.p:
+            if self.random_angles:
+                angx = np.random.uniform(self.range_x[0], self.range_x[1])
+                angy = np.random.uniform(self.range_y[0], self.range_y[1])
+                angz = np.random.uniform(self.range_z[0], self.range_z[1])
+            else:
+                angx = self.angles_x[self.i]
+                angy = self.angles_y[self.i]
+                angz = self.angles_z[self.i]
+                self.i += 1
+                if self.i >= self.total:
+                    self.i = 0
+                    np.random.shuffle(self.angles_x)
+                    np.random.shuffle(self.angles_y)
+                    np.random.shuffle(self.angles_z)
+
+            NZ, NY, NX, NT = img4d.shape
+            CZ, CY, CX = NZ // 2, NY // 2, NX // 2
+
+            LZ, LY, LX = self.getMeshLength(self.config, NZ, NY, NX)
+
+            meshInfo = opticalFlow.MeshInfo3D(NZ, NY, NX, LZ, LY, LX)
+            rotationOp = opticalFlow.Rotation3D(meshInfo, self.interp, self.boundary)
+
+            # Rotation about the image center
+            Rx = rotx(angx)
+            Ry = roty(angy)
+            Rz = rotz(angz)
+            R = Rz @ Ry @ Rx
+            R = R.T
+            tx = CX - R[0, 0] * CX - R[0, 1] * CY - R[0, 2] * CZ
+            ty = CY - R[1, 0] * CX - R[1, 1] * CY - R[1, 2] * CZ
+            tz = CZ - R[2, 0] * CX - R[2, 1] * CY - R[2, 2] * CZ
+            offset = np.array([tx, ty, tz])
+
+            # TODO: use pytorch tensors for R and offset
+
+            # Rotate masks (mask shape [NZ,NY,NX])
+            ms_rot = rotationOp.forward(ms, R, offset)
+            md_rot = rotationOp.forward(md, R, offset)
+
+            # Rotate image (image shape [NZ,NY,NX,NT])
+            img4d_rot = rotationOp.forwardVectorField(img4d, R, offset)
+            # TODO: clipping on pytorch tensor
+            #img4d_rot = np.clip(img4d_rot, self.clip_interval[0], self.clip_interval[1])
+
+            # Rotate optical flow (of shape [NZ,NY,NX,3,NT])
+            ff_rot = rotationOp.forwardMatrixField(ff, R, offset)
+            bf_rot = rotationOp.forwardMatrixField(bf, R, offset)
+
+            # TODO: pytorch function
+            # WARNING: take care of the new shape [NZ,NY,NX,3,NT]
+            ff_rot = self.rotate_of(ff_rot, R)
+            bf_rot = self.rotate_of(bf_rot, R)
+
+            return (img4d_rot, ms_rot, md_rot, ff_rot, bf_rot)
+        else:
+            return (img4d, ms, md, ff, bf)
+
+    def rotate_of(self, of, R):
+        R = R.T  # TODO! why?? check this
+        x = of[:, :, :, :, 0].copy()
+        y = of[:, :, :, :, 1].copy()
+        z = of[:, :, :, :, 2].copy()
+        of[:, :, :, :, 0] = x * R[0, 0] + y * R[0, 1] + z * R[0, 2]
+        of[:, :, :, :, 1] = x * R[1, 0] + y * R[1, 1] + z * R[1, 2]
+        of[:, :, :, :, 2] = x * R[2, 0] + y * R[2, 1] + z * R[2, 2]
+        return of
+
+    def getMeshLength(self, config, NZ, NY, NX):
+        LenghtType = config.get('WARPING', 'LenghtType')
+        if LenghtType == "numDofs":
+            LZ = NZ - 1
+            LY = NY - 1
+            LX = NX - 1
+            return LZ, LY, LX
+        elif LenghtType == "fixed":
+            LZ = config.getfloat('WARPING', "LenghtZ")
+            LY = config.getfloat('WARPING', "LenghtY")
+            LX = config.getfloat('WARPING', "LenghtX")
+            return LZ, LY, LX
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}()"

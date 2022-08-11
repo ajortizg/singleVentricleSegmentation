@@ -2,6 +2,7 @@
 #include "differentialOps.h"
 #include "anisotropicDifferentialOps.h"
 #include "prolongationOps.h"
+#include "rotationOps.h"
 #include "warpingOps.h"
 #include "warpingOpsCNN.h"
 #include "opticalFlowOps.h"
@@ -101,6 +102,15 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
     .value("INTERPOLATE_CUBIC_HERMITESPLINE", InterpolationType::INTERPOLATE_CUBIC_HERMITESPLINE)
     //.value("INTERPOLATE_CUBIC_BSPLINE", InterpolationType::INTERPOLATE_CUBIC_BSPLINE)
     .export_values();
+
+  //=======================================
+  // rotation
+  //======================================= 
+  py::class_<Rotation3D>(m,"Rotation3D")
+      .def(py::init<const MeshInfo3D&, const InterpolationType, const BoundaryType>())
+      .def("forward", &Rotation3D::forward)
+      .def("forwardVectorField", &Rotation3D::forwardVectorField)
+      .def("forwardMatrixField", &Rotation3D::forwardMatrixField);
 
   //=======================================
   // warping

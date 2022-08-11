@@ -12,10 +12,12 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     # parser.add_argument('--gpu', type=int, default=0)
-    parser.add_argument('--gpu', type=int, default=0)
+    parser.add_argument('--gpu', type=str, default="0")
     args = parser.parse_args()
 
     DEVICE = torch_utils.getTorchDevice(args.gpu)
+    
+    test = torch.zeros([7, 8, 9, 3]).float().to(DEVICE)
 
     # if torch.cuda.is_available():
 
