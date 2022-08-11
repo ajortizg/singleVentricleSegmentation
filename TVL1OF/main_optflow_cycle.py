@@ -1,14 +1,13 @@
 import os.path as osp
 import os
 from enum import Enum
-
 from TVL1OF3D import *
 
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
-from cnn.dataset import SingleVentricleDataset, DatasetMode, LoadFlowMode
 from utils import plots
 import utils.transforms as T
+from cnn.dataset import SingleVentricleDataset, DatasetMode, LoadFlowMode
 
 
 class OpticalFlowMode(Enum):
@@ -18,42 +17,32 @@ class OpticalFlowMode(Enum):
 
 
 def compute_optical_flow(ds: SingleVentricleDataset, idx: int, mode: OpticalFlowMode, save_dir: str, device: str, config, logger):
-    (pname, data, _, _, _, init_ts, final_ts, _, _) = ds[idx]
+    (pname, data, _, _, _, _, _, _) = ds[idx]
     data = data.to(device)
-    NZ, NY, NX, NT = data.shape
+    NZ, NY, NX, _ = data.shape
+    original_NT = ds.get_original_NT(idx)
 
     patient_dir = plots.createSubDirectory(save_dir, pname)
-    logger.info(f'{idx} - {pname} ({data.shape}), ({init_ts}-{final_ts})')
+    logger.info(f'{idx} - {pname} ({data.shape}), {original_NT}')
 
     # initialization of optical flow and mask
     u = torch.zeros([NZ, NY, NX, 3]).float().to(device)
     p = torch.zeros([NZ, NY, NX, 3, 3]).float().to(device)
 
-    original_NT = ds.get_original_NT(idx)
-    full_cycle = ds.full_cycle(idx)
-    if full_cycle:
-        logger.info(f'{pname}, full_cycle, {original_NT}')
-
-    indices = None
     if mode == OpticalFlowMode.FORWARD:
-        if full_cycle:
-            indices = torch.arange(0, original_NT + 1, 1)
-            indices[-1] = 0
-        else:
-            indices = torch.arange(init_ts, final_ts + 1, 1)
+        # mask = m0.to(DEVICE)
+        indices = torch.arange(0, original_NT + 1, 1)
+        indices[-1] = 0
     elif mode == OpticalFlowMode.BACKWARD:
-        if full_cycle:
-            indices = torch.arange(original_NT - 1, -2, -1)
-            indices[-1] = original_NT - 1
-        else:
-            indices = torch.arange(final_ts, init_ts - 1, -1)
+        # mask = mk.to(DEVICE)
+        indices = torch.arange(original_NT - 1, -2, -1)
+        indices[-1] = original_NT - 1
 
     for i in range(len(indices) - 1):
-        # t0, t1 = t + inc_t, t
         t0 = indices[i + 1].item()
         t1 = indices[i].item()
-        I0 = data[:, :, :, t0]
-        I1 = data[:, :, :, t1]
+        I0 = data[:, :, :, t0]  # tgt
+        I1 = data[:, :, :, t1]  # src
         # print(f'{t1}->{t0}')
         pbar.set_postfix_str(f'P: {pname}, ({t1}->{t0})')
         save_dir_timestep = plots.createSubDirectory(patient_dir, f'time{t1}')
@@ -91,12 +80,9 @@ if __name__ == "__main__":
     with open(conifg_output, 'w') as configfile:
         config.write(configfile)
 
-    img4d_transforms = T.ComposeUnary([T.ToTensor()])
-    # mask_transf = T.ComposeUnary([T.ToTensor()])
-
-    train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, LoadFlowMode.NO_LOAD_OF, img4d_transforms)
-    val_ds = SingleVentricleDataset(config, DatasetMode.VAL, LoadFlowMode.NO_LOAD_OF, img4d_transforms)
-    test_ds = SingleVentricleDataset(config, DatasetMode.TEST, LoadFlowMode.NO_LOAD_OF, img4d_transforms)
+    data_transf = T.ComposeUnary([T.ToTensor()])
+    train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, LoadFlowMode.NO_LOAD_OF, data_transf)
+    val_ds = SingleVentricleDataset(config, DatasetMode.VAL, LoadFlowMode.NO_LOAD_OF, data_transf)
 
     compute_all_patients = config.get('DATA', 'COMPUTE_ALL_PATIENTS')
 
@@ -108,17 +94,14 @@ if __name__ == "__main__":
             ds_list.append(train_ds)
         elif dataset == 'val':
             ds_list.append(val_ds)
-        elif dataset == 'test':
-            ds_list.append(test_ds)
-
         from_idx = config.getint('PARAMETERS', 'from_idx')
         to_idx = config.getint('PARAMETERS', 'to_idx')
     else:
-        ds_list = [train_ds, val_ds, test_ds]
+        ds_list = [train_ds, val_ds]
         from_idx = 0
 
     if compute_all_patients:
-        pbar = tqdm(total=to_idx - from_idx if use_indices else len(train_ds) + len(val_ds) + len(test_ds))
+        pbar = tqdm(total=to_idx - from_idx if use_indices else len(train_ds) + len(val_ds))
         for ds in ds_list:
             to_idx = to_idx if use_indices else len(ds)
 

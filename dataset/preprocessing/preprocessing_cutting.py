@@ -74,6 +74,7 @@ if __name__ == "__main__":
     xshifts = np.zeros(len(dataSet))
     yshifts = np.zeros(len(dataSet))
     zshifts = np.zeros(len(dataSet))
+    original_NT = np.zeros(len(dataSet))
 
     #
     saveDir4D = plots.createSubDirectory(saveDir, dataSet.volumes_subdir_path)
@@ -107,6 +108,7 @@ if __name__ == "__main__":
         xshifts[index] = xmin_total
         yshifts[index] = ymin_total
         zshifts[index] = zmin_total
+        original_NT[index] = patient.nii_data_xyzt.shape[3]
 
         NX_cut = xmax_total - xmin_total + 1
         NY_cut = ymax_total - ymin_total + 1
@@ -122,6 +124,12 @@ if __name__ == "__main__":
         save_np_to_nifty(cutting_diastole, saveDirPatient, patient.name + "_Diastole_Labelmap.nii", patient.hdr_mask_diastole)
         save_np_to_nifty(cutting_systole, saveDirPatient, patient.name + "_Systole_Labelmap.nii", patient.hdr_mask_systole)
 
+        if patient.full_cycle:
+            for t in range(patient.NT):
+                mask_cutted = patient.nii_masks_xyz[t][xmin_total:xmax_total + 1, ymin_total:ymax_total + 1, zmin_total:zmax_total + 1]
+                mask_filename = patient.masks_dirs[t].split('/')[-1]
+                save_np_to_nifty(mask_cutted, saveDirPatient, mask_filename, patient.nii_masks_load[t].header)
+
         pbar.update(1)
 
     # save data base with shifts
@@ -132,5 +140,6 @@ if __name__ == "__main__":
     output_df['xshift'] = xshifts
     output_df['yshift'] = yshifts
     output_df['zshift'] = zshifts
+    output_df['original_NT'] = original_NT
     output_df_file = os.path.sep.join([saveDir, dataSet.segmentations_filename])
     output_df.to_excel(output_df_file, index=False)

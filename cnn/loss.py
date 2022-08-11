@@ -24,9 +24,10 @@ class DiceLoss(nn.Module):
 
 
 class DiceBCELoss(nn.Module):
-    def __init__(self, weight=None, size_average=True, alpha=0.7):
+    def __init__(self, reduction, weight=None, size_average=True, alpha=0.7):
         super(DiceBCELoss, self).__init__()
         self.alpha = alpha
+        self.reduction = reduction
 
     def forward(self, inputs, targets, smooth=1):
 
@@ -38,8 +39,8 @@ class DiceBCELoss(nn.Module):
         targets = targets.view(-1)
 
         intersection = (inputs * targets).sum()
-        dice_loss = 1 - (2. * intersection + smooth) / (inputs.sum() + targets.sum() + smooth)
-        bce = F.binary_cross_entropy(inputs, targets, reduction='mean')
+        dice_loss = 1. - (2. * intersection + smooth) / (inputs.sum() + targets.sum() + smooth)
+        bce = F.binary_cross_entropy(inputs, targets, reduction=self.reduction)
         dice_bce = (1.0 - self.alpha) * bce + self.alpha * dice_loss
 
         return dice_bce

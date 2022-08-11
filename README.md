@@ -73,24 +73,12 @@ always use /parser/configPreprocessing.ini
     ```
     Save resulting folder to /data/singleVentricleData_prolongLinear_split.
 
-6. Data augmentation only for training the CNN.
+6. No longer required, data augmentation is now on the fly (i.e. during training).
+<s>Data augmentation only for training the CNN.
     in parset set BASE_PATH_3D to /data/singleVentricleData_prolongLinear_split
     ```
     python ./dataset/preprocessing/preprocessing_data_augmentation.py
     ```
     Save resulting folder to /data/singleVentricleData_prolongLinear_split_xN,
-    where N is the number of new patients created per patient.
+    where N is the number of new patients created per patient.</s>
 
-
-
-## TODOs
-
-### saving
-* nifty header
-* cutting/prolongation: variable tolerance for cutting, prolongation of 4d data and mask: so far both by nearest neighbor
-
-### tests
-* compare u,p on different levels, scaling correct?
-* convergence in number of warpings?
-* influence of smoothing the input images or using ROF-output as input
-* check Moreau identity u = prox_{tau F}(u) + tau prox_{F^{*}/tau}(u/tau) = u

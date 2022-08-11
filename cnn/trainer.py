@@ -2,169 +2,209 @@ import os.path as osp
 import sys
 import torch
 from torch import nn
-import datetime
+from monai.metrics.meandice import compute_meandice
+import numpy as np
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
-import utils.transforms as T
 from cnn.warp import WarpCNN
 
 
 class Trainer:
-    def __init__(self, net, pbar, config, device):
+    def __init__(self, net, pbar, config, device, writer, display_prob=0.2):
         self.net = net
         self.pbar = pbar
         self.config = config
         self.device = device
+        self.writer = writer
+        self.display_prob = display_prob
         self.loss_lambda = config.getfloat('PARAMETERS', 'LOSS_LAMBDA')
         loss_fn_type = config.get('PARAMETERS', 'LOSS_FN')
-
+        self.penalization = config.getboolean('PARAMETERS', 'LOSS_PENALIZATION')
+        self.mu = config.getfloat('PARAMETERS', 'LOSS_PENALIZATION_MU')
+        self.reduction = config.get('PARAMETERS', 'LOSS_REDUCTION')
         self.loss_fn = None
+
         if loss_fn_type == 'mse':
-            self.loss_fn = nn.MSELoss(reduction='sum')
+            self.loss_fn = nn.MSELoss(reduction=self.reduction)
         elif loss_fn_type == 'huber':
             huber_delta = config.getfloat('PARAMETERS', 'HUBER_DELTA')
-            self.loss_fn = nn.HuberLoss(reduction='sum', delta=huber_delta)
+            self.loss_fn = nn.HuberLoss(reduction=self.reduction, delta=huber_delta)
         else:
             print('Unknown loss function: ' + loss_fn_type)
             sys.exit()
 
     def train_epoch(self, train_loader, opt):
         self.net.train()
-        total_train_loss = 0
-        total_l1_loss = 0
-        total_l2_loss = 0
-        total_l3_loss = 0
+        total_loss = (0.0, 0.0, 0.0, 0.0, 0.0)
+        total_acc = 0
 
-        for i, (pnames, imgs4d, m0s, mks, init_ts, final_ts, ff, bf, offsets) in enumerate(train_loader):
+        for i, (pnames, img4d, m0, mk, _, times_fwd, times_bwd, ff, bf, offsets) in enumerate(train_loader):
             self.pbar.set_postfix_str(f'Train: {i+1}/{len(train_loader)}')
-            imgs4d = imgs4d.to(self.device)
-            m0s = m0s.to(self.device)
-            mks = mks.to(self.device)
+            img4d = img4d.to(self.device)
+            m0 = m0.to(self.device)
+            mk = mk.to(self.device)
             ff = ff.to(self.device)
             bf = bf.to(self.device)
+            offsets = offsets.to(torch.long)
+            batch_indices = torch.arange(offsets.shape[0])
 
-            mts, mtts = self.time_popagation(imgs4d, m0s, mks, init_ts, final_ts, ff, bf, offsets)
-            train_loss, l1, l2, l3 = self.compute_loss(mts, mtts, offsets)
+            mts, mtts, mhs, mhhs = self.time_popagation(img4d, m0, mk, times_fwd, times_bwd, ff, bf, batch_indices)
+            loss = self.compute_loss(mts, mtts, offsets, batch_indices, mhs, mhhs)
 
             opt.zero_grad()
-            train_loss.backward()
+            loss[0].backward()
             opt.step()
 
             with torch.no_grad():
-                total_train_loss += train_loss.item()
-                total_l1_loss += l1
-                total_l2_loss += l2
-                total_l3_loss += l3
-        return (total_train_loss, total_l1_loss, total_l2_loss, total_l3_loss)
+                total_loss = tuple(tl + l.item() for tl, l in zip(total_loss, loss))
+                total_acc += self.compute_dice_acc(mts, mtts, offsets, batch_indices).item()
+                if np.random.rand() < self.display_prob:
+                    self.plot_imgs(mts, mtts, offsets, batch_indices, 'train')
+        return (*total_loss, total_acc)
 
     def val_epoch(self, val_loader):
         self.net.eval()
-        total_val_loss = 0
-        total_l1_loss = 0
-        total_l2_loss = 0
-        total_l3_loss = 0
+        total_loss = (0.0, 0.0, 0.0, 0.0, 0.0)
+        total_acc = 0
 
         with torch.no_grad():
-            for i, (pnames, imgs4d, m0s, mks, init_ts, final_ts, ff, bf, offsets) in enumerate(val_loader):
+            for i, (pnames, img4d, m0, mk, _, times_fwd, times_bwd, ff, bf, offsets) in enumerate(val_loader):
                 self.pbar.set_postfix_str(f'Val: {i+1}/{len(val_loader)}')
-                imgs4d = imgs4d.to(self.device)
-                m0s = m0s.to(self.device)
-                mks = mks.to(self.device)
+                img4d = img4d.to(self.device)
+                m0 = m0.to(self.device)
+                mk = mk.to(self.device)
                 ff = ff.to(self.device)
                 bf = bf.to(self.device)
-                
-                mts, mtts = self.time_popagation(imgs4d, m0s, mks, init_ts, final_ts, ff, bf, offsets)
-                val_loss, l1, l2, l3 = self.compute_loss(mts, mtts, offsets)
+                offsets = offsets.to(torch.long)
+                batch_indices = torch.arange(offsets.shape[0])
 
-                total_val_loss += val_loss.item()
-                total_l1_loss += l1
-                total_l2_loss += l2
-                total_l3_loss += l3
-        return (total_val_loss, total_l1_loss, total_l2_loss, total_l3_loss)
+                mts, mtts, mhs, mhhs = self.time_popagation(img4d, m0, mk, times_fwd, times_bwd, ff, bf, batch_indices)
+                loss = self.compute_loss(mts, mtts, offsets, batch_indices, mhs, mhhs)
 
-    def time_popagation(self, imgs4d, m0s, mks, init_ts, final_ts, ff, bf, offsets):
-        # mts = [m0s.to(self.device)]
-        # mtts = [mks.to(self.device)]
+                total_loss = tuple(tl + l.item() for tl, l in zip(total_loss, loss))
+                total_acc += self.compute_dice_acc(mts, mtts, offsets, batch_indices).item()
+                if np.random.rand() < self.display_prob:
+                    self.plot_imgs(mts, mtts, offsets, batch_indices, 'val')
+        return (*total_loss, total_acc)
+
+    def train_patient(self, imgs4d, m0s, mks, _, list_times_fwd, list_times_bwd, ff, bf, offsets, opt):
+        offsets = offsets.to(torch.long)
+        BS = offsets.shape[0]
+        batch_indices = torch.arange(BS)
+
+        self.net.train()
+        mts, mtts, mhs, mhhs = self.time_popagation(imgs4d, m0s, mks, list_times_fwd, list_times_bwd, ff, bf, batch_indices)
+        loss = self.compute_loss(mts, mtts, offsets, batch_indices, mhs, mhhs)
+
+        opt.zero_grad()
+        loss[0].backward()
+        opt.step()
+
+        with torch.no_grad():
+            acc = self.compute_dice_acc(mts, mtts, offsets, batch_indices).item()
+            loss = tuple(l.item() for l in loss)
+        return (*loss, acc)
+
+    def val_patient(self, imgs4d, m0s, mks, list_times_fwd, list_times_bwd, ff, bf, offsets):
+        offsets = offsets.to(torch.long)
+        BS = offsets.shape[0]
+        batch_indices = torch.arange(BS)
+        self.net.eval()
+
+        with torch.no_grad():
+            mts, mtts = self.time_popagation(imgs4d, m0s, mks, list_times_fwd, list_times_bwd, ff, bf, batch_indices)
+            loss = self.compute_loss(mts, mtts, offsets, batch_indices)
+            acc = self.compute_dice_acc(mts, mtts, offsets, batch_indices).item()
+            loss = tuple(l.item() for l in loss)
+        return (*loss, acc)
+
+    def time_popagation(self, imgs4d, m0s, mks, list_times_fwd, list_times_bwd, ff, bf, batch_indices):
         BS, timesteps, NZ, NY, NX, _ = ff.shape
         dtype = m0s.dtype
-
+        warp = WarpCNN(self.config, NZ, NY, NX)
         mts = torch.empty(size=(timesteps + 1, BS, 1, NZ, NY, NX), dtype=dtype, device=self.device)
         mts[0] = m0s
         mtts = torch.empty_like(mts)
         mtts[-1] = mks
 
-        diff_t = timesteps - offsets
-        warp = WarpCNN(self.config, NZ, NY, NX)
+        if self.penalization:
+            mhs = torch.empty(size=(timesteps, BS, 1, NZ, NY, NX), dtype=dtype, device=self.device)
+            mhhs = torch.empty_like(mhs)
+        else:
+            mhs = mhhs = None
 
         for t in range(timesteps):
-            img4d_fwd, img4d_bwd = self.select_img4d(imgs4d, init_ts, final_ts, t, diff_t)
-
             # Forward propagation m0 -> mk
             mt = warp(mts[t], ff[:, t, :, :, :, :])
-            x = torch.cat((img4d_fwd, mt), dim=1)
-            x = torch.sigmoid(self.net(x))
-            mts[t + 1] = x
-            # mts.append(x)
+            x = torch.cat((imgs4d[batch_indices, :, :, :, :, list_times_fwd[t + 1][batch_indices]], mt), dim=1)
+            mts[t + 1], mh = self.net(x)
 
             # Backward propagation mk -> m0
             mtt = warp(mtts[timesteps - t], bf[:, t, :, :, :, :])
-            x = torch.cat((img4d_bwd, mtt), dim=1)
-            x = torch.sigmoid(self.net(x))
-            mtts[timesteps - t - 1] = x
-            # mtts.append(x)
+            x = torch.cat((imgs4d[batch_indices, :, :, :, :, list_times_bwd[t + 1][batch_indices]], mtt), dim=1)
+            mtts[timesteps - t - 1], mhh = self.net(x)
 
-        # mtts.reverse()
-        # to_tensor = T.ListToTensor()
+            if self.penalization:
+                mhs[t] = mh
+                mhhs[t] = mhh
+        return (mts, mtts, mhs, mhhs)
 
-        # print(len(mts), len(mtts))
-        # print(to_tensor(mts).shape)
-        # print(ff.shape)
-        # return (to_tensor(mts), to_tensor(mtts))
-        return (mts, mtts)
+    def compute_dice_acc(self, mts, mtts, offsets, batch_indices):
+        m0 = mts[0, batch_indices]
+        m0tt = mtts[offsets[batch_indices], batch_indices]
+        m0tt = torch.where(m0tt > 0.5, 1.0, 0.0)
 
-    def select_img4d(self, imgs4d: torch.Tensor, init_ts: torch.Tensor, final_ts: torch.Tensor, cur_t: int, diff_t: torch.Tensor):
-        ts_fwd = init_ts + cur_t + 1
-        ts_bwd = final_ts - cur_t - 1
+        mk = mtts[-1]
+        mkt = mts[-offsets[batch_indices] - 1, batch_indices]
+        mkt = torch.where(mkt > 0.5, 1.0, 0.0)
 
-        BS, CH, NZ, NY, NX, NT = imgs4d.shape
+        acc0 = compute_meandice(m0tt, m0).mean()
+        acck = compute_meandice(mkt, mk).mean()
+        dc = 0.5 * (acc0 + acck)
+        return dc
 
-        dtype = imgs4d.dtype
-        img4d_fwd = torch.empty(size=(BS, CH, NZ, NY, NX), dtype=dtype, device=self.device)
-        img4d_bwd = torch.empty(size=(BS, CH, NZ, NY, NX), dtype=dtype, device=self.device)
+    def plot_imgs(self, mts, mtts, offsets, batch_indices, tag):
+        m0 = mts[0, batch_indices]
+        m0tt = mtts[offsets[batch_indices], batch_indices]
+        m0tt = torch.where(m0tt > 0.5, 1.0, 0.0)
 
-        for b in range(BS):
-            if cur_t >= diff_t[b]:
-                img4d_fwd[b, :, :, :, :] = imgs4d[b, :, :, :, :, final_ts[b]]
-                img4d_bwd[b, :, :, :, :] = imgs4d[b, :, :, :, :, init_ts[b]]
-                # print(f'correct: b: {b} - {cur_t} - {final_ts[b]}')
-            else:
-                img4d_fwd[b, :, :, :, :] = imgs4d[b, :, :, :, :, ts_fwd[b]]
-                img4d_bwd[b, :, :, :, :] = imgs4d[b, :, :, :, :, ts_bwd[b]]
-                # print(f'normal: b: {b} - {cur_t} - {ts[b]}')
+        mk = mtts[-1]
+        mkt = mts[-offsets[batch_indices] - 1, batch_indices]
+        mkt = torch.where(mkt > 0.5, 1.0, 0.0)
 
-        return (img4d_fwd, img4d_bwd)
+        # take batch randomly
+        b = np.random.randint(len(offsets))
+        m0_b = m0[b]
+        m0tt_b = m0tt[b]
+        m0_b.swapaxes_(0, 1)
+        m0tt_b.swapaxes_(0, 1)
+        m0_e = torch.abs(m0_b - m0tt_b)
+        self.writer.add_images(f'{tag}/m0_b{b}/gt', m0_b)
+        self.writer.add_images(f'{tag}/m0_b{b}/est', m0tt_b)
+        self.writer.add_images(f'{tag}/m0_b{b}/error', m0_e)
 
-    def compute_loss(self, mts: torch.Tensor, mtts: torch.Tensor, offsets: torch.Tensor):
+        mk_b = mk[b]
+        mkt_b = mkt[b]
+        mk_b.swapaxes_(0, 1)
+        mkt_b.swapaxes_(0, 1)
+        mk_e = torch.abs(mk_b - mkt_b)
+        self.writer.add_images(f'{tag}/mk_b{b}/gt', mk_b)
+        self.writer.add_images(f'{tag}/mk_b{b}/est', mkt_b)
+        self.writer.add_images(f'{tag}/mk_b{b}/error', mk_e)
+
+    def compute_loss(self, mts, mtts, offsets, batch_indices, mhs=None, mhhs=None):
         BS = mts.shape[1]
-        # bce_loss = nn.BCEWithLogitsLoss(reduction='mean')
-        # bce_loss = nn.BCELoss(reduction='mean')
-        # mse_loss = nn.MSELoss(reduction='sum')
-        # dice_bce_loss = L.DiceBCELoss(alpha=0.7)
 
         # compute l1
-        m0 = mts[0]
-        m0tt = mtts[0]
+        m0 = mts[0, batch_indices]
+        m0tt = mtts[offsets[batch_indices], batch_indices]
         l1 = self.loss_fn(m0tt, m0)
-        # l1 = bce_loss(m0tt, m0)
-        # l1 = dice_bce_loss(m0tt, m0)
 
         # compute l2
-        mk = mtts[-1]
-        mkt = mts[-1]
+        mk = mtts[-1, batch_indices]
+        mkt = mts[-offsets[batch_indices] - 1, batch_indices]
         l2 = self.loss_fn(mkt, mk)
-        # l2 = bce_loss(mkt, mk)
-        # l2 = dice_bce_loss(mkt, mk)
 
         # compute l3
         timesteps = mts.shape[0]
@@ -172,13 +212,25 @@ class Trainer:
         for b in range(BS):
             mt = mts[1:timesteps - offsets[b] - 1, b, :, :, :, :]
             mtt = mtts[1 + offsets[b]:-1, b, :, :, :, :]
-            l3 += self.loss_fn(mt, mtt) / mt.shape[0]
+            if self.reduction == 'sum':
+                l3 += self.loss_fn(mt, mtt) / mt.shape[0]
+            else:
+                l3 += self.loss_fn(mt, mtt)
 
-        # l3 = l3 / BS
-        # lt = l1 + l2 + l3
-        # return lt
-        l1 = l1 / BS
-        l2 = l2 / BS
+        # compute l4 - penalization term
+        l4 = torch.tensor([0.0], dtype=l1.dtype, device=l1.device)
+        if self.penalization:
+            timesteps = mhs.shape[0]
+            for b in range(BS):
+                mh = mhs[0:timesteps - offsets[b], b]
+                mhh = mhhs[0:timesteps - offsets[b], b]
+                l4 += torch.norm(mh)**2 + torch.norm(mhh)**2
+            # l4 = self.mu * (torch.norm(mhs)**2 + torch.norm(mhhs)**2)
+            l4 = self.mu * l4 / BS
+
+        if self.reduction == 'sum':
+            l1 = l1 / BS
+            l2 = l2 / BS
         l3 = self.loss_lambda * l3 / BS
-        total_loss = l1 + l2 + l3
-        return (total_loss, l1.item(), l2.item(), l3.item())
+        total_loss = l1 + l2 + l3 + l4
+        return (total_loss, l1, l2, l3, l4)

@@ -13,7 +13,7 @@ from tqdm import tqdm
 
 utils_lib_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../utils'))
 sys.path.append(utils_lib_path)
-#sys.path.append("../utils")
+# sys.path.append("../utils")
 #from utils.plots import *
 import torch_utils
 import flow_viz
@@ -329,9 +329,12 @@ class TVL1OpticalFlow3D:
             ks = self.KERNEL_MF
             uf = ndimage.median_filter(u.cpu().detach().numpy(), size=(ks, ks, ks, 1))
             # plotOpticalFlow3D(uf, "uf", saveDirStep, step)
-            flowName = f"flow_m_it{step}.pt"
+            # flowName = f"flow_m_it{step}.pt"
+            # fileNameFlow = os.path.join(saveDirStep, flowName)
+            # torch.save(torch.from_numpy(uf), fileNameFlow)
+            flowName = f"flow_m_it{step}.npy"
             fileNameFlow = os.path.join(saveDirStep, flowName)
-            torch.save(torch.from_numpy(uf), fileNameFlow)
+            np.save(fileNameFlow, uf)
 
         # save3D_torch_to_nifty(I0, saveDirStep, f"I0.nii")
         # save_slices(I0, f"I0_it{step}.png", saveDirStep)
@@ -354,9 +357,13 @@ class TVL1OpticalFlow3D:
         # for z in range(numZSlices):
             # print(" norm of diff(z=", z, ") = ", diff[z, :, :].norm().item())
 
-        flowName = f"flow_it{step}.pt"
+        # flowName = f"flow_it{step}.pt"
+        # fileNameFlow = os.path.join(saveDirStep, flowName)
+        # torch.save(u.cpu().detach(), fileNameFlow)
+
+        flowName = f'flow_it{step}.npy'
         fileNameFlow = os.path.join(saveDirStep, flowName)
-        torch.save(u.cpu().detach(), fileNameFlow)
+        np.save(fileNameFlow, u.cpu().detach().numpy())
 
         # dualName = f"dual_it{step}.pt"
         # fileNameDual = os.path.join(saveDirStep, dualName)

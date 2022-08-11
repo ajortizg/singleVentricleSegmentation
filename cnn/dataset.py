@@ -1,115 +1,131 @@
 from torch.utils.data import Dataset
 import os.path as osp
-from glob import glob
 import nibabel as nib
 import numpy as np
 import os
+import sys
 import pandas
-import time
 import torch
 from enum import Enum
 import yaml
+import re
 
 
 class DatasetMode(Enum):
     TRAIN = 1
     VAL = 2
     FULL = 3
+    TEST = 4
+
+
+class LoadFlowMode(Enum):
+    NO_LOAD_OF = 1
+    TRAIN_VAL_OF = 2
+    TEST_OF = 3
 
 
 class SingleVentricleDataset(Dataset):
-    def __init__(self, config, mode, load_flow,
-                 img4d_transforms=None,
-                 mask_transforms=None,
-                 img4d_mask_transforms=None,
-                 flow_transforms=None):
+    def __init__(self, config, mode, flow_mode, img4d_transforms=None, mask_transforms=None, flow_transforms=None, full_transforms=None):
         self.config = config
-        self.load_flow = load_flow
         self.mode = mode
-        self.img4d_transforms = img4d_transforms              # transformations applied only on data
-        self.mask_tranforms = mask_transforms               # transformations applied only on masks
-        self.img4d_mask_transforms = img4d_mask_transforms    # transformations applied on data and masks
-        self.flow_transforms = flow_transforms              # transformations applied on optical flow
+        self.flow_mode = flow_mode
+        self.img4d_transforms = img4d_transforms    # transformations applied only on data
+        self.mask_transforms = mask_transforms      # transformations applied only on masks
+        self.flow_transforms = flow_transforms      # transformations applied only on optical flow
+        self.full_transforms = full_transforms      # transformations applied on img, mask and optical flow
 
         self.base_path = config.get('DATA', 'BASE_PATH_3D')
         if mode == DatasetMode.TRAIN:
             self.base_path = osp.join(self.base_path, 'train')
-            self.mode_str = 'train'
         elif mode == DatasetMode.VAL:
             self.base_path = osp.join(self.base_path, 'val')
-            self.mode_str = 'val'
-        else:
-            self.mode_str = 'full'
+        elif mode == DatasetMode.TEST:
+            self.base_path = osp.join(self.base_path, 'test')
 
         self.segmentations_subdir_path = config.get('DATA', 'SEGMENTATIONS_SUBDIR_PATH')
-        self.masks_root = osp.join(self.base_path, self.segmentations_subdir_path)
+        self.segmentations_path = osp.join(self.base_path, self.segmentations_subdir_path)
 
         self.volumes_subdir_path = config.get('DATA', 'VOLUMES_SUBDIR_PATH')
         self.volumes_path = osp.join(self.base_path, self.volumes_subdir_path)
-        self.volume_files = glob(osp.join(self.volumes_path, '*.nii.gz'))
 
         self.segmetations_filename = config.get('DATA', 'SEGMENTATIONS_FILE_NAME')
-        self.segmetations_path = osp.join(self.base_path, self.segmetations_filename)
-        self.df = pandas.read_excel(self.segmetations_path)
+        self.segmetations_file = osp.join(self.base_path, self.segmetations_filename)
+        self.df = pandas.read_excel(self.segmetations_file)
 
         # Optical flow parameters
         self.fwdof_dir = None
         self.bwdof_dir = None
         self.flow_name = None
         self.flow_level = None
-
-        self.total_time = 0
-
-        if self.load_flow:
+        self.load_flow = False
+        if self.flow_mode != LoadFlowMode.NO_LOAD_OF:
+            self.load_flow = True
             use_filtered_flow = config.getboolean('PARAMETERS', 'USE_MEDIAN_FILTERED_FLOW')
-            self.flow_name = 'flow_m_it0.pt' if use_filtered_flow else 'flow_it0.pt'
+            self.flow_name = 'flow_m_it0.npy' if use_filtered_flow else 'flow_it0.npy'
             self.flow_level = 'it0'
             self.fwdof_dir = osp.sep.join([config.get('DATA', 'BASE_PATH_3D'), 'optical_flow', 'forward'])
             self.bwdof_dir = osp.sep.join([config.get('DATA', 'BASE_PATH_3D'), 'optical_flow', 'backward'])
 
     def __len__(self):
-        return len(self.volume_files)
+        return len(self.df)
 
     def __getitem__(self, idx):
-        # Load 4D nifty [x,y,z,t]
-        tic = time.time()
-        img4d = nib.load(self.volume_files[idx])
+        df_row = self.df.iloc[[idx]]
+        patient_name = df_row.loc[idx, 'Name']
+        tsyst = df_row.loc[idx, 'Systole']
+        tdias = df_row.loc[idx, 'Diastole']
+        full_cycle = df_row.loc[idx, 'Full']
+
+        # Load 4D nifty
+        img4d = nib.load(osp.join(self.volumes_path, patient_name + '.nii.gz'))
         img4d_zyxt = np.swapaxes(img4d.get_fdata(), 0, 2)
 
-        # Read time steps for systole and diastole
-        patient_name = self.get_patient_name(idx)
-        tsyst, tdias = self.systole_diastole_time(patient_name)
+        # Load segmentations masks
+        mask_syst_zyx = self.load_mask(patient_name, '_Systole_Labelmap.nii')
+        mask_diast_zyx = self.load_mask(patient_name, '_Diastole_Labelmap.nii')
 
-        # Load segmentations masks and convert them to torch tensors
-        mask_syst_zyx, mask_diast_zyx = self.systole_diastole_mask(patient_name)
-
-        if self.img4d_mask_transforms is not None:
-            img4d_zyxt, mask_syst_zyx, mask_diast_zyx = self.img4d_mask_transforms(img4d_zyxt, mask_syst_zyx, mask_diast_zyx)
-
-        if self.mask_tranforms is not None:
-            mask_syst_zyx = self.mask_tranforms(mask_syst_zyx)
-            mask_diast_zyx = self.mask_tranforms(mask_diast_zyx)
-
-        if self.img4d_transforms is not None:
-            img4d_zyxt = self.img4d_transforms(img4d_zyxt)
+        # Load whole cycle masks
+        if full_cycle:
+            orig_NT = df_row.loc[idx, 'original_NT']
+            masks = np.empty(shape=(orig_NT, *mask_syst_zyx.shape), dtype=mask_syst_zyx.dtype)
+            for t in range(orig_NT):
+                masks[t] = self.load_mask(patient_name, f'_{t}_Labelmap.nii')
+        else:
+            masks = None
 
         m0, mk, init_ts, final_ts = self.prepare_masks(tsyst, tdias, mask_syst_zyx, mask_diast_zyx)
 
-        # Load optical flow if needed
+        # Load optical flow
         ff, bf = None, None
         if self.load_flow:
-            ff, bf = self.optflow_for_patient(patient_name)
+            ff, bf = self.optflow_for_patient(patient_name, init_ts, final_ts, idx)
 
-        toc = time.time()
-        self.total_time += (toc - tic)
-        return (patient_name, img4d_zyxt, m0, mk, init_ts, final_ts, ff, bf)
+        # Full transforms
+        if self.full_transforms is not None:
+            img4d_zyxt, m0, mk, ff, bf = self.full_transforms(img4d_zyxt, m0, mk, ff, bf)
 
-    def systole_diastole_time(self, patient_name):
-        row_patient = self.df[self.df['Name'] == patient_name]
-        index_patient = row_patient.index[0]
-        tsyst = int(row_patient.loc[index_patient, 'Systole'])
-        tdias = int(row_patient.loc[index_patient, 'Diastole'])
-        return (tsyst, tdias)
+        # Mask transformations
+        if self.mask_transforms is not None:
+            m0 = self.mask_transforms(m0)
+            mk = self.mask_transforms(mk)
+            if full_cycle:
+                masks = self.mask_transforms(masks)
+
+        # Image transformations
+        if self.img4d_transforms is not None:
+            img4d_zyxt = self.img4d_transforms(img4d_zyxt)
+
+        # Optical flow transformation
+        if self.flow_transforms is not None:
+            ff = self.flow_transforms(ff)
+            bf = self.flow_transforms(bf)
+
+        return (patient_name, img4d_zyxt, m0, mk, masks, init_ts, final_ts, ff, bf)
+
+    def systole_diastole_time(self, idx):
+        ts = self.df.iloc[idx]['Systole']
+        td = self.df.iloc[idx]['Diastole']
+        return (ts, td)
 
     def systole_diastole_mask(self, patient_name):
         mask_syst_zyx = self.load_mask(patient_name, '_Systole_Labelmap.nii')
@@ -117,60 +133,57 @@ class SingleVentricleDataset(Dataset):
         return (mask_syst_zyx, mask_diast_zyx)
 
     def get_patient_name(self, idx):
-        return (self.volume_files[idx].split(os.sep)[-1]).split(".")[0]
+        return self.df.iloc[idx]['Name']
+
+    def get_systole_time(self, idx):
+        return self.df.iloc[idx]['Systole']
+
+    def full_cycle(self, idx):
+        return self.df.iloc[idx]['Full']
+
+    def get_diastole_time(self, idx):
+        return self.df.iloc[idx]['Diastole']
+
+    def get_original_NT(self, idx):
+        return self.df.iloc[idx]['original_NT']
 
     def load_mask(self, patient_name, ending):
-        mask = nib.load(osp.sep.join([self.masks_root, patient_name, patient_name + ending]))
+        mask = nib.load(osp.sep.join([self.segmentations_path, patient_name, patient_name + ending]))
         mask = np.swapaxes(mask.get_fdata(), 0, 2)
         return mask
 
     def index_for_patient(self, patient_name):
-        found = False
-        for idx in range(len(self.volume_files)):
-            query = self.get_patient_name(idx)
-            if patient_name == query:
-                found = True
-                return (idx, found)
-        return (-1, found)
+        row_patient = self.df[self.df['Name'] == patient_name]
+        index_patient = row_patient.index[0]
+        return index_patient
 
-    def optflow(self, idx):
-        patient_name = self.get_patient_name(idx)
-        return self.optflow_for_patient(patient_name)
-
-    def optflow_for_patient(self, patient):
+    def optflow_for_patient(self, patient, init_ts, final_ts, idx):
         fwd_flows = []
         bwd_flows = []
         fwd_patient_dir = osp.join(self.fwdof_dir, patient)
-        fwd_time_dirs = sorted(os.listdir(fwd_patient_dir))
         bwd_patient_dir = osp.join(self.bwdof_dir, patient)
-        # bwd_time_dirs = sorted(os.listdir(bwd_patient_dir))
-        bwd_time_dirs = sorted(os.listdir(bwd_patient_dir), reverse=True)
-        assert len(fwd_time_dirs) == len(bwd_time_dirs)
 
-        for fwd_dir, bwd_dir in zip(fwd_time_dirs, bwd_time_dirs):
-            # Read forward optical flow
-            fwd_path = osp.join(fwd_patient_dir, fwd_dir)
-            if osp.isdir(fwd_path):
-                flow_path = osp.sep.join([fwd_path, self.flow_level, self.flow_name])
-                u = torch.load(flow_path, map_location='cpu')
-                if self.flow_transforms is not None:
-                    u = self.flow_transforms(u)
-                fwd_flows.append(u)
+        times_fwd, times_bwd = self.create_timeline(init_ts, final_ts, self.get_original_NT(idx))
+        assert len(times_fwd) == len(times_bwd)
 
-            # Read backward optical flow
-            bwd_path = osp.join(bwd_patient_dir, bwd_dir)
-            if osp.isdir(bwd_path):
-                flow_path = osp.sep.join([bwd_path, self.flow_level, self.flow_name])
-                u = torch.load(flow_path, map_location='cpu')
-                if self.flow_transforms is not None:
-                    u = self.flow_transforms(u)
-                bwd_flows.append(u)
+        for i in range(len(times_fwd)):
+            fwd_file = osp.sep.join([fwd_patient_dir, f'time{times_fwd[i]}', self.flow_level, self.flow_name])
+            bwd_file = osp.sep.join([bwd_patient_dir, f'time{times_bwd[i]}', self.flow_level, self.flow_name])
+            fwd_flows.append(np.load(fwd_file))
+            bwd_flows.append(np.load(bwd_file))
 
-        fwd_t = torch.stack([x.float() for x in fwd_flows], dim=0)
-        bwd_t = torch.stack([x.float() for x in bwd_flows], dim=0)
-
-        # return (fwd_flows, bwd_flows)
+        fwd_t = np.stack([x for x in fwd_flows], axis=0)
+        bwd_t = np.stack([x for x in bwd_flows], axis=0)
         return (fwd_t, bwd_t)
+
+    def create_timeline(self, init_ts, final_ts, original_NT):
+        if self.flow_mode == LoadFlowMode.TRAIN_VAL_OF:
+            times_fwd = np.arange(init_ts, final_ts, 1)
+            times_bwd = np.arange(final_ts, init_ts, -1)
+        elif self.flow_mode == LoadFlowMode.TEST_OF:
+            times_fwd = np.concatenate((np.arange(init_ts, original_NT, 1), np.arange(0, init_ts)))
+            times_bwd = np.concatenate((np.arange(final_ts, -1, -1), np.arange(original_NT - 1, final_ts, -1)))
+        return (times_fwd, times_bwd)
 
     def prepare_masks(self, tsyst, tdias, msyst, mdias):
         init_ts = min(tdias, tsyst)
@@ -186,19 +199,9 @@ class SingleVentricleDataset(Dataset):
         return (m0, mk, init_ts, final_ts)
 
     def save_patients(self, save_dir: str, filename: str):
-        filepath = osp.join(save_dir, filename)
-        with open(filepath, 'w') as pfile:
-            for i in range(len(self.volume_files)):
-                pfile.write(self.get_patient_name(i) + '\n')
-        pfile.close()
+        output_df_file = osp.join(save_dir, filename)
+        self.df.to_excel(output_df_file, index=False)
 
-
-def read_stats(config, filename):
-    base_path = config.get('DATA', 'BASE_PATH_3D')
-    with open(osp.sep.join([base_path, 'statistics', filename]), 'r') as f:
-        stats_yaml = yaml.load(f, Loader=yaml.FullLoader)
-        mean = stats_yaml['mean']
-        std = stats_yaml['std']
-        min_obs = stats_yaml['min']
-        max_obs = stats_yaml['max']
-        return (mean, std, min_obs, max_obs)
+    def optflow(self, idx):
+        patient_name = self.get_patient_name(idx)
+        return self.optflow_for_patient(patient_name)
