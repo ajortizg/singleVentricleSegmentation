@@ -200,11 +200,11 @@ class RandomVerticalFlip:
             img4d_flip = np.flip(img4d, axis=1).copy()
             ms_flip = np.flip(ms, axis=1).copy()
             md_flip = np.flip(md, axis=1).copy()
-            ff_flip = np.flip(ff, axis=2).copy()
-            bf_flip = np.flip(bf, axis=2).copy()
+            ff_flip = np.flip(ff, axis=1).copy()
+            bf_flip = np.flip(bf, axis=1).copy()
 
-            ff_flip[:, :, :, :, 1] *= -1
-            bf_flip[:, :, :, :, 1] *= -1
+            ff_flip[..., 1, :] *= -1
+            bf_flip[..., 1, :] *= -1
             return (img4d_flip, ms_flip, md_flip, ff_flip, bf_flip)
         else:
             return (img4d, ms, md, ff, bf)
@@ -222,11 +222,11 @@ class RandomHorizontalFlip:
             img4d_flip = np.flip(img4d, axis=2).copy()
             ms_flip = np.flip(ms, axis=2).copy()
             md_flip = np.flip(md, axis=2).copy()
-            ff_flip = np.flip(ff, axis=3).copy()
-            bf_flip = np.flip(bf, axis=3).copy()
+            ff_flip = np.flip(ff, axis=2).copy()
+            bf_flip = np.flip(bf, axis=2).copy()
 
-            ff_flip[:, :, :, :, 0] *= -1
-            bf_flip[:, :, :, :, 0] *= -1
+            ff_flip[..., 0, :] *= -1
+            bf_flip[..., 0, :] *= -1
             return (img4d_flip, ms_flip, md_flip, ff_flip, bf_flip)
         else:
             return (img4d, ms, md, ff, bf)
@@ -244,11 +244,11 @@ class RandomDepthFlip:
             img4d_flip = np.flip(img4d, axis=0).copy()
             ms_flip = np.flip(ms, axis=0).copy()
             md_flip = np.flip(md, axis=0).copy()
-            ff_flip = np.flip(ff, axis=1).copy()
-            bf_flip = np.flip(bf, axis=1).copy()
+            ff_flip = np.flip(ff, axis=0).copy()
+            bf_flip = np.flip(bf, axis=0).copy()
 
-            ff_flip[:, :, :, :, 2] *= -1
-            bf_flip[:, :, :, :, 2] *= -1
+            ff_flip[..., 2, :] *= -1
+            bf_flip[..., 2, :] *= -1
             return (img4d_flip, ms_flip, md_flip, ff_flip, bf_flip)
         else:
             return (img4d, ms, md, ff, bf)
@@ -419,24 +419,24 @@ class RandomRotate:
             new_coords = self.generate_rotation_grid(R, offset, NZ, NY, NX)
 
             # Rotate masks (mask shape [NZ,NY,NX])
-            ms_rot = ndimage.map_coordinates(ms, new_coords, order=3, mode='constant')
-            md_rot = ndimage.map_coordinates(md, new_coords, order=3, mode='constant')
+            ms_rot = ndimage.map_coordinates(ms, new_coords, order=3, mode=self.boundary)
+            md_rot = ndimage.map_coordinates(md, new_coords, order=3, mode=self.boundary)
 
             # Rotate image (image shape [NZ,NY,NX,NT])
             img4d_rot = np.zeros_like(img4d)
             for t in range(NT):
-                img4d_rot[:, :, :, t] = ndimage.map_coordinates(img4d[:, :, :, t], new_coords, order=3, mode='constant')
+                img4d_rot[..., t] = ndimage.map_coordinates(img4d[..., t], new_coords, order=3, mode=self.boundary)
             img4d_rot = np.clip(img4d_rot, self.clip_interval[0], self.clip_interval[1])
 
-            # Rotate optical flow (of shape [timesteps,NZ,NY,NX,3])
+            # Rotate optical flow (of shape [NZ,NY,NX,3,timesteps])
             ff_rot = np.zeros_like(ff)
             bf_rot = np.zeros_like(bf)
 
-            timesteps = ff.shape[0]
+            timesteps = ff.shape[-1]
             for t in range(timesteps):
                 for c in range(3):
-                    ff_rot[t, :, :, :, c] = ndimage.map_coordinates(ff[t, :, :, :, c], new_coords, order=3, mode='constant')
-                    bf_rot[t, :, :, :, c] = ndimage.map_coordinates(bf[t, :, :, :, c], new_coords, order=3, mode='constant')
+                    ff_rot[..., c, t] = ndimage.map_coordinates(ff[..., c, t], new_coords, order=3, mode=self.boundary)
+                    bf_rot[..., c, t] = ndimage.map_coordinates(bf[..., c, t], new_coords, order=3, mode=self.boundary)
 
             ff_rot = self.rotate_of(ff_rot, R)
             bf_rot = self.rotate_of(bf_rot, R)
@@ -447,12 +447,12 @@ class RandomRotate:
 
     def rotate_of(self, of, R):
         R = R.T  # TODO! why?? check this
-        x = of[:, :, :, :, 0].copy()
-        y = of[:, :, :, :, 1].copy()
-        z = of[:, :, :, :, 2].copy()
-        of[:, :, :, :, 0] = x * R[0, 0] + y * R[0, 1] + z * R[0, 2]
-        of[:, :, :, :, 1] = x * R[1, 0] + y * R[1, 1] + z * R[1, 2]
-        of[:, :, :, :, 2] = x * R[2, 0] + y * R[2, 1] + z * R[2, 2]
+        x = of[..., 0, :].copy()
+        y = of[..., 1, :].copy()
+        z = of[..., 2, :].copy()
+        of[..., 0, :] = x * R[0, 0] + y * R[0, 1] + z * R[0, 2]
+        of[..., 1, :] = x * R[1, 0] + y * R[1, 1] + z * R[1, 2]
+        of[..., 2, :] = x * R[2, 0] + y * R[2, 1] + z * R[2, 2]
         return of
 
     def generate_rotation_grid(self, rot, offset, NZ, NY, NX):
@@ -480,9 +480,9 @@ class ElasticDeformation:
         if np.random.rand() < self.p:
             sigma = np.random.uniform(self.sigma_range[0], self.sigma_range[1])
             if self.axis_str == 'zyx':
-                axis = [(0, 1, 2), (0, 1, 2), (0, 1, 2), (1, 2, 3), (1, 2, 3)]
+                axis = [(0, 1, 2)] * 5
             else:
-                axis = [(1, 2), (1, 2), (1, 2), (2, 3), (2, 3)]
+                axis = [(1, 2)] * 5
 
             [img4d_d, ms_d, md_d, ff_d, bf_d] = ed.deform_random_grid([img4d, ms, md, ff, bf], sigma,
                                                                       points=self.points, mode=self.boundary,

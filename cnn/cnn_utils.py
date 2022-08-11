@@ -213,11 +213,9 @@ def collate_fn(data):
     m0s.unsqueeze_(1)
     mks.unsqueeze_(1)
 
-    # print(masks)
-
-    # if masks is not None:
-    #     masks = to_tensor(masks)
-    #     masks.unsqueeze_(1)
+    if masks[0] is not None:
+        masks = to_tensor(masks)
+        masks.unsqueeze_(1)
 
     return (pnames, imgs4d, m0s, mks, masks, list_times_fwd, list_times_bwd, ff, bf, offsets)
 
@@ -243,23 +241,23 @@ def collate_times(init_ts, final_ts):
 def collate_optical_flow(off, ofb):
     BS = len(off)
     maxts_flow = max_ts(off)
-    NT, NZ, NY, NX, CH = off[0].shape
+    NZ, NY, NX, CH, NT = off[0].shape
 
-    off_t = torch.zeros(size=(BS, maxts_flow, NZ, NY, NX, CH))
-    ofb_t = torch.zeros(size=(BS, maxts_flow, NZ, NY, NX, CH))
+    off_t = torch.zeros(size=(BS, NZ, NY, NX, CH, maxts_flow))
+    ofb_t = torch.zeros(size=(BS, NZ, NY, NX, CH, maxts_flow))
     offsets = torch.zeros(BS, dtype=torch.int)
 
     for b in range(BS):
         # Prepare optical flow
-        diff_of_ts = (int)(maxts_flow - off[b].shape[0])
+        diff_of_ts = (int)(maxts_flow - off[b].shape[-1])
         offsets[b] = diff_of_ts
         if diff_of_ts != 0:
-            zeros = torch.zeros(size=(diff_of_ts, NZ, NY, NX, 3))
-            off_t[b, :, :, :, :, :] = torch.cat((off[b], zeros), dim=0)
-            ofb_t[b, :, :, :, :, :] = torch.cat((ofb[b], zeros), dim=0)
+            zeros = torch.zeros(size=(NZ, NY, NX, 3, diff_of_ts))
+            off_t[b] = torch.cat((off[b], zeros), dim=4)
+            ofb_t[b] = torch.cat((ofb[b], zeros), dim=4)
         else:
-            off_t[b, :, :, :, :, :] = off[b]
-            ofb_t[b, :, :, :, :, :] = ofb[b]
+            off_t[b] = off[b]
+            ofb_t[b] = ofb[b]
 
     return (off_t, ofb_t, offsets)
 
@@ -268,7 +266,7 @@ def max_ts(ff):
     BS = len(ff)
     maxts = 0
     for b in range(BS):
-        t = ff[b].shape[0]
+        t = ff[b].shape[-1]
         if t > maxts:
             maxts = t
     return maxts

@@ -86,8 +86,8 @@ if __name__ == "__main__":
     root_dir = 'results'
     report_dir = plots.createSubDirectory(root_dir, 'reports')
 
-    from_dt = datetime(year=2022, month=8, day=9, hour=0, minute=0)
-    to_dt = datetime(year=2022, month=8, day=11, hour=0, minute=0)
+    from_dt = datetime(year=2022, month=8, day=11, hour=0, minute=0)
+    to_dt = datetime(year=2022, month=8, day=12, hour=0, minute=0)
 
     report = TrainingReport(from_dt, to_dt)
     report.filter('results')

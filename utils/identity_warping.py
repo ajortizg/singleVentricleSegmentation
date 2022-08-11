@@ -18,7 +18,7 @@ from cnn.cnn_utils import collate_fn
 
 
 if __name__ == "__main__":
-    save_imgs = True
+    save_imgs = False
     save_size = (16, 200, 200)
 
     plots.printConsoleOutput_Header('Identity warping')
@@ -28,13 +28,15 @@ if __name__ == "__main__":
     cuda_availabe = config.get('DEVICE', 'CUDA_AVAILABLE')
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-    transforms = T.ComposeFull([T.ElasticDeformation(1.0, (2, 2), 10, 'nearest', False),
+    transforms = T.ComposeFull([T.ElasticDeformation(1.0, (0.5, 2.0), 10, 'nearest', False, 'zyx', (0.0, 1.0)),
                                 T.BinarizeMasks(th=0.5),
                                 T.ToTensorFull()])
+    test_mask_transforms = T.ComposeUnary([T.Round(0.5), T.ToTensor()])
 
     train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, LoadFlowMode.TRAIN_VAL_OF, full_transforms=transforms)
     val_ds = SingleVentricleDataset(config, DatasetMode.VAL, LoadFlowMode.TRAIN_VAL_OF, full_transforms=transforms)
-    test_ds = SingleVentricleDataset(config, DatasetMode.TEST, LoadFlowMode.TRAIN_VAL_OF, full_transforms=transforms)
+    test_ds = SingleVentricleDataset(config, DatasetMode.TEST, LoadFlowMode.TRAIN_VAL_OF,
+                                     full_transforms=transforms, test_masks_transforms=test_mask_transforms)
 
     train_loader = DataLoader(train_ds, batch_size=1, shuffle=False, num_workers=8, collate_fn=collate_fn)
     val_loader = DataLoader(val_ds, batch_size=1, shuffle=False, num_workers=8, collate_fn=collate_fn)
@@ -66,16 +68,16 @@ if __name__ == "__main__":
             warp = WarpCNN(config, NZ, NY, NX)
             batch_indices = torch.arange(BS)
             out = {'mt': [m0s], 'mtt': [mks]}
-            timesteps = ff.shape[1]
+            timesteps = ff.shape[-1]
 
             for t in range(timesteps):
                 pbar.set_postfix_str(f'P: {pnames[0]}, S: {t+1}/{timesteps}')
 
                 # Forward mask propagation m0 -> mk
-                out['mt'].append(warp(out['mt'][-1], ff[:, t, :, :, :, :]))
+                out['mt'].append(warp(out['mt'][-1], ff[..., t]))
 
                 # Backward mask propagation mk -> m0
-                out['mtt'].append(warp(out['mtt'][-1], bf[:, t, :, :, :, :]))
+                out['mtt'].append(warp(out['mtt'][-1], bf[..., t]))
 
             assert(len(out['mt']) == len(out['mtt']))
 
@@ -95,7 +97,7 @@ if __name__ == "__main__":
                 # mtt_slices_dir = plots.createSubDirectory(mtt_dir, 'zslices')
 
                 for t in range(len(out['mt'])):
-                    img3d = img_posp(imgs4d[batch_indices, :, :, :, :, times_fwd[t][batch_indices]].squeeze())
+                    img3d = img_posp(imgs4d[batch_indices, ..., times_fwd[t][batch_indices]].squeeze())
                     mt = mask_posp(out['mt'][t].squeeze())
                     mtt = mask_posp(out['mtt'][t].squeeze())
 

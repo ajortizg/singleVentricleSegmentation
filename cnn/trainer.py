@@ -88,6 +88,13 @@ class Trainer:
                     self.plot_imgs(mts, mtts, offsets, batch_indices, 'val')
         return (*total_loss, total_acc)
 
+    def test_epoch(self, test_loader):
+        self.net.eval()
+
+        with torch.no_grad():
+            for i, (pnames, img4d, m0, mk, masks, times_fwd, times_bwd, ff, bf, offsets) in enumerate(test_loader):
+                print('test: ', masks.shape)
+
     def train_patient(self, imgs4d, m0s, mks, _, list_times_fwd, list_times_bwd, ff, bf, offsets, opt):
         offsets = offsets.to(torch.long)
         BS = offsets.shape[0]
@@ -120,7 +127,7 @@ class Trainer:
         return (*loss, acc)
 
     def time_popagation(self, imgs4d, m0s, mks, list_times_fwd, list_times_bwd, ff, bf, batch_indices):
-        BS, timesteps, NZ, NY, NX, _ = ff.shape
+        BS, NZ, NY, NX, CH, timesteps = ff.shape
         dtype = m0s.dtype
         warp = WarpCNN(self.config, NZ, NY, NX)
         mts = torch.empty(size=(timesteps + 1, BS, 1, NZ, NY, NX), dtype=dtype, device=self.device)
@@ -136,13 +143,13 @@ class Trainer:
 
         for t in range(timesteps):
             # Forward propagation m0 -> mk
-            mt = warp(mts[t], ff[:, t, :, :, :, :])
-            x = torch.cat((imgs4d[batch_indices, :, :, :, :, list_times_fwd[t + 1][batch_indices]], mt), dim=1)
+            mt = warp(mts[t], ff[..., t])
+            x = torch.cat((imgs4d[batch_indices, ..., list_times_fwd[t + 1][batch_indices]], mt), dim=1)
             mts[t + 1], mh = self.net(x)
 
             # Backward propagation mk -> m0
-            mtt = warp(mtts[timesteps - t], bf[:, t, :, :, :, :])
-            x = torch.cat((imgs4d[batch_indices, :, :, :, :, list_times_bwd[t + 1][batch_indices]], mtt), dim=1)
+            mtt = warp(mtts[timesteps - t], bf[..., t])
+            x = torch.cat((imgs4d[batch_indices, ..., list_times_bwd[t + 1][batch_indices]], mtt), dim=1)
             mtts[timesteps - t - 1], mhh = self.net(x)
 
             if self.penalization:
@@ -155,7 +162,7 @@ class Trainer:
         m0tt = mtts[offsets[batch_indices], batch_indices]
         m0tt = torch.where(m0tt > 0.5, 1.0, 0.0)
 
-        mk = mtts[-1]
+        mk = mtts[-1, batch_indices]
         mkt = mts[-offsets[batch_indices] - 1, batch_indices]
         mkt = torch.where(mkt > 0.5, 1.0, 0.0)
 
@@ -169,7 +176,7 @@ class Trainer:
         m0tt = mtts[offsets[batch_indices], batch_indices]
         m0tt = torch.where(m0tt > 0.5, 1.0, 0.0)
 
-        mk = mtts[-1]
+        mk = mtts[-1, batch_indices]
         mkt = mts[-offsets[batch_indices] - 1, batch_indices]
         mkt = torch.where(mkt > 0.5, 1.0, 0.0)
 
@@ -210,8 +217,8 @@ class Trainer:
         timesteps = mts.shape[0]
         l3 = 0
         for b in range(BS):
-            mt = mts[1:timesteps - offsets[b] - 1, b, :, :, :, :]
-            mtt = mtts[1 + offsets[b]:-1, b, :, :, :, :]
+            mt = mts[1:timesteps - offsets[b] - 1, b]
+            mtt = mtts[1 + offsets[b]:-1, b]
             if self.reduction == 'sum':
                 l3 += self.loss_fn(mt, mtt) / mt.shape[0]
             else:

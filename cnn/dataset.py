@@ -25,7 +25,8 @@ class LoadFlowMode(Enum):
 
 
 class SingleVentricleDataset(Dataset):
-    def __init__(self, config, mode, flow_mode, img4d_transforms=None, mask_transforms=None, flow_transforms=None, full_transforms=None):
+    def __init__(self, config, mode, flow_mode, img4d_transforms=None, mask_transforms=None, flow_transforms=None,
+                 full_transforms=None, test_masks_transforms=None):
         self.config = config
         self.mode = mode
         self.flow_mode = flow_mode
@@ -33,6 +34,7 @@ class SingleVentricleDataset(Dataset):
         self.mask_transforms = mask_transforms      # transformations applied only on masks
         self.flow_transforms = flow_transforms      # transformations applied only on optical flow
         self.full_transforms = full_transforms      # transformations applied on img, mask and optical flow
+        self.test_masks_transforms = test_masks_transforms
 
         self.base_path = config.get('DATA', 'BASE_PATH_3D')
         if mode == DatasetMode.TRAIN:
@@ -87,9 +89,11 @@ class SingleVentricleDataset(Dataset):
         # Load whole cycle masks
         if full_cycle:
             orig_NT = df_row.loc[idx, 'original_NT']
-            masks = np.empty(shape=(orig_NT, *mask_syst_zyx.shape), dtype=mask_syst_zyx.dtype)
+            masks = np.empty(shape=(*mask_syst_zyx.shape, orig_NT), dtype=mask_syst_zyx.dtype)
             for t in range(orig_NT):
-                masks[t] = self.load_mask(patient_name, f'_{t}_Labelmap.nii')
+                masks[..., t] = self.load_mask(patient_name, f'_{t}_Labelmap.nii')
+            if self.test_masks_transforms is not None:
+                masks = self.test_masks_transforms(masks)
         else:
             masks = None
 
@@ -172,8 +176,8 @@ class SingleVentricleDataset(Dataset):
             fwd_flows.append(np.load(fwd_file))
             bwd_flows.append(np.load(bwd_file))
 
-        fwd_t = np.stack([x for x in fwd_flows], axis=0)
-        bwd_t = np.stack([x for x in bwd_flows], axis=0)
+        fwd_t = np.stack([x for x in fwd_flows], axis=4)
+        bwd_t = np.stack([x for x in bwd_flows], axis=4)
         return (fwd_t, bwd_t)
 
     def create_timeline(self, init_ts, final_ts, original_NT):

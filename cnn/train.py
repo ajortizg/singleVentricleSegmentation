@@ -45,15 +45,17 @@ if __name__ == "__main__":
     ])
     val_transforms = T.ComposeFull([T.BinarizeMasks(th=0.5),
                                     T.ToTensorFull()])
-
-    train_ds = ds.SingleVentricleDataset(config, ds.DatasetMode.TRAIN, ds.LoadFlowMode.TRAIN_VAL_OF,
-                                         full_transforms=train_transforms)
-    val_ds = ds.SingleVentricleDataset(config, ds.DatasetMode.VAL, ds.LoadFlowMode.TRAIN_VAL_OF,
-                                       full_transforms=val_transforms)
+    test_masks_transforms = T.ComposeUnary([T.Round(th=0.5),
+                                            T.ToTensor()])
+    train_ds = ds.SingleVentricleDataset(config, ds.DatasetMode.TRAIN, ds.LoadFlowMode.TRAIN_VAL_OF, full_transforms=train_transforms)
+    val_ds = ds.SingleVentricleDataset(config, ds.DatasetMode.VAL, ds.LoadFlowMode.TRAIN_VAL_OF, full_transforms=val_transforms)
+    test_ds = ds.SingleVentricleDataset(config, ds.DatasetMode.TEST, ds.LoadFlowMode.TEST_OF, full_transforms=val_transforms,
+                                        test_masks_transforms=test_masks_transforms)
 
     # Create data loaders
     train_loader = DataLoader(train_ds, batch_size=P['batch_size'], shuffle=True, num_workers=P['workers'], collate_fn=utils.collate_fn)
     val_loader = DataLoader(val_ds, batch_size=P['batch_size'], shuffle=False, num_workers=P['workers'], collate_fn=utils.collate_fn)
+    test_loader = DataLoader(test_ds, batch_size=1, shuffle=False, num_workers=3, collate_fn=utils.collate_fn)
 
     save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'CNN')
     logger = plots.create_logger(save_dir)
@@ -77,6 +79,7 @@ if __name__ == "__main__":
     utils.save_model(net, save_dir, 'net.txt')
     train_ds.save_patients(save_dir, 'train.xlsx')
     val_ds.save_patients(save_dir, 'val.xlsx')
+    test_ds.save_patients(save_dir, 'test.xlsx')
 
     # Steps per epoch for training and evaluation set
     train_steps = len(train_loader)
@@ -97,6 +100,7 @@ if __name__ == "__main__":
     for e in range(P['epochs']):
         train_res = trainer.train_epoch(train_loader, opt)
         val_res = trainer.val_epoch(val_loader)
+        trainer.test_epoch(test_loader)
 
         train_avg = tuple(x / train_steps for x in train_res)
         val_avg = tuple(x / val_steps for x in val_res)
