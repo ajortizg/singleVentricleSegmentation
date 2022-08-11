@@ -34,12 +34,24 @@ def normalize(x):
     return (x - min) / (max - min)
 
 
-def getTorchDevice(gpuNum):
+# def getTorchDevice(gpuNum: int):
+#     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+#     #os.environ['CUDA_VISIBLE_DEVICES'] = str(gpuNum)
+
+#     if torch.cuda.is_available():
+#         DEVICE = torch.device('cuda:' + str(gpuNum))
+#         #DEVICE = torch.device('cuda:')
+#     else:
+#         DEVICE = 'cpu'
+    
+#     return DEVICE
+
+def getTorchDevice(gpuNum: str):
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-    os.environ['CUDA_VISIBLE_DEVICES'] = str(gpuNum)
+    os.environ['CUDA_VISIBLE_DEVICES'] = gpuNum
 
     if torch.cuda.is_available():
-        DEVICE = torch.device('cuda:' + str(gpuNum))
+        DEVICE = torch.device('cuda')
     else:
         DEVICE = 'cpu'
     

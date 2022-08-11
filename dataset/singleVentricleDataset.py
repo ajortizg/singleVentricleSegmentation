@@ -18,6 +18,8 @@ class SingleVentriclePatient:
             self.name = df_row.loc[idx, "Name"]
             self.tDiastole = df_row.loc[idx, "Diastole"]
             self.tSystole = df_row.loc[idx, "Systole"]
+            self.init_ts = min(self.tDiastole, self.tSystole)
+            self.final_ts = max(self.tDiastole, self.tSystole)
 
             # Load 4D nifty [x,y,z,t]
             self.nii_xyzt = nib.load(osp.join(volumes_path, f'{self.name}.nii.gz'))
@@ -79,9 +81,6 @@ class SingleVentricleDataset(Dataset):
         self.segmentations_file = osp.join(self.base_path, self.segmentations_filename)
 
         self.df = pandas.read_excel(self.segmentations_file)
-        # self.numDataFiles = self.df.shape[0]
-        # print("number of data files = ", self.numDataFiles)
-        # print("compare with length = ", self.__len__())
 
     def __len__(self):
         return len(self.df)
