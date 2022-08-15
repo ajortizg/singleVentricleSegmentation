@@ -4,11 +4,12 @@ from tqdm import tqdm
 from warp import WarpCNN
 import sys
 import os.path as osp
-from loss import loss_func_three
+import pandas as pd
 import csv
 from torch.utils.data import DataLoader
 import nibabel as nib
 from monai.metrics.meandice import compute_meandice
+from trainer import Trainer
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
@@ -28,28 +29,11 @@ def save_nifty(mask, save_dir, filename):
     nib.save(mt_nii, outputFile)
 
 
-def create_row(pname, mts_cnn_list, mtts_cnn_list, mts_iw_list, mtts_iw_list):
-    loss_cnn, l1_cnn, l2_cnn, l3_cnn = loss_func_three(mts_cnn_list, mtts_cnn_list)
-    loss_iw, l1_iw, l2_iw, l3_iw = loss_func_three(mts_iw_list, mtts_iw_list)
-    row = [pname]
-    row.append('{:.2f}'.format(l1_cnn.item()))
-    row.append('{:.2f}'.format(l2_cnn.item()))
-    row.append('{:.2f}'.format(l3_cnn.item()))
-    row.append('{:.2f}'.format(loss_cnn.item()))
-    row.append('{:.2f}'.format(l1_iw.item()))
-    row.append('{:.2f}'.format(l2_iw.item()))
-    row.append('{:.2f}'.format(l3_iw.item()))
-    row.append('{:.2f}'.format(loss_iw.item()))
-    row.append('{:.3f}'.format(compute_meandice(mtts_cnn_list[0], mts_cnn_list[0]).mean().item()))
-    row.append('{:.3f}'.format(compute_meandice(mts_cnn_list[-1], mtts_cnn_list[-1]).mean().item()))
-    return row
-
-
 if __name__ == "__main__":
     config_eval = configparser.ConfigParser()
     config_eval.read('parser/configCNNEval.ini')
 
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     P = utils.read_eval_params(config_eval)
 
     if P['fine_tuning']:
@@ -64,22 +48,28 @@ if __name__ == "__main__":
         config_train = configparser.ConfigParser()
         config_train.read(osp.join(P['trained_model_dir'], 'config.ini'))
 
-    data_transf = T.ComposeUnary([T.ToTensor()])
-    mask_transf = T.ComposeUnary([T.Round(th=0.5), T.ToTensor()])
+    transforms = T.ComposeFull([T.BinarizeMasks(th=0.5),
+                                T.ToTensorFull()])
     if P['dataset'] == 'train':
-        ds = SingleVentricleDataset(config_train, DatasetMode.TRAIN, LoadFlowMode.TRAIN_VAL_OF, data_transf, mask_transf)
-    else:
-        ds = SingleVentricleDataset(config_train, DatasetMode.VAL, LoadFlowMode.TRAIN_VAL_OF, data_transf, mask_transf)
+        ds = SingleVentricleDataset(config_train, DatasetMode.TRAIN, LoadFlowMode.TRAIN_VAL_OF, full_transforms=transforms)
+    elif P['dataset'] == 'val':
+        ds = SingleVentricleDataset(config_train, DatasetMode.VAL, LoadFlowMode.TRAIN_VAL_OF, full_transforms=transforms)
+    elif P['dataset'] == 'test':
+        test_masks_transforms = T.ComposeUnary([T.Round(th=0.5), T.ToTensor()])
+        ds = SingleVentricleDataset(config_train, DatasetMode.TEST, LoadFlowMode.TEST_OF,
+                                    full_transforms=transforms, test_masks_transforms=test_masks_transforms)
+
     loader = DataLoader(ds, batch_size=1, shuffle=False, num_workers=P['workers'], collate_fn=utils.collate_fn)
 
     save_dir = plots.createSaveDirectory(config_eval.get('DATA', 'OUTPUT_PATH'), 'EVAL')
     utils.save_config(config_eval, save_dir, 'config.ini')
 
-    csv_file = open(osp.join(save_dir, 'loss.csv'), 'w')
-    csv_writer = csv.writer(csv_file)
-    csv_writer.writerow(['Patient', 'L1-CNN', 'L2-CNN', 'L3-CNN', 'LT-CNN', 'L1-OF', 'L2-OF', 'L3-OF', 'LT-OF', 'dc_0', 'dc_k'])
     logger = plots.create_logger(save_dir)
+    logger.info(f'Device: {device}')
+    logger.info('Dataset: %s' % P['dataset'])
+    logger.info('Checkpoint: %s' % osp.join(P['trained_model_dir'], P['model_name']))
 
+    # Create net and load parameters
     net = utils.create_net(config_train, logger).to(device)
     net = torch.nn.DataParallel(net, device_ids=[0])
     checkpoint = torch.load(osp.join(P['trained_model_dir'], P['model_name']))
@@ -87,88 +77,88 @@ if __name__ == "__main__":
 
     save_size = (P['save_nz'], P['save_ny'], P['save_nx'])
     mask_posp = T.ComposeUnary([T.ToArray(), T.Resize(size=save_size), T.Round(th=0.5), T.Erode(), T.ToTensor()])
-    m0_mk_posp = T.ComposeUnary([T.ToArray(), T.Resize(size=save_size), T.Round(th=0.5), T.ToTensor()])
+    masks_gt_posp = T.ComposeUnary([T.ToArray(), T.Resize(size=save_size), T.Round(th=0.5), T.ToTensor()])
     img_posp = T.ComposeUnary([T.ToArray(), T.Resize(size=save_size), T.Normalize(), T.ToTensor()])
 
     pbar = tqdm(total=len(ds))
-    net.eval()
-    with torch.no_grad():
-        for (pnames, imgs4d, m0s, mks, times_fwd, times_bwd, ff, bf, offsets) in loader:
-            if P['fine_tuning']:
-                if pnames[0] != patient_name:
-                    continue
+    trainer = Trainer(net, pbar, config_train, device, None)
+    df = pd.DataFrame()
 
-            imgs4d = imgs4d.to(device)
-            m0s = m0s.to(device)
-            mks = mks.to(device)
-            ff = ff.to(device)
-            bf = bf.to(device)
+    for i, (pnames, imgs4d, m0s, mks, masks, times_fwd, times_bwd, ff, bf, offsets) in enumerate(loader):
+        if P['fine_tuning']:
+            if pnames[0] != patient_name:
+                continue
 
-            BS, CH, NZ, NY, NX, NT = imgs4d.shape
-            warp = WarpCNN(config_train, NZ, NY, NX)
+        imgs4d = imgs4d.to(device)
+        m0s = m0s.to(device)
+        mks = mks.to(device)
+        ff = ff.to(device)
+        bf = bf.to(device)
 
-            net_out = {'mt': [m0s], 'mtt': [mks]}
-            of_out = {'mt': [m0s], 'mtt': [mks]}
-            batch_indices = torch.arange(BS)
-            timesteps = ff.shape[1]
+        row = {'Patient': pnames[0]}
 
+        if P['dataset'] == 'test':
+            masks = masks.to(device)
+            times_fwd, times_bwd = ds.create_timeline(times_fwd[0], times_bwd[0], masks.shape[-1])
+            acc_cnn, mts_cnn, mtts_cnn = trainer.test_patient(imgs4d, masks, times_fwd, times_bwd, ff, bf, cnn=True)
+            acc_warp, mts_warp, mtts_warp = trainer.test_patient(imgs4d, masks, times_fwd, times_bwd, ff, bf, cnn=False)
+        else:
+            loss_cnn, acc_cnn, mts_cnn, mtts_cnn = trainer.val_patient(imgs4d, m0s, mks, times_fwd, times_bwd, ff, bf, offsets, cnn=True)
+            loss_warp, acc_warp, mts_warp, mtts_warp = trainer.val_patient(imgs4d, m0s, mks, times_fwd, times_bwd, ff, bf, offsets, cnn=False)
+            for k in range(len(loss_cnn)):
+                row[f'L{k}_cnn'] = loss_cnn[k]
+                row[f'L{k}_of'] = loss_warp[k]
+
+        row['Acc_cnn'] = acc_cnn
+        row['Acc_of'] = acc_warp
+        df_row = pd.DataFrame(row, index=[i])
+        df = pd.concat([df_row, df])
+
+        if P['save_imgs'] or P['save_nifti']:
+            patient_dir = plots.createSubDirectory(save_dir, pnames[0])
+            fwd_dir = plots.createSubDirectory(patient_dir, 'fwd')
+            bwd_dir = plots.createSubDirectory(patient_dir, 'bwd')
+
+            timesteps = mts_cnn.shape[0]
             for t in range(timesteps):
-                pbar.set_postfix_str(f'P: {pnames[0]}, S: {t+1}/{timesteps}')
+                if P['save_imgs']:
+                    img3d = img_posp(imgs4d[..., times_fwd[t].item()].squeeze())
 
-                # Forward mask propagation m0 -> mk
-                mt = warp(net_out['mt'][-1], ff[:, t, :, :, :, :])
-                mt, _ = net(torch.cat((imgs4d[batch_indices, :, :, :, :, times_fwd[t + 1][batch_indices]], mt), dim=1))
-                net_out['mt'].append(mt)
-                of_out['mt'].append(warp(of_out['mt'][-1], ff[:, t, :, :, :, :]))
+                    if P['dataset'] == 'test':
+                        mtt_net = mask_posp(mtts_cnn[times_fwd[t]].squeeze())
+                        mtt_of = mask_posp(mtts_warp[times_fwd[t]].squeeze())
+                        mt_net = mask_posp(mts_cnn[times_fwd[t]].squeeze())
+                        mt_of = mask_posp(mts_warp[times_fwd[t]].squeeze())
 
-                # Backward mask propagation mk -> m0
-                mtt = warp(net_out['mtt'][-1], bf[:, t, :, :, :, :])
-                mtt, _ = net(torch.cat((imgs4d[batch_indices, :, :, :, :, times_bwd[t + 1][batch_indices]], mtt), dim=1))
-                net_out['mtt'].append(mtt)
-                of_out['mtt'].append(warp(of_out['mtt'][-1], bf[:, t, :, :, :, :]))
+                        mgt = masks_gt_posp(masks[..., times_fwd[t]].squeeze())
+                        plots.save_img_masks(img3d, [mgt, mtt_net, mtt_of], f'im_t_{times_fwd[t]}', fwd_dir, th=0.5,
+                                             alphas=[0.3, 1.0, 1.0], colors=[[1, 0.7, 0], [0, 1, 0], [0, 0, 1]])
 
-            assert(len(net_out['mt']) == len(net_out['mtt']) and len(of_out['mt']) == len(of_out['mtt']))
-
-            net_out['mtt'].reverse()
-            of_out['mtt'].reverse()
-            csv_writer.writerow(create_row(pnames[0], net_out['mt'], net_out['mtt'], of_out['mt'], of_out['mtt']))
-
-            if P['save_imgs'] or P['save_nifti']:
-                patient_dir = plots.createSubDirectory(save_dir, pnames[0])
-                fwd_dir = plots.createSubDirectory(patient_dir, 'fwd')
-                bwd_dir = plots.createSubDirectory(patient_dir, 'bwd')
-
-                for t in range(len(net_out['mt'])):
-                    if P['save_imgs']:
-                        img3d = img_posp(imgs4d[batch_indices, :, :, :, :, times_fwd[t][batch_indices]].squeeze())
-                        mtt_net = mask_posp(net_out['mtt'][t].squeeze())
-                        mtt_of = mask_posp(of_out['mtt'][t].squeeze())
-                        mt_net = mask_posp(net_out['mt'][t].squeeze())
-                        mt_of = mask_posp(of_out['mt'][t].squeeze())
-
+                        plots.save_img_masks(img3d, [mgt, mt_net, mt_of], f'im_t_{times_fwd[t]}', bwd_dir, th=0.5,
+                                             alphas=[0.3, 1.0, 1.0], colors=[[1, 0.7, 0], [0, 1, 0], [0, 0, 1]])
+                    else:
+                        mtt_net = mask_posp(mtts_cnn[t].squeeze())
+                        mtt_of = mask_posp(mtts_warp[t].squeeze())
+                        mt_net = mask_posp(mts_cnn[t].squeeze())
+                        mt_of = mask_posp(mts_warp[t].squeeze())
                         if t == 0:
-                            plots.save_img_masks(img3d, [m0_mk_posp(m0s.squeeze()), mtt_net, mtt_of], 'im_m0_m0tt', fwd_dir, th=0.5,
+                            plots.save_img_masks(img3d, [masks_gt_posp(m0s.squeeze()), mtt_net, mtt_of], 'im_m0_m0tt', fwd_dir, th=0.5,
                                                  alphas=[0.3, 1.0, 1.0], colors=[[1, 0.7, 0], [0, 1, 0], [0, 0, 1]])
-                            # plots.save_img_masks_slices(data_t, [m0_mk_posp(m0), mtt_cnn, mtt_iw], fwd_dir, 'im_m0_m0tt_slices', th=0.5,
-                            #                             alphas=[0.3, 1.0, 1.0], colors=[[1, 0.7, 0], [0, 1, 0], [0, 0, 1]])
-                        elif t == len(net_out['mt']) - 1:
-                            plots.save_img_masks(img3d, [m0_mk_posp(mks.squeeze()), mt_net, mt_of], 'mk_mkt', bwd_dir, th=0.5,
+
+                        elif t == timesteps - 1:
+                            plots.save_img_masks(img3d, [masks_gt_posp(mks.squeeze()), mt_net, mt_of], 'mk_mkt', bwd_dir, th=0.5,
                                                  alphas=[0.3, 1.0, 1.0], colors=[[1, 0.7, 0], [0, 1, 0], [0, 0, 1]])
-                            # plots.save_img_masks_slices(data_t, [m0_mk_posp(mk), mt_cnn, mt_iw], bwd_dir, 'mk_mkt_slices', th=0.5,
-                            #                             alphas=[0.3, 1.0, 1.0], colors=[[1, 0.7, 0], [0, 1, 0], [0, 0, 1]])
 
-                        plots.save_img_masks(img3d, [mt_net, mt_of], f'im_t_{times_fwd[t][batch_indices].item()}', fwd_dir, th=0.5,
+                        plots.save_img_masks(img3d, [mt_net, mt_of], f'im_t_{times_fwd[t].item()}', fwd_dir, th=0.5,
                                              alphas=[1.0, 1.0], colors=[[0, 1, 0], [0, 0, 1]])
-                        # plots.save_img_masks_slices(data_t, [mt_cnn, mt_iw], fwd_dir, f'im_t_{init_ts + i}', th=0.5,
-                        #                             alphas=[1.0, 1.0], colors=[[0, 1, 0], [0, 0, 1]])
 
-                        plots.save_img_masks(img3d, [mtt_net, mtt_of], f'im_tt_{times_fwd[t][batch_indices].item()}', bwd_dir, th=0.5,
+                        plots.save_img_masks(img3d, [mtt_net, mtt_of], f'im_tt_{times_fwd[t].item()}', bwd_dir, th=0.5,
                                              alphas=[1.0, 1.0], colors=[[0, 1, 0], [0, 0, 1]])
-                        # plots.save_img_masks_slices(data_t, [mtt_cnn, mtt_iw], bwd_dir, f'im_tt_{init_ts + i}', th=0.5,
-                        #                             alphas=[1.0, 1.0], colors=[[0, 1, 0], [0, 0, 1]])
 
-                    if P['save_nifti']:
-                        save_nifty(net_out['mt'][t], fwd_dir, f'mt_{times_fwd[t][batch_indices].item()}.nii')
-                        save_nifty(net_out['mtt'][t], bwd_dir, f'mtt_{times_fwd[t][batch_indices].item()}.nii')
-            pbar.update(1)
-    csv_file.close()
+                if P['save_nifti']:
+                    save_nifty(mts_cnn[t], fwd_dir, f'mt_{times_fwd[t].item()}.nii')
+                    save_nifty(mtts_cnn[t], bwd_dir, f'mtt_{times_fwd[t].item()}.nii')
+        pbar.update(1)
+    df = df.round(3)
+    logger.info(df.mean(axis=0, numeric_only=True))
+    df.to_excel(osp.join(save_dir, 'results.xlsx'), index=False)

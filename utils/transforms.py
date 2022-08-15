@@ -380,27 +380,27 @@ class RandomRotateTorch:
         if np.random.rand() < self.p:
             NZ, NY, NX, NT = img4d.shape
             R, offset = self.create_rot_mat(NZ, NY, NX)
+            grid_t = scale_grid(self.generate_rotation_grid(R, offset, NZ, NY, NX).unsqueeze(0))
 
-            grid_t = self.generate_rotation_grid(R, offset, NZ, NY, NX)
-            grid_t.unsqueeze_(0)
-            grid_t = scale_grid(grid_t)
-
+            # Rotate masks
             ms_rot, md_rot = self.rotate_masks(ms, md, grid_t)
 
+            # Rotate images 4d
             grid_t = grid_t.repeat(NT, 1, 1, 1, 1)
-
             img4d_rot = self.rotate_imgs(img4d, grid_t)
+            img4d_rot = torch.clip(img4d_rot, min=self.clip_interval[0], max=self.clip_interval[1])
 
-            ff_rot = self.rototate_of_img(ff, grid_t)
-            bf_rot = self.rototate_of_img(bf, grid_t)
-            ff_rot = self.rotate_of_vectors(ff_rot, R)
-            bf_rot = self.rotate_of_vectors(bf_rot, R)
+            # Rotate optical flow imgs and vectors
+            ff_rot = self.rototate_flow_img(ff, grid_t)
+            bf_rot = self.rototate_flow_img(bf, grid_t)
+            ff_rot = self.rotate_flow_vectors(ff_rot, R)
+            bf_rot = self.rotate_flow_vectors(bf_rot, R)
 
             return (img4d_rot.numpy(), ms_rot.numpy(), md_rot.numpy(), ff_rot.numpy(), bf_rot.numpy())
         else:
             return (img4d, ms, md, ff, bf)
 
-    def rototate_of_img(self, of, grid_t):
+    def rototate_flow_img(self, of, grid_t):
         NT = of.shape[-1]
         grid_t = grid_t[:NT]
         of = np.transpose(of, (4, 3, 0, 1, 2))
@@ -415,7 +415,6 @@ class RandomRotateTorch:
         img4d = torch.from_numpy(img4d).float().unsqueeze(1)
         img4d_rot = F.grid_sample(img4d, grid_t, mode='bilinear', padding_mode=self.boundary, align_corners=True).squeeze()
         img4d_rot = torch.permute(img4d_rot, (1, 2, 3, 0))
-
         return img4d_rot
 
     def rotate_masks(self, ms, md, grid_t):
@@ -425,8 +424,8 @@ class RandomRotateTorch:
         md_rot = F.grid_sample(md, grid_t, mode='bilinear', padding_mode=self.boundary, align_corners=True).squeeze()
         return ms_rot, md_rot
 
-    def rotate_of_vectors(self, of, R):
-        R = R.T  # TODO! why?? check this
+    def rotate_flow_vectors(self, of, R):
+        R = R.T
         x = of[..., 0, :].clone()
         y = of[..., 1, :].clone()
         z = of[..., 2, :].clone()
@@ -447,9 +446,8 @@ class RandomRotateTorch:
         angy = np.random.uniform(self.range_y[0], self.range_y[1])
         angz = np.random.uniform(self.range_z[0], self.range_z[1])
 
-        CZ, CY, CX = NZ // 2, NY // 2, NX // 2
-
         # Rotation about the image center
+        CZ, CY, CX = NZ // 2, NY // 2, NX // 2
         Rx = rotx(angx)
         Ry = roty(angy)
         Rz = rotz(angz)
@@ -488,7 +486,7 @@ class ElasticDeformation:
             [img4d_d, ms_d, md_d, ff_d, bf_d] = ed.deform_random_grid([img4d, ms, md, ff, bf], sigma,
                                                                       points=self.points, mode=self.boundary,
                                                                       prefilter=self.prefilter,
-                                                                      axis=axis)                                                                  
+                                                                      axis=axis)
             img4d_d = np.clip(img4d_d, self.clip_interval[0], self.clip_interval[1])
             return (img4d_d, ms_d, md_d, ff_d, bf_d)
         else:

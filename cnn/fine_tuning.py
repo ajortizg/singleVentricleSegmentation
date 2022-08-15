@@ -4,17 +4,13 @@ import sys
 from torch.optim import Adam
 from tqdm import tqdm
 from torch.optim.lr_scheduler import StepLR
-from unet_3d import UNet3d
 from torch.utils.data import DataLoader
-import matplotlib.pyplot as plt
+import pandas as pd
 from torch.utils.tensorboard import SummaryWriter
 import time
 import numpy as np
 import os.path as osp
 import cnn_utils
-import os
-from torchsummary import summary
-import csv
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
@@ -24,145 +20,119 @@ import cnn.dataset as ds
 from cnn.trainer import Trainer
 
 
+def search_patient(query, loader):
+    found = False
+    for data in loader:
+        pnames = data[0]
+        if pnames[0] == query:
+            found = True
+            logger.info(f'Patient found: {pnames[0]}')
+            return found, data
+    return found, None
+
+
 if __name__ == "__main__":
-    cnn_utils.seeding(42)
-    DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     config = configparser.ConfigParser()
     config.read('parser/configFineTuning.ini')
-
-    PRETRAINED_MODEL_DIR = config.get('DATA', 'PRETRAINED_DIR')
-    WEIGHTS_FILENAME = config.get('DATA', 'WEIGHTS_FILENAME')
-    PATIENT_NAME = config.get('DATA', 'PATIENT_NAME')
-    NUM_GPUS = config.getint('PARAMETERS', 'NUM_GPUS')
-    NUM_WORKERS = config.getint('PARAMETERS', 'NUM_WORKERS')
-    NUM_EPOCHS = config.getint('PARAMETERS', 'NUM_EPOCHS')
-    BATCH_SIZE = 1
-    LR = config.getfloat('PARAMETERS', 'LR')
-    WEIGHT_DECAY = config.getfloat('PARAMETERS', 'WEIGHT_DECAY')
-    STEP_SIZE = config.getfloat('PARAMETERS', 'STEP_SIZE')
-    GAMMA = config.getfloat('PARAMETERS', 'GAMMA')
-    BETA1 = config.getfloat('PARAMETERS', 'BETA1')
-    BETA2 = config.getfloat('PARAMETERS', 'BETA2')
-    LOSS_LAMBDA = config.getfloat('PARAMETERS', 'LOSS_LAMBDA')
+    P = cnn_utils.read_fine_tuning_params(config)
 
     config_train = configparser.ConfigParser()
-    config_train.read(osp.join(PRETRAINED_MODEL_DIR, 'config.ini'))
+    config_train.read(osp.join(P['pretrained_model_dir'], 'config.ini'))
 
-    # Create validation dataset and loader
-    img4d_transforms = T.ComposeUnary([T.ToTensor()])
-    mask_transforms = T.ComposeUnary([T.Round(th=0.5), T.ToTensor()])
-    train_ds = ds.SingleVentricleDataset(config_train, ds.DatasetMode.VAL, ds.LoadFlowMode.TRAIN_VAL_OF, img4d_transforms, mask_transforms)
-    train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS, collate_fn=cnn_utils.collate_fn)
+    # Create dataset and loader
+    transforms = T.ComposeFull([T.BinarizeMasks(th=0.5), T.ToTensorFull()])
+    if P['dataset'] == 'train':
+        train_ds = ds.SingleVentricleDataset(config_train, ds.DatasetMode.TRAIN, ds.LoadFlowMode.TRAIN_VAL_OF, full_transforms=transforms)
+    elif P['dataset'] == 'val':
+        train_ds = ds.SingleVentricleDataset(config_train, ds.DatasetMode.VAL, ds.LoadFlowMode.TRAIN_VAL_OF, full_transforms=transforms)
+    elif P['dataset'] == 'test':
+        test_transforms = T.ComposeUnary([T.Round(th=0.5), T.ToTensor()])
+        train_ds = ds.SingleVentricleDataset(config_train, ds.DatasetMode.TEST, ds.LoadFlowMode.TRAIN_VAL_OF, full_transforms=transforms, test_masks_transforms=test_transforms)
+        test_ds = ds.SingleVentricleDataset(config_train, ds.DatasetMode.TEST, ds.LoadFlowMode.TEST_OF, full_transforms=transforms, test_masks_transforms=test_transforms)
+        test_loader = DataLoader(test_ds, batch_size=P['batch_size'], shuffle=False, num_workers=P['num_workers'], collate_fn=cnn_utils.collate_fn)
+    
+    train_loader = DataLoader(train_ds, batch_size=P['batch_size'], shuffle=False, num_workers=P['num_workers'], collate_fn=cnn_utils.collate_fn)
 
     save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'FT')
     logger = plots.create_logger(save_dir)
-
-    # UNet3D model
-    net = UNet3d(config_train, logger).to(DEVICE)
-    net = torch.nn.DataParallel(net, device_ids=np.arange(NUM_GPUS).tolist())
-
-    PRETRAIED_WEIGHTS = osp.join(PRETRAINED_MODEL_DIR, WEIGHTS_FILENAME)
-    net.load_state_dict(torch.load(PRETRAIED_WEIGHTS), strict=True)
-    logger.info(f'Use pretrained model: {PRETRAIED_WEIGHTS}')
-
-    opt = Adam(net.parameters(), lr=LR, weight_decay=WEIGHT_DECAY, betas=(BETA1, BETA2))
-    schedule_lr = StepLR(opt, step_size=STEP_SIZE, gamma=GAMMA)
-
     writer = SummaryWriter(log_dir=save_dir)
+    plots.save_config(config, save_dir, 'config.ini')
 
-    # save config file to save directory
-    conifg_output = osp.join(save_dir, 'config.ini')
-    with open(conifg_output, 'w') as config_file:
-        config.write(config_file)
-
+    # Create model and load weights
+    net = cnn_utils.create_net(config_train, logger).to(device)
+    net = torch.nn.DataParallel(net, device_ids=np.arange(P['num_gpus']).tolist())
+    checkpoint = torch.load(osp.join(P['pretrained_model_dir'], P['weights_filename']))
+    net.load_state_dict(checkpoint['model_state_dict'], strict=True)
     cnn_utils.save_model(net, save_dir, 'net.txt')
 
-    # Steps per epoch for training and evaluation set
-    H = {'train_loss': [], 'acc': []}
+    opt = Adam(net.parameters(), lr=P['lr'], weight_decay=P['weight_decay'], betas=(P['beta1'], P['beta2']))
+    scheduler = StepLR(opt, step_size=P['step_size'], gamma=P['gamma'])
+
+    H = {'train_loss': [], 'val_loss': [], 'train_acc': [], 'val_acc': [], 'test_acc': []}
     logger.info('Save directory: ' + save_dir)
-    logger.info(f'Searching patient: {PATIENT_NAME}')
+    logger.info('Searching patient: %s' % P['patient_name'])
 
-    pbar = tqdm(total=NUM_EPOCHS)
-    tic = time.time()
-    trainer = Trainer(net, pbar, config, DEVICE)
-    best_train_loss = 1e10
-    patient_found = False
-    for (pnames, imgs4d, m0s, mks, list_times_fwd, list_times_bwd, ff, bf, offsets) in train_loader:
-        if pnames[0] == PATIENT_NAME:
-            patient_found = True
-            imgs4d = imgs4d.to(DEVICE)
-            m0s = m0s.to(DEVICE)
-            mks = mks.to(DEVICE)
-            ff = ff.to(DEVICE)
-            bf = bf.to(DEVICE)
-            logger.info(f'Patient found: {pnames[0]}')
-            break
-
-    if not patient_found:
-        logger.error(f'No patient found: {PATIENT_NAME}')
+    # Search retraning patient
+    found, data = search_patient(P['patient_name'], train_loader)
+    if not found:
+        logger.error('Patient not found: %s ' % P['PATIENT_NAME'])
         sys.exit()
+    pnames, imgs4d, m0s, mks, _, times_fwd, times_bwd, ff, bf, offsets = data
+    imgs4d = imgs4d.to(device)
+    m0s = m0s.to(device)
+    mks = mks.to(device)
+    ff = ff.to(device)
+    bf = bf.to(device)
 
-    csv_file = open(osp.join(save_dir, 'acc.csv'), 'w')
-    csv_writer = csv.writer(csv_file)
-    csv_writer.writerow(['Patient', 'Lambda', '1', '100', '200', '300', '400', '500'])
-    save_epochs = {0, 99, 199, 299, 399, 499}
+    if P['dataset'] == 'test':
+        _, test_data = search_patient(P['patient_name'], test_loader)
+        test_imgs4d = test_data[1].to(device)
+        test_masks = test_data[4].to(device)
+        test_ff = test_data[7].to(device)
+        test_bf = test_data[8].to(device)
+        test_times_fwd, test_times_bwd = test_ds.create_timeline(test_data[5][0], test_data[6][0], test_masks.shape[-1])
 
-    row = [PATIENT_NAME]
-    row.append(LOSS_LAMBDA)
+    pbar = tqdm(total=P['num_epochs'])
+    tic = time.time()
+    trainer = Trainer(net, pbar, config, device, writer)
+    best_train_loss = 1e10
 
+    df = pd.DataFrame({'Patient': pnames[0], 'Lambda': P['loss_lambda']}, index=[0])
+    save_every = 100
     logger.info('Train CNN')
-    for e in range(NUM_EPOCHS):
+    
+    for e in range(P['num_epochs']):
         pbar.set_postfix_str(f'Train: {pnames[0]}')
-        total_train_loss, l1_train, l2_train, l3_train, mean_acc = trainer.train_patient(
-            imgs4d, m0s, mks, list_times_fwd, list_times_bwd, ff, bf, offsets, opt)
+        train_res = trainer.train_patient(imgs4d, m0s, mks, times_fwd, times_bwd, ff, bf, offsets, opt)
 
-        schedule_lr.step()
+        if P['dataset'] == 'test':
+            pbar.set_postfix_str(f'Test: {test_data[0][0]}')
+            test_acc, *_ = trainer.test_patient(test_imgs4d, test_masks, test_times_fwd, test_times_bwd, test_ff, test_bf, cnn=True)
+        else:
+            test_acc = 0.0
 
-        logger.info(f'Epoch: {e}')
-        logger.info(f'\t*Train:\tlt: {total_train_loss:,.4f}\tl1: {l1_train:,.4f}\tl2: {l2_train:,.4f}\tl3: {l3_train:,.4f}\tAcc: {mean_acc:,.3f}')
+        best_train_loss, _ = cnn_utils.log(logger, writer, e, train_res, train_res, test_acc, net, opt,
+                                           best_train_loss, 0, save_dir)
+        H = cnn_utils.update_train_history(H, train_res, train_res, test_acc)
 
-        if total_train_loss < best_train_loss:
-            best_train_loss = total_train_loss
-            torch.save(net, osp.join(save_dir, 'best_train_model.pth'))
-            torch.save(net.state_dict(), osp.join(save_dir, 'best_train_weights.pth'))
-            logger.info(f'\t*Best train model and weights updated with loss: {best_train_loss:,.4f}')
+        if e % save_every == 0:
+            df.insert(0, f'{e}', train_res[-1])
 
-        H['train_loss'].append(total_train_loss)
-        H['acc'].append(mean_acc)
-
-        writer.add_scalars('loss', {'e_train_loss': total_train_loss}, e)
-        writer.add_scalars('l123', {'l123/train_l1': l1_train, 'l123/train_l2': l2_train, 'l123/train_l3': l3_train}, e)
-        writer.add_scalar('lr', schedule_lr.get_last_lr()[0], e)
-        writer.add_scalars('acc', {'train': mean_acc}, e)
-
-        if e in save_epochs:
-            row.append(mean_acc)
+        scheduler.step()
         pbar.update(1)
 
-    csv_writer.writerow(row)
+    df.to_excel(osp.join(save_dir, 'accuracy.xlsx'), index=False)
     toc = time.time()
     logger.info('\nTotal time taken to train the model: {:.4f}s'.format(toc - tic))
 
-    plt.style.use('ggplot')
-    plt.figure()
-    plt.plot(H['train_loss'], label='train_loss')
-    plt.title('Training Loss on Dataset')
-    plt.xlabel('Epoch #')
-    plt.ylabel('Loss')
-    plt.legend(loc='lower left')
-    plt.savefig(osp.join(save_dir, 'loss.png'))
-
-    plt.figure()
-    plt.plot(H['acc'], label='acc')
-    plt.title('Acc on Dataset')
-    plt.xlabel('Epoch #')
-    plt.ylabel('Acc')
-    plt.legend(loc='lower left')
-    plt.savefig(osp.join(save_dir, 'acc.png'))
-
-    torch.save(net, osp.join(save_dir, 'model.pth'))
-    torch.save(net.state_dict(), osp.join(save_dir, 'weights.pth'))
+    plots.save_loss(H, save_dir)
+    plots.save_acc(H, save_dir)
+    cnn_utils.checkpoint(e, net, opt, train_res, train_res, test_acc, save_dir, 'checkpoint.pth')
+   
     pbar.close()
     writer.close()
-    csv_file.close()
+   
+
+   

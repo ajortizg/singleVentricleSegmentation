@@ -121,6 +121,27 @@ def read_eval_params(config):
     return params
 
 
+def read_fine_tuning_params(config):
+    params = {
+        'pretrained_model_dir': config.get('DATA', 'PRETRAINED_DIR'),
+        'weights_filename': config.get('DATA', 'WEIGHTS_FILENAME'),
+        'patient_name': config.get('DATA', 'PATIENT_NAME'),
+        'num_gpus': config.getint('PARAMETERS', 'NUM_GPUS'),
+        'num_workers': config.getint('PARAMETERS', 'NUM_WORKERS'),
+        'num_epochs': config.getint('PARAMETERS', 'NUM_EPOCHS'),
+        'batch_size': 1,
+        'lr': config.getfloat('PARAMETERS', 'LR'),
+        'weight_decay': config.getfloat('PARAMETERS', 'WEIGHT_DECAY'),
+        'step_size': config.getfloat('PARAMETERS', 'STEP_SIZE'),
+        'gamma': config.getfloat('PARAMETERS', 'GAMMA'),
+        'beta1': config.getfloat('PARAMETERS', 'BETA1'),
+        'beta2': config.getfloat('PARAMETERS', 'BETA2'),
+        'loss_lambda': config.getfloat('PARAMETERS', 'LOSS_LAMBDA'),
+        'dataset': config.get('DATA', 'DATASET')
+    }
+    return params
+
+
 def checkpoint(e, net, opt, train_res, val_res, test_acc_avg, save_dir, filename):
     torch.save({
         'epoch': e,
@@ -143,7 +164,7 @@ def update_train_history(H, train_avg, val_avg, test_acc_avg):
     return H
 
 
-def log(logger, writer, e, train_avg, val_avg, test_acc_avg, net, opt, schedule_lr, best_train_loss, best_val_loss, save_dir):
+def log(logger, writer, e, train_avg, val_avg, test_acc_avg, net, opt, best_train_loss, best_val_loss, save_dir):
     log_train = '\t*Train:'
     log_val = '\t*Val:'
     log_test = f'\t*Test:\tacc: {test_acc_avg:,.3f}'
@@ -158,7 +179,6 @@ def log(logger, writer, e, train_avg, val_avg, test_acc_avg, net, opt, schedule_
     logger.info(log_val)
     logger.info(log_test)
 
-    # writer.add_scalar('lr', schedule_lr.get_last_lr()[0], e)
     writer.add_scalar('lr', opt.param_groups[0]['lr'], e)
     writer.add_scalars('acc', {'train': train_avg[-1], 'val': val_avg[-1], 'test': test_acc_avg}, e)
 
@@ -206,7 +226,7 @@ def save_weights(net: Module, epoch: int, every: int, save_dir: str, filename: s
 def collate_fn(data):
     pnames, imgs4d, m0s, mks, masks, init_ts, final_ts, ff, bf = zip(*data)
 
-    list_times_fwd, list_times_bwd = collate_times(init_ts, final_ts)
+    times_fwd, times_bwd = collate_times(init_ts, final_ts)
     ff, bf, offsets = collate_optical_flow(ff, bf)
 
     to_tensor = T.ListToTensor()
@@ -220,8 +240,10 @@ def collate_fn(data):
     if masks[0] is not None:
         masks = to_tensor(masks)
         masks.unsqueeze_(1)
+    else:
+        masks = None
 
-    return (pnames, imgs4d, m0s, mks, masks, list_times_fwd, list_times_bwd, ff, bf, offsets)
+    return (pnames, imgs4d, m0s, mks, masks, times_fwd, times_bwd, ff, bf, offsets)
 
 
 def collate_times(init_ts, final_ts):
@@ -229,17 +251,17 @@ def collate_times(init_ts, final_ts):
     final_ts = torch.tensor(final_ts)
     num_ts = (final_ts - init_ts).max().item()
 
-    list_times_fwd = [init_ts]
-    list_times_bwd = [final_ts]
+    times_fwd = [init_ts]
+    times_bwd = [final_ts]
 
     for _ in range(num_ts):
-        next_time = list_times_fwd[-1] + 1
-        list_times_fwd.append(torch.where(next_time > final_ts, final_ts, next_time))
+        next_time = times_fwd[-1] + 1
+        times_fwd.append(torch.where(next_time > final_ts, final_ts, next_time))
 
-        prev_time = list_times_bwd[-1] - 1
-        list_times_bwd.append(torch.where(prev_time < init_ts, init_ts, prev_time))
+        prev_time = times_bwd[-1] - 1
+        times_bwd.append(torch.where(prev_time < init_ts, init_ts, prev_time))
 
-    return(list_times_fwd, list_times_bwd)
+    return(times_fwd, times_bwd)
 
 
 def collate_optical_flow(off, ofb):

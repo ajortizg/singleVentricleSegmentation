@@ -44,6 +44,7 @@ if __name__ == "__main__":
                 if t == init_ts:
                     plots.save_img_masks(u, [m0_mk_posp(m0), mask_posp(m0)], f'{pname}_t{t}.png', patient_dir,
                                          th=0.5, alphas=[0.2, 1.0, 1.0], colors=[[1, 0.75, 0], [0, 1, 0]])
+                    plots.save_img_masks_slices(u,[m0_mk_posp(m0), mask_posp(m0)],patient_dir,'slices',th=0.5,alphas=[0.2,1.0], colors=[[1, 0.75, 0], [0, 1, 0]])
                 elif t == final_ts:
                     plots.save_img_masks(u, [m0_mk_posp(mk), mask_posp(mk)], f'{pname}_t{t}.png', patient_dir,
                                          th=0.5, alphas=[0.2, 1.0, 1.0], colors=[[0, 0.75, 1], [1, 0, 0]])

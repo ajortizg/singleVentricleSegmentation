@@ -88,76 +88,81 @@ class Trainer:
                     self.plot_imgs(mts, mtts, offsets, batch_indices, 'val')
         return (*total_loss, total_acc)
 
+    @torch.no_grad()
     def test_epoch(self, test_loader, test_ds):
         self.net.eval()
         total_acc = 0
 
-        with torch.no_grad():
-            for i, (_, img4d, _, _, masks, times_fwd, times_bwd, ff, bf, _) in enumerate(test_loader):
-                self.pbar.set_postfix_str(f'Test: {i+1}/{len(test_loader)}')
-                times_fwd, _ = test_ds.create_timeline(times_fwd[0], times_bwd[0], masks.shape[-1])
-                img4d = img4d.to(self.device)
-                masks = masks.to(self.device)
-                ff = ff.to(self.device)
-                # bf = bf.to(self.device)
+        for i, (pnames, img4d, _, _, masks, times_fwd, times_bwd, ff, bf, _) in enumerate(test_loader):
+            self.pbar.set_postfix_str(f'Test: {i+1}/{len(test_loader)}')
+            times_fwd, times_bwd = test_ds.create_timeline(times_fwd[0], times_bwd[0], masks.shape[-1])
+            img4d = img4d.to(self.device)
+            masks = masks.to(self.device)
+            ff = ff.to(self.device)
+            bf = bf.to(self.device)
 
-                BS, NZ, NY, NX, _, timesteps = ff.shape
-                warp = WarpCNN(self.config, NZ, NY, NX)
-                mts = torch.empty(size=(timesteps, BS, 1, NZ, NY, NX), dtype=img4d.dtype, device=self.device)
-                mts[0] = masks[..., times_fwd[0]]
-                masks_gt = torch.empty_like(mts)
-                masks_gt[0] = masks[..., times_fwd[0]]
+            BS, NZ, NY, NX, _, timesteps = ff.shape
+            warp = WarpCNN(self.config, NZ, NY, NX)
+            mts = torch.empty_like(masks)
+            mts[..., times_fwd[0]] = masks[..., times_fwd[0]]
+            mtts = torch.empty_like(masks)
+            mtts[..., times_bwd[0]] = masks[..., times_bwd[0]]
 
-                for t in range(timesteps - 1):
-                    # Forward mask propagation
-                    mt = warp(mts[t], ff[..., t])
-                    x = torch.cat((img4d[..., times_fwd[t + 1]], mt), dim=1)
-                    mts[t + 1], _ = self.net(x)
-                    masks_gt[t + 1] = masks[..., times_fwd[t + 1]]
+            for t in range(timesteps - 1):
+                # Forward mask propagation
+                mt = warp(mts[..., times_fwd[t]], ff[..., t])
+                x = torch.cat((img4d[..., times_fwd[t + 1]], mt), dim=1)
+                mts[..., times_fwd[t + 1]], _ = self.net(x)
 
-                # Compute accuracy
-                mts.swapaxes_(0, 1).squeeze_(0)
-                mts = torch.where(mts > 0.5, 1.0, 0.0)
-                masks_gt.swapaxes_(0, 1).squeeze_(0)
-                acc = compute_meandice(mts, masks_gt).mean()
-                total_acc += acc.item()
+                # Backward mask propagation
+                mtt = warp(mtts[..., times_bwd[t]], bf[..., t])
+                x = torch.cat((img4d[..., times_bwd[t + 1]], mtt), dim=1)
+                mtts[..., times_bwd[t + 1]], _ = self.net(x)
 
-                if np.random.rand() < self.display_prob:
-                    self.plot_test_imgs(mts, masks_gt, 'test')
+            # Compute forward accuracy
+            mts = mts.swapaxes(0, -1).squeeze(-1)
+            masks = masks.swapaxes(0, -1).squeeze(-1)
+            mts = torch.where(mts > 0.5, 1.0, 0.0)
+            acc_fwd = compute_meandice(mts, masks).mean().item()
+
+            # Compute backward accuracy
+            mtts = mtts.swapaxes(0, -1).squeeze(-1)
+            mtts = torch.where(mtts > 0.5, 1.0, 0.0)
+            acc_bwd = compute_meandice(mtts, masks).mean().item()
+
+            # Mean acc
+            acc = 0.5 * (acc_fwd + acc_bwd)
+            total_acc += acc
+            if np.random.rand() < self.display_prob:
+                self.plot_test_imgs(mts, masks, 'test')
         return total_acc
 
-    def train_patient(self, imgs4d, m0s, mks, _, list_times_fwd, list_times_bwd, ff, bf, offsets, opt):
-        offsets = offsets.to(torch.long)
-        BS = offsets.shape[0]
-        batch_indices = torch.arange(BS)
+        #         BS, NZ, NY, NX, _, timesteps = ff.shape
+        #         warp = WarpCNN(self.config, NZ, NY, NX)
+        #         mts = torch.empty(size=(timesteps, BS, 1, NZ, NY, NX), dtype=img4d.dtype, device=self.device)
+        #         mts[0] = masks[..., times_fwd[0]]
+        #         masks_gt = torch.empty_like(mts)
+        #         masks_gt[0] = masks[..., times_fwd[0]]
 
-        self.net.train()
-        mts, mtts, mhs, mhhs = self.time_popagation(imgs4d, m0s, mks, list_times_fwd, list_times_bwd, ff, bf, batch_indices)
-        loss = self.compute_loss(mts, mtts, offsets, batch_indices, mhs, mhhs)
+        #         for t in range(timesteps - 1):
+        #             # Forward mask propagation
+        #             mt = warp(mts[t], ff[..., t])
+        #             x = torch.cat((img4d[..., times_fwd[t + 1]], mt), dim=1)
+        #             mts[t + 1], _ = self.net(x)
+        #             masks_gt[t + 1] = masks[..., times_fwd[t + 1]]
 
-        opt.zero_grad()
-        loss[0].backward()
-        opt.step()
+        #         # Compute accuracy
+        #         mts.swapaxes_(0, 1).squeeze_(0)
+        #         mts = torch.where(mts > 0.5, 1.0, 0.0)
+        #         masks_gt.swapaxes_(0, 1).squeeze_(0)
+        #         acc = compute_meandice(mts, masks_gt).mean()
+        #         total_acc += acc.item()
 
-        with torch.no_grad():
-            acc = self.compute_dice_acc(mts, mtts, offsets, batch_indices).item()
-            loss = tuple(l.item() for l in loss)
-        return (*loss, acc)
+        #         if np.random.rand() < self.display_prob:
+        #             self.plot_test_imgs(mts, masks_gt, 'test')
+        # return total_acc
 
-    def val_patient(self, imgs4d, m0s, mks, list_times_fwd, list_times_bwd, ff, bf, offsets):
-        offsets = offsets.to(torch.long)
-        BS = offsets.shape[0]
-        batch_indices = torch.arange(BS)
-        self.net.eval()
-
-        with torch.no_grad():
-            mts, mtts = self.time_popagation(imgs4d, m0s, mks, list_times_fwd, list_times_bwd, ff, bf, batch_indices)
-            loss = self.compute_loss(mts, mtts, offsets, batch_indices)
-            acc = self.compute_dice_acc(mts, mtts, offsets, batch_indices).item()
-            loss = tuple(l.item() for l in loss)
-        return (*loss, acc)
-
-    def time_popagation(self, imgs4d, m0s, mks, list_times_fwd, list_times_bwd, ff, bf, batch_indices):
+    def time_popagation(self, imgs4d, m0s, mks, times_fwd, times_bwd, ff, bf, batch_indices, cnn=True):
         BS, NZ, NY, NX, CH, timesteps = ff.shape
         dtype = m0s.dtype
         warp = WarpCNN(self.config, NZ, NY, NX)
@@ -175,13 +180,19 @@ class Trainer:
         for t in range(timesteps):
             # Forward propagation m0 -> mk
             mt = warp(mts[t], ff[..., t])
-            x = torch.cat((imgs4d[batch_indices, ..., list_times_fwd[t + 1][batch_indices]], mt), dim=1)
-            mts[t + 1], mh = self.net(x)
+            if cnn:
+                x = torch.cat((imgs4d[batch_indices, ..., times_fwd[t + 1][batch_indices]], mt), dim=1)
+                mts[t + 1], mh = self.net(x)
+            else:
+                mts[t + 1] = mt
 
             # Backward propagation mk -> m0
             mtt = warp(mtts[timesteps - t], bf[..., t])
-            x = torch.cat((imgs4d[batch_indices, ..., list_times_bwd[t + 1][batch_indices]], mtt), dim=1)
-            mtts[timesteps - t - 1], mhh = self.net(x)
+            if cnn:
+                x = torch.cat((imgs4d[batch_indices, ..., times_bwd[t + 1][batch_indices]], mtt), dim=1)
+                mtts[timesteps - t - 1], mhh = self.net(x)
+            else:
+                mtts[timesteps - t - 1] = mtt
 
             if self.penalization:
                 mhs[t] = mh
@@ -283,3 +294,80 @@ class Trainer:
         l3 = self.loss_lambda * l3 / BS
         total_loss = l1 + l2 + l3 + l4
         return (total_loss, l1, l2, l3, l4)
+
+    def train_patient(self, imgs4d, m0s, mks, times_fwd, times_bwd, ff, bf, offsets, opt):
+        offsets = offsets.to(torch.long)
+        BS = offsets.shape[0]
+        batch_indices = torch.arange(BS)
+
+        self.net.train()
+        mts, mtts, mhs, mhhs = self.time_popagation(imgs4d, m0s, mks, times_fwd, times_bwd, ff, bf, batch_indices)
+        loss = self.compute_loss(mts, mtts, offsets, batch_indices, mhs, mhhs)
+
+        opt.zero_grad()
+        loss[0].backward()
+        opt.step()
+
+        with torch.no_grad():
+            acc = self.compute_dice_acc(mts, mtts, offsets, batch_indices).item()
+            loss = tuple(l.item() for l in loss)
+            if np.random.rand() < self.display_prob:
+                self.plot_imgs(mts, mtts, offsets, batch_indices, 'train')
+        return (*loss, acc)
+
+    @torch.no_grad()
+    def val_patient(self, imgs4d, m0s, mks, times_fwd, times_bwd, ff, bf, offsets, cnn):
+        self.net.eval()
+        offsets = offsets.to(torch.long)
+        BS = offsets.shape[0]
+        batch_indices = torch.arange(BS)
+
+        mts, mtts, *_ = self.time_popagation(imgs4d, m0s, mks, times_fwd, times_bwd, ff, bf, batch_indices, cnn)
+        loss = self.compute_loss(mts, mtts, offsets, batch_indices)
+        acc = self.compute_dice_acc(mts, mtts, offsets, batch_indices).item()
+        loss = tuple(l.item() for l in loss)
+        return (loss, acc, mts, mtts)
+
+    @torch.no_grad()
+    def test_patient(self, img4d, masks, times_fwd, times_bwd, ff, bf, cnn):
+        if cnn:
+            self.net.eval()
+
+        BS, NZ, NY, NX, _, timesteps = ff.shape
+        warp = WarpCNN(self.config, NZ, NY, NX)
+        mts = torch.empty_like(masks)
+        mts[..., times_fwd[0]] = masks[..., times_fwd[0]]
+        mtts = torch.empty_like(masks)
+        mtts[..., times_bwd[0]] = masks[..., times_bwd[0]]
+
+        for t in range(timesteps - 1):
+            # Forward mask propagation
+            mt = warp(mts[..., times_fwd[t]], ff[..., t])
+            if cnn:
+                x = torch.cat((img4d[..., times_fwd[t + 1]], mt), dim=1)
+                mts[..., times_fwd[t + 1]], _ = self.net(x)
+            else:
+                mts[..., times_fwd[t + 1]] = mt
+
+            # Backward mask propagation
+            mtt = warp(mtts[..., times_bwd[t]], bf[..., t])
+            if cnn:
+                x = torch.cat((img4d[..., times_bwd[t + 1]], mtt), dim=1)
+                mtts[..., times_bwd[t + 1]], _ = self.net(x)
+            else:
+                mtts[..., times_bwd[t + 1]] = mtt
+
+        # Compute forward accuracy
+        mts = mts.swapaxes(0, -1).squeeze(-1)
+        masks = masks.swapaxes(0, -1).squeeze(-1)
+        mts = torch.where(mts > 0.5, 1.0, 0.0)
+        acc_fwd = compute_meandice(mts, masks).mean().item()
+
+        # Compute backward accuracy
+        mtts = mtts.swapaxes(0, -1).squeeze(-1)
+        mtts = torch.where(mtts > 0.5, 1.0, 0.0)
+        acc_bwd = compute_meandice(mtts, masks).mean().item()
+
+        # Mean acc
+        acc = 0.5 * (acc_fwd + acc_bwd)
+        return acc, mts, mtts

@@ -6,18 +6,25 @@ import plots
 import time
 import pandas as pd
 import torch
+from enum import Enum
 
 
-class TrainingReport:
-    def __init__(self, from_dt, to_dt):
+class ReportMode(str, Enum):
+    TRAIN = 'CNN_*'
+    FT = 'FT_*'
+
+
+class Report:
+    def __init__(self, from_dt, to_dt, mode):
         self.from_dt = from_dt
         self.to_dt = to_dt
         self.str_fmt = '%Y%m%d-%H%M%S'
         self.filtered_dirs = []
+        self.mode = mode
 
     def filter(self, root_dir):
-        experiment_dirs = sorted(glob(osp.join(root_dir, 'CNN_*')), reverse=True)
-        for exp_dir in experiment_dirs:
+        cnn_dirs = sorted(glob(osp.join(root_dir, self.mode)), reverse=True)
+        for exp_dir in cnn_dirs:
             dt = datetime.strptime(exp_dir.split(osp.sep)[-1].split('_')[-1], self.str_fmt)
             if dt >= self.from_dt and dt <= self.to_dt:
                 self.filtered_dirs.append(exp_dir)
@@ -69,11 +76,12 @@ class TrainingReport:
             return (0, 0, 0, 0, 0)
 
     def clean_data_dict(self, data_items):
-        data_items.pop('volumes_subdir_path')
-        data_items.pop('segmentations_subdir_path')
-        data_items.pop('segmentations_file_name')
-        data_items.pop('output_path')
-        data_items['base_path_3d'] = data_items['base_path_3d'].split(osp.sep)[-1]
+        if self.mode == ReportMode.TRAIN:
+            data_items.pop('volumes_subdir_path')
+            data_items.pop('segmentations_subdir_path')
+            data_items.pop('segmentations_file_name')
+            data_items.pop('output_path')
+            data_items['base_path_3d'] = data_items['base_path_3d'].split(osp.sep)[-1]
         return data_items
 
     def from_str(self):
@@ -87,9 +95,10 @@ if __name__ == "__main__":
     root_dir = 'results'
     report_dir = plots.createSubDirectory(root_dir, 'reports')
 
-    from_dt = datetime(year=2022, month=8, day=11, hour=17, minute=0)
-    to_dt = datetime(year=2022, month=8, day=12, hour=0, minute=0)
+    mode = ReportMode.TRAIN
+    from_dt = datetime(year=2022, month=8, day=12, hour=0, minute=0)
+    to_dt = datetime(year=2022, month=8, day=16, hour=23, minute=59)
 
-    report = TrainingReport(from_dt, to_dt)
+    report = Report(from_dt, to_dt, mode)
     report.filter('results')
     report.create(report_dir, f'report_{time.strftime(report.str_fmt)}.xlsx')
