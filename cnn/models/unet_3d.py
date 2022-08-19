@@ -11,8 +11,9 @@ from monai.networks.nets.unet import UNet
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
-import cnn.lipschitz as L
+import lipschitz as L
 
+__all__ = ["UNet3d", "ResUNet3d"]
 
 class UNet3d(nn.Module):
     def __init__(self, config, logger):
@@ -79,7 +80,7 @@ class UNet3d(nn.Module):
         if self.residual:
             return self.layers[-1](xi[-1]) + identity, self.layers[-1](xi[-1])
         else:
-            return self.layers[-1](xi[-1]), self.layers[-1](xi[-1])
+            return torch.sigmoid(self.layers[-1](xi[-1])), self.layers[-1](xi[-1])
 
 
 class DoubleConv3d(nn.Module):
@@ -219,7 +220,7 @@ class ResUNet3d(nn.Module):
         if self.residual:
             return x + identity, x
         else:
-            return x, x
+            return torch.sigmoid(x), x
 
 
 # class UNet3d(nn.Module):
@@ -277,7 +278,7 @@ class ResUNet3d(nn.Module):
 #         if self.residual:
 #             return self.layers[-1](xi[-1]) + identity, self.layers[-1](xi[-1])
 #         else:
-#             return self.layers[-1](xi[-1]), self.layers[-1](xi[-1])
+#             return torch.sigmoid(self.layers[-1](xi[-1])), self.layers[-1](xi[-1])
 
 
 # class DoubleConv3d(nn.Module):

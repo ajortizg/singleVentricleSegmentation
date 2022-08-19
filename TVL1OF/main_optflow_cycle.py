@@ -6,8 +6,8 @@ from TVL1OF3D import *
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 from utils import plots
-import utils.transforms as T
-from cnn.dataset import SingleVentricleDataset, DatasetMode, LoadFlowMode
+import utils.transforms.unary_transforms as T1
+from cnn.dataset import *
 
 
 class OpticalFlowMode(Enum):
@@ -80,9 +80,9 @@ if __name__ == "__main__":
     with open(conifg_output, 'w') as configfile:
         config.write(configfile)
 
-    data_transf = T.ComposeUnary([T.ToTensor()])
-    train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, LoadFlowMode.NO_LOAD_OF, data_transf)
-    val_ds = SingleVentricleDataset(config, DatasetMode.VAL, LoadFlowMode.NO_LOAD_OF, data_transf)
+    img_transf = T1.Compose([T1.ToTensor()])
+    train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, LoadFlowMode.NO_LOAD, img_transf)
+    val_ds = SingleVentricleDataset(config, DatasetMode.VAL, LoadFlowMode.NO_LOAD, img_transf)
 
     compute_all_patients = config.get('DATA', 'COMPUTE_ALL_PATIENTS')
 

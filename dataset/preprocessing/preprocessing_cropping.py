@@ -49,14 +49,14 @@ def save_np_to_nifty(file, saveDir, fileName, hdr_old):
 
 if __name__ == "__main__":
 
-    plots.printConsoleOutput_Header("preprocessing data: cutting out heart region")
+    plots.printConsoleOutput_Header("preprocessing data: cropping out heart region")
 
     # load config parser
     config = configparser.ConfigParser()
     config.read('parser/configPreprocessing.ini')
 
     # create save directory
-    saveDir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), "preprocessing_cut")
+    saveDir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), "preprocessing_crop")
 
     # save config file to save directory
     conifgOutput = os.path.sep.join([saveDir, "config.ini"])
@@ -79,6 +79,9 @@ if __name__ == "__main__":
     #
     saveDir4D = plots.createSubDirectory(saveDir, dataSet.volumes_subdir_path)
     saveDirSegmentations = plots.createSubDirectory(saveDir, dataSet.segmentations_subdir_path)
+
+    len_x = config.getint('CROPPING', 'len_x')
+    len_y = config.getint('CROPPING', 'len_y')
 
     # iterate over all patients
     pbar = tqdm(total=len(dataSet))
@@ -105,6 +108,10 @@ if __name__ == "__main__":
         # print("(ymin, ymax) = ", ymin_total, ",", ymax_total)
         # print("(zmin, zmax) = ", zmin_total, ",", zmax_total)
 
+        cx = (xmin_total + xmax_total) // 2
+        cy = (ymin_total + ymax_total) // 2
+        cz = (zmin_total + zmax_total) // 2
+
         xshifts[index] = xmin_total
         yshifts[index] = ymin_total
         zshifts[index] = zmin_total
@@ -114,9 +121,10 @@ if __name__ == "__main__":
         NY_cut = ymax_total - ymin_total + 1
         NZ_cut = zmax_total - zmin_total + 1
 
-        cutting_4d = patient.nii_data_xyzt[xmin_total:xmax_total + 1, ymin_total:ymax_total + 1, zmin_total:zmax_total + 1, :]
-        cutting_diastole = patient.nii_mask_diastole_xyz[xmin_total:xmax_total + 1, ymin_total:ymax_total + 1, zmin_total:zmax_total + 1]
-        cutting_systole = patient.nii_mask_systole_xyz[xmin_total:xmax_total + 1, ymin_total:ymax_total + 1, zmin_total:zmax_total + 1]
+        cutting_4d = patient.nii_data_xyzt[cx-len_x//2:cx+len_x//2, cy-len_y//2:cy+len_y//2, zmin_total:zmax_total + 1, :]
+        cutting_diastole = patient.nii_mask_diastole_xyz[cx-len_x//2:cx+len_x//2, cy-len_y//2:cy+len_y//2, zmin_total:zmax_total + 1]
+        cutting_systole = patient.nii_mask_systole_xyz[cx-len_x//2:cx+len_x//2, cy-len_y//2:cy+len_y//2, zmin_total:zmax_total + 1]
+        print(cutting_4d.shape, cutting_diastole.shape, cutting_systole.shape)
 
         # save to nifty
         saveDirPatient = plots.createSubDirectory(saveDirSegmentations, patient.name)
@@ -126,7 +134,8 @@ if __name__ == "__main__":
 
         if patient.full_cycle:
             for t in range(patient.NT):
-                mask_cutted = patient.nii_masks_xyz[t][xmin_total:xmax_total + 1, ymin_total:ymax_total + 1, zmin_total:zmax_total + 1]
+                mask_cutted = patient.nii_masks_xyz[t][cx-len_x//2:cx+len_x//2, cy-len_y//2:cy+len_y//2, zmin_total:zmax_total + 1]
+                print(mask_cutted.shape)
                 mask_filename = patient.masks_dirs[t].split('/')[-1]
                 save_np_to_nifty(mask_cutted, saveDirPatient, mask_filename, patient.nii_masks_load[t].header)
 

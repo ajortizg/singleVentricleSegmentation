@@ -15,7 +15,7 @@ from singleVentricleDataset import SingleVentricleDataset
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 from utils import plots
-import utils.transforms as T
+import utils.quaternary_transforms as T
 
 
 def filter_dirs(dirs, base_dir):

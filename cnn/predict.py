@@ -10,9 +10,9 @@ import nibabel as nib
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 from utils import plots
-import utils.transforms as T
+import utils.quaternary_transforms as T
 from cnn.dataset import SingleVentricleDataset, DatasetMode, LoadFlowMode
-from cnn import cnn_utils
+from utils import cnn_utils
 
 
 def save_nifty(mask, save_dir, filename):

@@ -80,9 +80,18 @@ def printColoredError(diff, tol=1.e-5, accTol=1.e-2):
         print(colored(diff, 'red'))
 
 
+def seeding(seed):
+    np.random.seed(seed)
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.backends.cudnn.deterministic = True
+
 ##########################
 # pytorch input
 #########################
+
 
 def saveCurve1D(input, LX1D, saveDir, name, type="plot"):
     NX1D = input.shape[0]

@@ -8,54 +8,55 @@ from torch.utils.tensorboard import SummaryWriter
 import time
 import numpy as np
 import os.path as osp
-import cnn_utils as utils
 import os
 from torchsummary import summary
+from models.model_factory import create_model, save_model
+from trainer import Trainer
+
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
+from utils.param_reader import ParamReader
+import utils.transforms.senary_transforms as T6
+from cnn.dataset import *
+from utils.collate import *
 from utils import plots
-import utils.transforms as T
-import cnn.dataset as ds
-from cnn.trainer import Trainer
+from log import *
 
 
 if __name__ == "__main__":
     # utils.seeding(42)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     config = configparser.ConfigParser()
     config.read('parser/configCNNTrain.ini')
 
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    P = utils.read_train_params(config)
+    param_reader = ParamReader(config)
+    P = param_reader.read_train()
 
     # Create train and validation datasets
-    train_transforms = T.ComposeFull([
-        T.RandomRotateTorch(P['rot_prob'], P['rot_range_x'], P['rot_range_y'], P['rot_range_z'], boundary=P['rot_boundary'], clip_interval=P['clip_interval']),
-        T.ElasticDeformation(P['ed_prob'], P['ed_sigma_range'], P['ed_grid'], P['ed_boundary'], P['ed_prefilter'], P['ed_axis'], P['clip_interval']),
-        T.RandomVerticalFlip(P['vflip_prob']),
-        T.RandomHorizontalFlip(P['hflip_prob']),
-        T.RandomDepthFlip(P['dflip_prob']),
-        T.GammaScaling(P['gamma_scaling_prob'], P['gamma_scaling_range']),
-        T.MutiplicativeScaling(P['mult_scaling_prob'], P['gamma_scaling_range'], P['clip_interval']),
-        T.AdditiveScaling(P['add_scaling_prob'], P['add_scaling_mean'], P['add_scaling_std'], P['clip_interval']),
-        T.AdditiveGaussianNoise(P['noise_prob'], P['noise_mu'], P['noise_std'], P['clip_interval']),
-        T.BinarizeMasks(th=0.5),
-        T.ToTensorFull()
-    ])
-    val_transforms = T.ComposeFull([T.BinarizeMasks(th=0.5),
-                                    T.ToTensorFull()])
-    test_masks_transforms = T.ComposeUnary([T.Round(th=0.5),
-                                            T.ToTensor()])
-    train_ds = ds.SingleVentricleDataset(config, ds.DatasetMode.TRAIN, ds.LoadFlowMode.TRAIN_VAL_OF, full_transforms=train_transforms)
-    val_ds = ds.SingleVentricleDataset(config, ds.DatasetMode.VAL, ds.LoadFlowMode.TRAIN_VAL_OF, full_transforms=val_transforms)
-    test_ds = ds.SingleVentricleDataset(config, ds.DatasetMode.TEST, ds.LoadFlowMode.TEST_OF, full_transforms=val_transforms,
-                                        test_masks_transforms=test_masks_transforms)
+    train_transforms = T6.Compose([
+        T6.RandomRotate(P['rot_prob'], P['rot_range_x'], P['rot_range_y'], P['rot_range_z'], boundary=P['rot_boundary'], clip_interval=P['clip_interval']),
+        T6.ElasticDeformation(P['ed_prob'], P['ed_sigma_range'], P['ed_grid'], P['ed_boundary'], P['ed_prefilter'], P['ed_axis'], P['clip_interval']),
+        T6.RandomVerticalFlip(P['vflip_prob']),
+        T6.RandomHorizontalFlip(P['hflip_prob']),
+        T6.RandomDepthFlip(P['dflip_prob']),
+        T6.GammaScaling(P['gamma_scaling_prob'], P['gamma_scaling_range']),
+        T6.MutiplicativeScaling(P['mult_scaling_prob'], P['gamma_scaling_range'], P['clip_interval']),
+        T6.AdditiveScaling(P['add_scaling_prob'], P['add_scaling_mean'], P['add_scaling_std'], P['clip_interval']),
+        T6.AdditiveGaussianNoise(P['noise_prob'], P['noise_mu'], P['noise_std'], P['clip_interval']),
+        T6.BinarizeMasks(th=0.5),
+        T6.ToTensor()])
 
-    # Create data loaders
-    train_loader = DataLoader(train_ds, batch_size=P['batch_size'], shuffle=True, num_workers=P['workers'], collate_fn=utils.collate_fn)
-    val_loader = DataLoader(val_ds, batch_size=P['batch_size'], shuffle=False, num_workers=P['workers'], collate_fn=utils.collate_fn)
-    test_loader = DataLoader(test_ds, batch_size=1, shuffle=False, num_workers=3, collate_fn=utils.collate_fn)
+    val_transforms = T6.Compose([T6.ToTensor()])
+
+    train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, LoadFlowMode.ED_ES, full_transforms=train_transforms)
+    val_ds = SingleVentricleDataset(config, DatasetMode.VAL, LoadFlowMode.ED_ES, full_transforms=val_transforms)
+    test_ds = SingleVentricleDataset(config, DatasetMode.TEST, LoadFlowMode.WHOLE_CYCLE, full_transforms=val_transforms)
+
+    train_loader = DataLoader(train_ds, batch_size=P['batch_size'], shuffle=True, num_workers=P['workers'], collate_fn=collate_fn)
+    val_loader = DataLoader(val_ds, batch_size=P['batch_size'], shuffle=False, num_workers=P['workers'], collate_fn=collate_fn)
+    test_loader = DataLoader(test_ds, batch_size=1, shuffle=False, num_workers=3, collate_fn=collate_fn)
 
     save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'CNN')
     logger = plots.create_logger(save_dir)
@@ -63,7 +64,7 @@ if __name__ == "__main__":
     logger.info(f'Using device {device}')
 
     # Create model
-    net = utils.create_net(config, logger).to(device)
+    net = create_model(config, logger).to(device)
     summary(net, input_size=(2, 80, 80, 80), batch_size=P['batch_size'])
     net = torch.nn.DataParallel(net, device_ids=np.arange(P['gpus']).tolist())
     if P['pretrained']:
@@ -71,12 +72,15 @@ if __name__ == "__main__":
         checkpoint = torch.load(checkpoint_file)
         net.load_state_dict(checkpoint['model_state_dict'], strict=True)
         logger.info(f'Use pretrained weights: {checkpoint_file}')
+        opt = optim.Adam(net.parameters(), lr=P['lr'], weight_decay=P['weight_decay'], betas=(P['beta1'], P['beta2']))
+        opt.load_state_dict(checkpoint['optimizer_state_dict'])
+    else:
+        opt = optim.Adam(net.parameters(), lr=P['lr'], weight_decay=P['weight_decay'], betas=(P['beta1'], P['beta2']))
 
-    opt = optim.Adam(net.parameters(), lr=P['lr'], weight_decay=P['weight_decay'], betas=(P['beta1'], P['beta2']))
     scheduler = optim.lr_scheduler.StepLR(opt, step_size=P['step_size'], gamma=P['gamma'])
 
-    utils.save_config(config, save_dir, 'config.ini')
-    utils.save_model(net, save_dir, 'net.txt')
+    param_reader.save(save_dir, filename='config')
+    save_model(net, save_dir, 'net.txt')
     train_ds.save_patients(save_dir, 'train.xlsx')
     val_ds.save_patients(save_dir, 'val.xlsx')
     test_ds.save_patients(save_dir, 'test.xlsx')
@@ -85,6 +89,8 @@ if __name__ == "__main__":
     train_steps = len(train_loader)
     val_steps = len(val_loader)
     test_stepps = len(test_loader)
+    if test_stepps == 0:
+        test_stepps = 1
 
     # History training info
     H = {'train_loss': [], 'val_loss': [], 'train_acc': [], 'val_acc': [], 'test_acc': []}
@@ -107,9 +113,9 @@ if __name__ == "__main__":
         val_avg = tuple(x / val_steps for x in val_res)
         test_acc_avg = test_acc / test_stepps
 
-        best_train_loss, best_val_loss = utils.log(logger, writer, e, train_avg, val_avg, test_acc_avg, net, opt,
-                                                   scheduler, best_train_loss, best_val_loss, save_dir)
-        H = utils.update_train_history(H, train_avg, val_avg, test_acc_avg)
+        best_train_loss, best_val_loss = log(logger, writer, e, train_avg, val_avg, test_acc_avg, net, opt,
+                                             best_train_loss, best_val_loss, save_dir)
+        H = update_train_history(H, train_avg, val_avg, test_acc_avg)
 
         scheduler.step()
         pbar.update(1)
@@ -119,8 +125,7 @@ if __name__ == "__main__":
 
     plots.save_loss(H, save_dir)
     plots.save_acc(H, save_dir)
-    utils.checkpoint(e, net, opt, train_avg, val_avg, test_acc_avg, save_dir, 'checkpoint.pth')
-    # torch.save(net, osp.join(save_dir, 'model.pth'))
+    checkpoint(e, net, opt, train_avg, val_avg, test_acc_avg, save_dir, 'checkpoint.pth')
 
     pbar.close()
     writer.close()

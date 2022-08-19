@@ -2,6 +2,8 @@ import torch
 import configparser
 from opticalFlow_cuda_ext import opticalFlow
 
+__all__ = ['Warp', 'WarpCNN']
+
 
 class Warp:
     def __init__(self, config, NZ, NY, NX):
@@ -50,7 +52,6 @@ class Warp:
             LY = config.getfloat('WARPING', "LenghtY")
             LX = config.getfloat('WARPING', "LenghtX")
             return LZ, LY, LX
-
 
 
 class WarpCNN:

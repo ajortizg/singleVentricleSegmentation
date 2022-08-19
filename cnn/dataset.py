@@ -2,13 +2,10 @@ from torch.utils.data import Dataset
 import os.path as osp
 import nibabel as nib
 import numpy as np
-import os
-import sys
 import pandas
-import torch
 from enum import Enum
-import yaml
-import re
+
+__all__ = ['DatasetMode', 'LoadFlowMode', 'SingleVentricleDataset']
 
 
 class DatasetMode(Enum):
@@ -19,14 +16,18 @@ class DatasetMode(Enum):
 
 
 class LoadFlowMode(Enum):
-    NO_LOAD_OF = 1
-    TRAIN_VAL_OF = 2
-    TEST_OF = 3
+    NO_LOAD = 1
+    ED_ES = 2           # Load optical flow from ED to ES and viceversa
+    WHOLE_CYCLE = 3     # Load optical flow for the complete carciac cycle
 
 
 class SingleVentricleDataset(Dataset):
-    def __init__(self, config, mode, flow_mode, img4d_transforms=None, mask_transforms=None, flow_transforms=None,
-                 full_transforms=None, test_masks_transforms=None):
+    def __init__(self, config, mode, flow_mode,
+                 img4d_transforms=None,
+                 mask_transforms=None,
+                 flow_transforms=None,
+                 full_transforms=None,
+                 test_masks_transforms=None):
         self.config = config
         self.mode = mode
         self.flow_mode = flow_mode
@@ -60,7 +61,7 @@ class SingleVentricleDataset(Dataset):
         self.flow_name = None
         self.flow_level = None
         self.load_flow = False
-        if self.flow_mode != LoadFlowMode.NO_LOAD_OF:
+        if self.flow_mode != LoadFlowMode.NO_LOAD:
             self.load_flow = True
             use_filtered_flow = config.getboolean('PARAMETERS', 'USE_MEDIAN_FILTERED_FLOW')
             self.flow_name = 'flow_m_it0.npy' if use_filtered_flow else 'flow_it0.npy'
@@ -92,8 +93,6 @@ class SingleVentricleDataset(Dataset):
             masks = np.empty(shape=(*mask_syst_zyx.shape, orig_NT), dtype=mask_syst_zyx.dtype)
             for t in range(orig_NT):
                 masks[..., t] = self.load_mask(patient_name, f'_{t}_Labelmap.nii')
-            if self.test_masks_transforms is not None:
-                masks = self.test_masks_transforms(masks)
         else:
             masks = None
 
@@ -106,14 +105,16 @@ class SingleVentricleDataset(Dataset):
 
         # Full transforms
         if self.full_transforms is not None:
-            img4d_zyxt, m0, mk, ff, bf = self.full_transforms(img4d_zyxt, m0, mk, ff, bf)
+            img4d_zyxt, m0, mk, ff, bf, masks = self.full_transforms(img4d_zyxt, m0, mk, ff, bf, masks)
 
         # Mask transformations
         if self.mask_transforms is not None:
             m0 = self.mask_transforms(m0)
             mk = self.mask_transforms(mk)
-            if full_cycle:
-                masks = self.mask_transforms(masks)
+
+        # Complete cardiac cycle masks transforms
+        if self.test_masks_transforms is not None:
+            masks = self.test_masks_transforms(masks)
 
         # Image transformations
         if self.img4d_transforms is not None:
@@ -181,10 +182,10 @@ class SingleVentricleDataset(Dataset):
         return (fwd_t, bwd_t)
 
     def create_timeline(self, init_ts, final_ts, original_NT):
-        if self.flow_mode == LoadFlowMode.TRAIN_VAL_OF:
+        if self.flow_mode == LoadFlowMode.ED_ES:
             times_fwd = np.arange(init_ts, final_ts, 1)
             times_bwd = np.arange(final_ts, init_ts, -1)
-        elif self.flow_mode == LoadFlowMode.TEST_OF:
+        elif self.flow_mode == LoadFlowMode.WHOLE_CYCLE:
             times_fwd = np.concatenate((np.arange(init_ts, original_NT, 1), np.arange(0, init_ts)))
             times_bwd = np.concatenate((np.arange(final_ts, -1, -1), np.arange(original_NT - 1, final_ts, -1)))
         return (times_fwd, times_bwd)

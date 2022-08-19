@@ -15,8 +15,8 @@ utils_lib_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../uti
 sys.path.append(utils_lib_path)
 # sys.path.append("../utils")
 #from utils.plots import *
-import torch_utils
-import flow_viz
+# import torch_utils
+# import flow_viz
 
 # sys.path.append("../pythonOps/")
 # from pythonOps.mesh import *

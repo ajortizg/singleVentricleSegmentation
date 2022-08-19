@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import torch.nn.utils.parametrize as P
-import cnn_utils
+import utils.cnn_utils as cnn_utils
 import lipschitz as L
 
 

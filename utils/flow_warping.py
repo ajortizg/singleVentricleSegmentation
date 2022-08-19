@@ -4,17 +4,18 @@ import sys
 from tqdm import tqdm
 import os.path as osp
 import numpy as np
+from torch.utils.data import DataLoader
 import csv
 from monai.metrics.meandice import compute_meandice
+import transforms.senary_transforms as T6
+import transforms.unary_transforms as T1
+import plots
+from collate import collate_fn
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
-from utils import plots
-from cnn.dataset import SingleVentricleDataset, DatasetMode, LoadFlowMode
-import utils.transforms as T
+from cnn.dataset import *
 from cnn.warp import WarpCNN
-from torch.utils.data import DataLoader
-from cnn.cnn_utils import collate_fn
 
 
 if __name__ == "__main__":
@@ -25,19 +26,12 @@ if __name__ == "__main__":
 
     config = configparser.ConfigParser()
     config.read('parser/configCNNTrain.ini')
-    cuda_availabe = config.get('DEVICE', 'CUDA_AVAILABLE')
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    transforms = T.ComposeFull(
-        [T.RandomRotateTorch(1.0, range_z=(20, 340), range_x=(20, 340), range_y=(20, 340)),
-         T.BinarizeMasks(th=0.5),
-         T.ToTensorFull()])
-    test_mask_transforms = T.ComposeUnary([T.Round(0.5), T.ToTensor()])
-
-    train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, LoadFlowMode.TRAIN_VAL_OF, full_transforms=transforms)
-    val_ds = SingleVentricleDataset(config, DatasetMode.VAL, LoadFlowMode.TRAIN_VAL_OF, full_transforms=transforms)
-    test_ds = SingleVentricleDataset(config, DatasetMode.TEST, LoadFlowMode.TRAIN_VAL_OF,
-                                     full_transforms=transforms, test_masks_transforms=test_mask_transforms)
+    transforms = T6.Compose([T6.ToTensor()])
+    train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, LoadFlowMode.ED_ES, full_transforms=transforms)
+    val_ds = SingleVentricleDataset(config, DatasetMode.VAL, LoadFlowMode.ED_ES, full_transforms=transforms)
+    test_ds = SingleVentricleDataset(config, DatasetMode.TEST, LoadFlowMode.ED_ES, full_transforms=transforms)
 
     train_loader = DataLoader(train_ds, batch_size=1, shuffle=False, num_workers=8, collate_fn=collate_fn)
     val_loader = DataLoader(val_ds, batch_size=1, shuffle=False, num_workers=8, collate_fn=collate_fn)
@@ -51,10 +45,10 @@ if __name__ == "__main__":
     writer.writerow(['Patient', 'dc_0', 'dc_k'])
     pbar = tqdm(total=len(train_ds) + len(val_ds) + len(test_ds))
 
-    mask_posp = T.ComposeUnary([T.ToArray(), T.Resize(size=save_size), T.Round(th=0.5), T.Erode(), T.ToTensor()])
-    m0_mk_posp = T.ComposeUnary([T.ToArray(), T.Resize(size=save_size), T.Round(th=0.5), T.ToTensor()])
-    img_posp = T.ComposeUnary([T.ToArray(), T.Resize(size=save_size), T.Normalize(), T.ToTensor()])
-    mt_mtt_posp = T.ComposeUnary([T.ToArray(), T.Resize(size=save_size), T.ToTensor()])
+    rre_transf = T1.Compose([T1.Resize(save_size), T1.Round(th=0.5), T1.Erode()])
+    rr_transf = T1.Compose([T1.Resize(save_size), T1.Round(th=0.5)])
+    r_transf = T1.Compose([T1.Resize(save_size)])
+
     acc = {'0': [], 'k': []}
 
     for loader in [train_loader, val_loader, test_loader]:
@@ -67,7 +61,7 @@ if __name__ == "__main__":
 
             BS, CH, NZ, NY, NX, NT = imgs4d.shape
             warp = WarpCNN(config, NZ, NY, NX)
-            batch_indices = torch.arange(BS)
+            # batch_indices = torch.arange(BS)
             out = {'mt': [m0s], 'mtt': [mks]}
             timesteps = ff.shape[-1]
 
@@ -98,20 +92,20 @@ if __name__ == "__main__":
                 # mtt_slices_dir = plots.createSubDirectory(mtt_dir, 'zslices')
 
                 for t in range(len(out['mt'])):
-                    img3d = img_posp(imgs4d[batch_indices, ..., times_fwd[t][batch_indices]].squeeze())
-                    mt = mask_posp(out['mt'][t].squeeze())
-                    mtt = mask_posp(out['mtt'][t].squeeze())
+                    img3d = r_transf(imgs4d[..., times_fwd[t].item()].squeeze())
+                    mt = rre_transf(out['mt'][t].squeeze())
+                    mtt = rre_transf(out['mtt'][t].squeeze())
 
                     if t == 0:
-                        plots.save_img_masks(img3d, [m0_mk_posp(m0s.squeeze()), mtt], 'im_m0_m0tt', patient_dir,
+                        plots.save_img_masks(img3d, [rr_transf(m0s.squeeze()), mtt], 'im_m0_m0tt', patient_dir,
                                              th=0.5, alphas=[0.3, 1.0], colors=[[1, 0.7, 0], [0, 0, 1]])
                     elif t == len(out['mt']) - 1:
-                        plots.save_img_masks(img3d, [m0_mk_posp(mks.squeeze()), mt], 'mk_mkt', patient_dir,
+                        plots.save_img_masks(img3d, [rr_transf(mks.squeeze()), mt], 'mk_mkt', patient_dir,
                                              th=0.5, alphas=[0.3, 1.0], colors=[[1, 0.7, 0], [0, 1, 0]])
 
                     plots.save_img_masks(img3d,
                                          [mt, mtt],
-                                         f'im_t_{times_fwd[t][batch_indices].item()}', patient_dir,
+                                         f'im_t_{times_fwd[t].item()}', patient_dir,
                                          th=0.5, alphas=[1.0, 1.0], colors=[[0, 1, 0], [0, 0, 1]])
 
                     # mt = mt_mtt_posp(out['mt'][t].squeeze())

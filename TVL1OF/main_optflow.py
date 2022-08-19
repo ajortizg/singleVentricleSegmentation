@@ -1,14 +1,13 @@
 import os.path as osp
 import os
 from enum import Enum
-
 from TVL1OF3D import *
 
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
-from cnn.dataset import SingleVentricleDataset, DatasetMode, LoadFlowMode
+from cnn.dataset import *
 from utils import plots
-import utils.transforms as T
+import utils.transforms.unary_transforms as T1
 
 
 class OpticalFlowMode(Enum):
@@ -18,7 +17,7 @@ class OpticalFlowMode(Enum):
 
 
 def compute_optical_flow(ds: SingleVentricleDataset, idx: int, mode: OpticalFlowMode, save_dir: str, device: str, config, logger):
-    (pname, data, _, _, _, init_ts, final_ts, _, _) = ds[idx]
+    pname, data, _, _, _, init_ts, final_ts, _, _ = ds[idx]
     data = data.to(device)
     NZ, NY, NX, NT = data.shape
 
@@ -91,12 +90,11 @@ if __name__ == "__main__":
     with open(conifg_output, 'w') as configfile:
         config.write(configfile)
 
-    img4d_transforms = T.ComposeUnary([T.ToTensor()])
-    # mask_transf = T.ComposeUnary([T.ToTensor()])
+    img_transforms = T1.Compose([T1.ToTensor()])
 
-    train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, LoadFlowMode.NO_LOAD_OF, img4d_transforms)
-    val_ds = SingleVentricleDataset(config, DatasetMode.VAL, LoadFlowMode.NO_LOAD_OF, img4d_transforms)
-    test_ds = SingleVentricleDataset(config, DatasetMode.TEST, LoadFlowMode.NO_LOAD_OF, img4d_transforms)
+    train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, LoadFlowMode.NO_LOAD, img_transforms)
+    val_ds = SingleVentricleDataset(config, DatasetMode.VAL, LoadFlowMode.NO_LOAD, img_transforms)
+    test_ds = SingleVentricleDataset(config, DatasetMode.TEST, LoadFlowMode.NO_LOAD, img_transforms)
 
     compute_all_patients = config.get('DATA', 'COMPUTE_ALL_PATIENTS')
 

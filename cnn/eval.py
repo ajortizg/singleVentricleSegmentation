@@ -1,7 +1,6 @@
 import torch
 import configparser
 from tqdm import tqdm
-from warp import WarpCNN
 import sys
 import os.path as osp
 import pandas as pd
@@ -9,14 +8,18 @@ import csv
 from torch.utils.data import DataLoader
 import nibabel as nib
 from monai.metrics.meandice import compute_meandice
-from trainer import Trainer
+
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 from utils import plots
-import utils.transforms as T
+from utils.collate import collate_fn
+from utils.param_reader import ParamReader
+import utils.transforms.senary_transforms as T6
+import utils.transforms.unary_transforms as T1
 from cnn.dataset import SingleVentricleDataset, DatasetMode, LoadFlowMode
-import cnn.cnn_utils as utils
+from cnn.trainer import Trainer
+from cnn.models.model_factory import create_model, save_model
 
 
 def save_nifty(mask, save_dir, filename):
@@ -24,7 +27,7 @@ def save_nifty(mask, save_dir, filename):
     mask = torch.swapaxes(mask, 0, 2)           # xyz format
     mask = torch.where(mask > 0.5, 1.0, 0.0)    # binarize
 
-    mt_nii = nib.Nifti1Image(T.ToArray()(mask), affine=None, header=None)
+    mt_nii = nib.Nifti1Image(T1.ToArray()(mask), affine=None, header=None)
     outputFile = osp.sep.join([save_dir, filename])
     nib.save(mt_nii, outputFile)
 
@@ -34,7 +37,8 @@ if __name__ == "__main__":
     config_eval.read('parser/configCNNEval.ini')
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    P = utils.read_eval_params(config_eval)
+    reader = ParamReader(config_eval)
+    P = reader.read_eval()
 
     if P['fine_tuning']:
         config_tl = configparser.ConfigParser()
@@ -48,21 +52,18 @@ if __name__ == "__main__":
         config_train = configparser.ConfigParser()
         config_train.read(osp.join(P['trained_model_dir'], 'config.ini'))
 
-    transforms = T.ComposeFull([T.BinarizeMasks(th=0.5),
-                                T.ToTensorFull()])
+    transforms = T6.Compose([T6.ToTensor()])
     if P['dataset'] == 'train':
-        ds = SingleVentricleDataset(config_train, DatasetMode.TRAIN, LoadFlowMode.TRAIN_VAL_OF, full_transforms=transforms)
+        ds = SingleVentricleDataset(config_train, DatasetMode.TRAIN, LoadFlowMode.ED_ES, full_transforms=transforms)
     elif P['dataset'] == 'val':
-        ds = SingleVentricleDataset(config_train, DatasetMode.VAL, LoadFlowMode.TRAIN_VAL_OF, full_transforms=transforms)
+        ds = SingleVentricleDataset(config_train, DatasetMode.VAL, LoadFlowMode.ED_ES, full_transforms=transforms)
     elif P['dataset'] == 'test':
-        test_masks_transforms = T.ComposeUnary([T.Round(th=0.5), T.ToTensor()])
-        ds = SingleVentricleDataset(config_train, DatasetMode.TEST, LoadFlowMode.TEST_OF,
-                                    full_transforms=transforms, test_masks_transforms=test_masks_transforms)
+        ds = SingleVentricleDataset(config_train, DatasetMode.TEST, LoadFlowMode.WHOLE_CYCLE, full_transforms=transforms)
 
-    loader = DataLoader(ds, batch_size=1, shuffle=False, num_workers=P['workers'], collate_fn=utils.collate_fn)
+    loader = DataLoader(ds, batch_size=1, shuffle=False, num_workers=P['workers'], collate_fn=collate_fn)
 
     save_dir = plots.createSaveDirectory(config_eval.get('DATA', 'OUTPUT_PATH'), 'EVAL')
-    utils.save_config(config_eval, save_dir, 'config.ini')
+    reader.save(save_dir, 'config.ini')
 
     logger = plots.create_logger(save_dir)
     logger.info(f'Device: {device}')
@@ -70,18 +71,18 @@ if __name__ == "__main__":
     logger.info('Checkpoint: %s' % osp.join(P['trained_model_dir'], P['model_name']))
 
     # Create net and load parameters
-    net = utils.create_net(config_train, logger).to(device)
+    net = create_model(config_train, logger).to(device)
     net = torch.nn.DataParallel(net, device_ids=[0])
     checkpoint = torch.load(osp.join(P['trained_model_dir'], P['model_name']))
     net.load_state_dict(checkpoint['model_state_dict'], strict=True)
 
     save_size = (P['save_nz'], P['save_ny'], P['save_nx'])
-    mask_posp = T.ComposeUnary([T.ToArray(), T.Resize(size=save_size), T.Round(th=0.5), T.Erode(), T.ToTensor()])
-    masks_gt_posp = T.ComposeUnary([T.ToArray(), T.Resize(size=save_size), T.Round(th=0.5), T.ToTensor()])
-    img_posp = T.ComposeUnary([T.ToArray(), T.Resize(size=save_size), T.Normalize(), T.ToTensor()])
+    mask_posp = T1.Compose([T1.Resize(save_size), T1.Round(0.5), T1.Erode()])
+    masks_gt_posp = T1.Compose([T1.Resize(save_size), T1.Round(0.5)])
+    img_posp = T1.Compose([T1.Resize(save_size)])
 
     pbar = tqdm(total=len(ds))
-    trainer = Trainer(net, pbar, config_train, device, None)
+    trainer = Trainer(net, pbar, config_train, device, None, display_prob=0)
     df = pd.DataFrame()
 
     for i, (pnames, imgs4d, m0s, mks, masks, times_fwd, times_bwd, ff, bf, offsets) in enumerate(loader):
@@ -103,11 +104,8 @@ if __name__ == "__main__":
             acc_cnn, mts_cnn, mtts_cnn = trainer.test_patient(imgs4d, masks, times_fwd, times_bwd, ff, bf, cnn=True)
             acc_warp, mts_warp, mtts_warp = trainer.test_patient(imgs4d, masks, times_fwd, times_bwd, ff, bf, cnn=False)
         else:
-            loss_cnn, acc_cnn, mts_cnn, mtts_cnn = trainer.val_patient(imgs4d, m0s, mks, times_fwd, times_bwd, ff, bf, offsets, cnn=True)
-            loss_warp, acc_warp, mts_warp, mtts_warp = trainer.val_patient(imgs4d, m0s, mks, times_fwd, times_bwd, ff, bf, offsets, cnn=False)
-            for k in range(len(loss_cnn)):
-                row[f'L{k}_cnn'] = loss_cnn[k]
-                row[f'L{k}_of'] = loss_warp[k]
+            acc_cnn, mts_cnn, mtts_cnn = trainer.val_patient(imgs4d, m0s, mks, times_fwd, times_bwd, ff, bf, offsets, cnn=True)
+            acc_warp, mts_warp, mtts_warp = trainer.val_patient(imgs4d, m0s, mks, times_fwd, times_bwd, ff, bf, offsets, cnn=False)
 
         row['Acc_cnn'] = acc_cnn
         row['Acc_of'] = acc_warp

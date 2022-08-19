@@ -3,6 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
+__all__ = ["BasicUNet3d"]
+
+
 class BasicUNet3d(nn.Module):
     def __init__(self, config, logger):
         super(BasicUNet3d, self).__init__()
@@ -47,7 +50,7 @@ class BasicUNet3d(nn.Module):
         if self.residual:
             return logits + identity, logits
         else:
-            return logits, logits
+            return torch.sigmoid(logits), logits
 
 
 class DoubleConv(nn.Module):

@@ -11,7 +11,7 @@ from scipy import ndimage
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
-import utils.transforms as T
+import utils.quaternary_transforms as T
 from utils import plots
 
 config = configparser.ConfigParser()

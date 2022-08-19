@@ -4,10 +4,15 @@ import torch
 from torch import nn
 from monai.metrics.meandice import compute_meandice
 import numpy as np
+import os
+from monai.visualize import plot_2d_or_3d_image
 
-ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
+ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 from cnn.warp import WarpCNN
+
+
+__all__ = ['Trainer']
 
 
 class Trainer:
@@ -34,7 +39,7 @@ class Trainer:
             print('Unknown loss function: ' + loss_fn_type)
             sys.exit()
 
-    def train_epoch(self, train_loader, opt):
+    def train_epoch(self, train_loader, opt, cnn=True):
         self.net.train()
         total_loss = (0.0, 0.0, 0.0, 0.0, 0.0)
         total_acc = 0
@@ -49,7 +54,7 @@ class Trainer:
             offsets = offsets.to(torch.long)
             batch_indices = torch.arange(offsets.shape[0])
 
-            mts, mtts, mhs, mhhs = self.time_popagation(img4d, m0, mk, times_fwd, times_bwd, ff, bf, batch_indices)
+            mts, mtts, mhs, mhhs = self.time_popagation(img4d, m0, mk, times_fwd, times_bwd, ff, bf, batch_indices, cnn)
             loss = self.compute_loss(mts, mtts, offsets, batch_indices, mhs, mhhs)
 
             opt.zero_grad()
@@ -63,7 +68,7 @@ class Trainer:
                     self.plot_imgs(mts, mtts, offsets, batch_indices, 'train')
         return (*total_loss, total_acc)
 
-    def val_epoch(self, val_loader):
+    def val_epoch(self, val_loader, cnn=True):
         self.net.eval()
         total_loss = (0.0, 0.0, 0.0, 0.0, 0.0)
         total_acc = 0
@@ -79,7 +84,7 @@ class Trainer:
                 offsets = offsets.to(torch.long)
                 batch_indices = torch.arange(offsets.shape[0])
 
-                mts, mtts, mhs, mhhs = self.time_popagation(img4d, m0, mk, times_fwd, times_bwd, ff, bf, batch_indices)
+                mts, mtts, mhs, mhhs = self.time_popagation(img4d, m0, mk, times_fwd, times_bwd, ff, bf, batch_indices, cnn)
                 loss = self.compute_loss(mts, mtts, offsets, batch_indices, mhs, mhhs)
 
                 total_loss = tuple(tl + l.item() for tl, l in zip(total_loss, loss))
@@ -233,6 +238,22 @@ class Trainer:
         mkt = mts[-offsets[batch_indices] - 1, batch_indices]
         mkt = torch.where(mkt > 0.5, 1.0, 0.0)
 
+        # m0 = m0.permute(0, 1, 3, 4, 2)
+        # m0tt = m0tt.permute(0, 1, 3, 4, 2)
+        # m0_e = torch.abs(m0 - m0tt)
+
+        # mk = mk.permute(0, 1, 3, 4, 2)
+        # mkt = mkt.permute(0, 1, 3, 4, 2)
+        # mk_e = torch.abs(mk - mkt)
+
+        # plot_2d_or_3d_image(m0, step=0, writer=self.writer, frame_dim=-1, tag=f'{tag}/m0/gt')
+        # plot_2d_or_3d_image(m0tt, step=0, writer=self.writer, frame_dim=-1, tag=f'{tag}/m0/pred')
+        # plot_2d_or_3d_image(m0_e, step=0, writer=self.writer, frame_dim=-1, tag=f'{tag}/m0/error')
+
+        # plot_2d_or_3d_image(mk, step=0, writer=self.writer, frame_dim=-1, tag=f'{tag}/mk/gt')
+        # plot_2d_or_3d_image(mkt, step=0, writer=self.writer, frame_dim=-1, tag=f'{tag}/mk/pred')
+        # plot_2d_or_3d_image(mk_e, step=0, writer=self.writer, frame_dim=-1, tag=f'{tag}/mk/error')
+
         # take batch randomly
         b = np.random.randint(len(offsets))
         m0_b = m0[b]
@@ -323,10 +344,39 @@ class Trainer:
         batch_indices = torch.arange(BS)
 
         mts, mtts, *_ = self.time_popagation(imgs4d, m0s, mks, times_fwd, times_bwd, ff, bf, batch_indices, cnn)
-        loss = self.compute_loss(mts, mtts, offsets, batch_indices)
+        # loss = self.compute_loss(mts, mtts, offsets, batch_indices)
         acc = self.compute_dice_acc(mts, mtts, offsets, batch_indices).item()
-        loss = tuple(l.item() for l in loss)
-        return (loss, acc, mts, mtts)
+        # loss = tuple(l.item() for l in loss)
+        return acc, mts, mtts
+
+    # @torch.no_grad()
+    # def val_test_patient(self, imgs4d, masks, times_fwd, times_bwd, ff, bf, offsets, cnn):
+    #     if cnn:
+    #         self.net.eval()
+    #     offsets = offsets.to(torch.long)
+    #     BS = offsets.shape[0]
+    #     batch_indices = torch.arange(BS)
+
+    #     m0 = masks[..., times_fwd[0].item()]
+    #     mk = masks[..., times_bwd[0].item()]
+
+    #     mts, mtts, *_ = self.time_popagation(imgs4d, m0, mk, times_fwd, times_bwd, ff, bf, batch_indices, cnn)
+    #     # loss = self.compute_loss(mts, mtts, offsets, batch_indices)
+    #     # acc = self.compute_dice_acc(mts, mtts, offsets, batch_indices).item()
+
+    #     # compute accuracy
+    #     mts = mts.swapaxes(0, 1).squeeze(0)
+    #     mtts = mtts.swapaxes(0, 1).squeeze(0)
+    #     masks = masks[..., times_fwd[0].item(): times_fwd[-1].item() + 1]
+    #     masks = masks.swapaxes(0, -1).squeeze(-1)
+    #     print(masks.shape)
+
+    #     acc_f = compute_meandice(mts, masks).mean().item()
+    #     acc_b = compute_meandice(mtts, masks).mean().item()
+
+    #     print(acc_f, acc_b)
+    #     acc = 0.5 * (acc_f + acc_b)
+    #     return acc
 
     @torch.no_grad()
     def test_patient(self, img4d, masks, times_fwd, times_bwd, ff, bf, cnn):

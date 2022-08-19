@@ -6,26 +6,29 @@ import plots
 import time
 import pandas as pd
 import torch
+import argparse
 from enum import Enum
 
 
 class ReportMode(str, Enum):
-    TRAIN = 'CNN_*'
+    CNN = 'CNN_*'
     FT = 'FT_*'
+
+
+str_fmt = '%Y%m%d-%H%M%S'
 
 
 class Report:
     def __init__(self, from_dt, to_dt, mode):
         self.from_dt = from_dt
         self.to_dt = to_dt
-        self.str_fmt = '%Y%m%d-%H%M%S'
         self.filtered_dirs = []
         self.mode = mode
 
     def filter(self, root_dir):
         cnn_dirs = sorted(glob(osp.join(root_dir, self.mode)), reverse=True)
         for exp_dir in cnn_dirs:
-            dt = datetime.strptime(exp_dir.split(osp.sep)[-1].split('_')[-1], self.str_fmt)
+            dt = datetime.strptime(exp_dir.split(osp.sep)[-1].split('_')[-1], str_fmt)
             if dt >= self.from_dt and dt <= self.to_dt:
                 self.filtered_dirs.append(exp_dir)
 
@@ -54,10 +57,10 @@ class Report:
             df_warping = pd.DataFrame(warping_items, index=[i])
             df_da = pd.DataFrame(da_items, index=[i])
 
-            metrics_row = pd.DataFrame({'best_train_loss': f'{best_train_loss:,.3f}', 'best_train_acc': f'{best_train_acc:,.3f}',
-                                        'best_val_loss': f'{best_val_loss:,.3f}', 'best_val_acc': f'{best_val_acc:,.3f}',
-                                        'train_loss': f'{train_loss:,.3f}', 'train_acc': f'{train_acc:,.3f}',
-                                        'val_loss': f'{val_loss:,.3f}', 'val_acc': f'{val_acc:,.3f}', 'test_acc': f'{test_acc:,.3f}'}, index=[i])
+            metrics_row = pd.DataFrame({'best_train_loss': best_train_loss, 'best_train_acc': best_train_acc,
+                                        'best_val_loss': best_val_loss, 'best_val_acc': best_val_acc,
+                                        'train_loss': train_loss, 'train_acc': train_acc,
+                                        'val_loss': val_loss, 'val_acc': val_acc, 'test_acc': test_acc}, index=[i]).round(3)                                       
 
             df_row = df_data.join([df_param, df_warping, df_da, metrics_row])
             df = pd.concat([df_row, df])
@@ -76,7 +79,7 @@ class Report:
             return (0, 0, 0, 0, 0)
 
     def clean_data_dict(self, data_items):
-        if self.mode == ReportMode.TRAIN:
+        if self.mode == ReportMode.CNN:
             data_items.pop('volumes_subdir_path')
             data_items.pop('segmentations_subdir_path')
             data_items.pop('segmentations_file_name')
@@ -85,20 +88,36 @@ class Report:
         return data_items
 
     def from_str(self):
-        return self.from_dt.strftime(self.str_fmt)
+        return self.from_dt.strftime(str_fmt)
 
     def to_str(self):
-        return self.to_dt.strftime(self.str_fmt)
+        return self.to_dt.strftime(str_fmt)
 
 
 if __name__ == "__main__":
-    root_dir = 'results'
-    report_dir = plots.createSubDirectory(root_dir, 'reports')
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--from_date', help='create report from date')
+    parser.add_argument('--to_date', help='create report to date')
+    parser.add_argument('--mode', help='cnn or ft', default='cnn')
+    args = parser.parse_args()
 
-    mode = ReportMode.TRAIN
-    from_dt = datetime(year=2022, month=8, day=12, hour=0, minute=0)
-    to_dt = datetime(year=2022, month=8, day=16, hour=23, minute=59)
+    save_dir = 'results'
+    report_dir = plots.createSubDirectory(save_dir, 'reports')
+
+    if args.mode == 'cnn':
+        mode = ReportMode.CNN
+    else:
+        mode = ReportMode.FT
+
+    from_dt = datetime.strptime(args.from_date, str_fmt)
+    to_dt = datetime.strptime(args.to_date, str_fmt)
+
+    print('Creating report from: ', from_dt, ' to: ', to_dt)
+    print('Mode: ', args.mode)
+
+    # from_dt = datetime(year=2022, month=8, day=17, hour=17, minute=0)
+    # to_dt = datetime(year=2022, month=8, day=17, hour=23, minute=59)
 
     report = Report(from_dt, to_dt, mode)
     report.filter('results')
-    report.create(report_dir, f'report_{time.strftime(report.str_fmt)}.xlsx')
+    report.create(report_dir, f'report_{time.strftime(str_fmt)}.xlsx')
