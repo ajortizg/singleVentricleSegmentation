@@ -80,7 +80,7 @@ class UNet3d(nn.Module):
             xi[-1] = layer(xi[-1], xi[-2 - i])
 
         output = self.layers[-1](xi[-1])
-        
+
         if self.residual:
             return output + identity, output
         else:
@@ -222,14 +222,14 @@ class ResUNet3d(nn.Module):
         if self.residual:
             identity = x[:, 1:2, :, :, :].clone()
 
-        x = self.unet(x)
+        output = self.unet(x)
 
         if self.residual:
-            return x + identity, x
+            return output + identity, output
         else:
-            x_c = x
-            x = torch.sigmoid(x) if self.out_layer == 'sigmoid' else x
-            return x, x_c
+            output_c = output
+            output = torch.sigmoid(output) if self.out_layer == 'sigmoid' else output
+            return output, output_c
 
 
 # class UNet3d(nn.Module):

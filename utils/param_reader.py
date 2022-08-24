@@ -35,6 +35,7 @@ def train_params(config):
         'workers': config.getint('PARAMETERS', 'NUM_WORKERS'),
         'pretrained': config.getboolean('PARAMETERS', 'PRETRAINED'),
         'checkpoint_file': config.get('PARAMETERS', 'CHECKPOINT_FILE'),
+        'patience': config.getint('PARAMETERS', 'PATIENCE'),
 
         # Flip
         'vflip_prob': config.getfloat('DATA_AUGMENTATION', 'VERTICAL_FLIP_PROB'),
@@ -75,7 +76,7 @@ def train_params(config):
         'ed_axis': config.get('DATA_AUGMENTATION', 'ED_AXIS'),
 
         # Clip
-        'clip_interval': clip_interval
+        'clip_interval': clip_interval        
     }
     return params
 

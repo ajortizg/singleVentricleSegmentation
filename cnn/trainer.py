@@ -51,6 +51,15 @@ class Trainer:
             print('Unknown loss function: ' + loss_fn_type)
             sys.exit()
 
+    def last_train_accuracy(self):
+        return self.mean_epoch_stat['train_acc'][-1][0]
+
+    def last_val_accuracy(self):
+        return self.mean_epoch_stat['val_acc'][-1][0]
+
+    def last_test_accuracy(self):
+        return self.mean_epoch_stat['test_acc'][-1][0]
+
     def train_epoch(self, train_loader):
         self.net.train()
         total_loss = (0.0, 0.0, 0.0, 0.0, 0.0)

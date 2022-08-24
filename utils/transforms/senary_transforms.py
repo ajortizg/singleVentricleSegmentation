@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 import elasticdeform as ed
-from .basic_transforms import rotx, roty ,rotz
+from .basic_transforms import rotx, roty, rotz
 
 
 class Compose:
@@ -309,7 +309,7 @@ class RandomRotate:
 
 
 class ElasticDeformation:
-    def __init__(self, p, sigma_range, points, boundary, prefilter, axis, clip_interval):
+    def __init__(self, p, sigma_range, points, boundary, prefilter, axis, clip_interval=(0.0, 1.0)):
         self.p = p
         self.sigma_range = sigma_range
         self.points = points

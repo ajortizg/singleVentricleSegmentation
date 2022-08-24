@@ -42,10 +42,13 @@ if __name__ == "__main__":
         T6.RandomDepthFlip(P['dflip_prob']),
         T6.GammaScaling(P['gamma_scaling_prob'], P['gamma_scaling_range']),
         T6.MutiplicativeScaling(P['mult_scaling_prob'], P['gamma_scaling_range'], P['clip_interval']),
-        T6.AdditiveScaling(P['add_scaling_prob'], P['add_scaling_mean'], P['add_scaling_std'], P['clip_interval']),
-        T6.AdditiveGaussianNoise(P['noise_prob'], P['noise_mu'], P['noise_std'], P['clip_interval']),
+        T6.OneOf([
+            T6.AdditiveScaling(P['add_scaling_prob'], P['add_scaling_mean'], P['add_scaling_std'], P['clip_interval']),
+            T6.AdditiveGaussianNoise(P['noise_prob'], P['noise_mu'], P['noise_std'], P['clip_interval'])
+        ]),
         T6.BinarizeMasks(th=0.5),
-        T6.ToTensor()])
+        T6.ToTensor()
+    ])
 
     val_transforms = T6.Compose([T6.ToTensor()])
 
@@ -87,6 +90,8 @@ if __name__ == "__main__":
     pbar = tqdm(total=P['epochs'])
     trainer = Trainer(net, opt, pbar, config, device, writer, logger)
     tic = time.time()
+    best_val_acc = 0
+    epochs_since_last_improvement = 0
 
     for e in range(P['epochs']):
         trainer.train_epoch(train_loader)
@@ -98,6 +103,19 @@ if __name__ == "__main__":
 
         scheduler.step()
         pbar.update(1)
+
+        # record best validation accuracy
+        last_acc = trainer.last_val_accuracy()
+        if last_acc > best_val_acc:
+            best_val_acc = last_acc
+            epochs_since_last_improvement = 0
+        else:
+            epochs_since_last_improvement += 1
+
+        # early stop
+        if epochs_since_last_improvement > P['patience']:
+            logger.info(f'Early stop at epoch: {e}')
+            break
 
     toc = time.time()
     logger.info('\nTotal time taken to train the model: {:.3f}s'.format(toc - tic))

@@ -28,7 +28,17 @@ if __name__ == "__main__":
     config.read('parser/configCNNTrain.ini')
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    transforms = T6.Compose([T6.ToTensor()])
+    transforms = T6.Compose([
+        # T6.RandomRotate(1.0, (0, 360), (0, 360), (0, 360), 'border'),
+        # T6.OneOf([
+        #     T6.RandomDepthFlip(1.0),
+        #     T6.RandomHorizontalFlip(1.0),
+        #     T6.RandomVerticalFlip(1.0)
+        # ]),
+        T6.ElasticDeformation(1.0, (2.0, 2.0), 8, 'nearest', False, 'yx'),
+        T6.ToTensor()
+    ])
+
     train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, LoadFlowMode.ED_ES, full_transforms=transforms)
     val_ds = SingleVentricleDataset(config, DatasetMode.VAL, LoadFlowMode.ED_ES, full_transforms=transforms)
     test_ds = SingleVentricleDataset(config, DatasetMode.TEST, LoadFlowMode.ED_ES, full_transforms=transforms)
@@ -52,7 +62,7 @@ if __name__ == "__main__":
     acc = {'0': [], 'k': []}
 
     for loader in [train_loader, val_loader, test_loader]:
-        for (pnames, imgs4d, m0s, mks, _, times_fwd, times_bwd, ff, bf, _) in loader:
+        for pnames, imgs4d, m0s, mks, _, times_fwd, times_bwd, ff, bf in loader:
             imgs4d = imgs4d.to(device)
             m0s = m0s.to(device)
             mks = mks.to(device)
@@ -68,10 +78,10 @@ if __name__ == "__main__":
             for t in range(timesteps):
                 pbar.set_postfix_str(f'P: {pnames[0]}, S: {t+1}/{timesteps}')
 
-                # Forward mask propagation mi -> mf
+                # Forward mask propagation m0 -> mk
                 out['mt'].append(warp(out['mt'][-1], ff[..., t]))
 
-                # Backward mask propagation mf -> mi
+                # Backward mask propagation mk -> m0
                 out['mtt'].append(warp(out['mtt'][-1], bf[..., t]))
 
             assert(len(out['mt']) == len(out['mtt']))
@@ -92,7 +102,7 @@ if __name__ == "__main__":
                 # mtt_slices_dir = plots.createSubDirectory(mtt_dir, 'zslices')
 
                 for t in range(len(out['mt'])):
-                    img3d = r_transf(imgs4d[..., times_fwd[t].item()].squeeze())
+                    img3d = r_transf(imgs4d[..., times_fwd[t]].squeeze())
                     mt = rre_transf(out['mt'][t].squeeze())
                     mtt = rre_transf(out['mtt'][t].squeeze())
 
@@ -105,7 +115,7 @@ if __name__ == "__main__":
 
                     plots.save_img_masks(img3d,
                                          [mt, mtt],
-                                         f'im_t_{times_fwd[t].item()}', patient_dir,
+                                         f'im_t_{times_fwd[t]}', patient_dir,
                                          th=0.5, alphas=[1.0, 1.0], colors=[[0, 1, 0], [0, 0, 1]])
 
                     # mt = mt_mtt_posp(out['mt'][t].squeeze())
