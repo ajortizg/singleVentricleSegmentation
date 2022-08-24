@@ -41,6 +41,7 @@ class Trainer:
                                 'val_acc': [],
                                 'test_acc': []}
         self.best_val_acc = 0.0
+        self.epochs_since_last_improvement = 0
 
         if loss_fn_type == 'mse':
             self.loss_fn = nn.MSELoss(reduction=self.reduction)
@@ -241,13 +242,16 @@ class Trainer:
 
     def create_checkpoint(self, e, save_dir, when_better, verbose=False):
         if when_better:
-            last_val_acc = self.mean_epoch_stat['val_acc'][-1][0]
+            last_val_acc = self.last_val_accuracy()
             if last_val_acc > self.best_val_acc:
                 self.best_val_acc = last_val_acc
+                self.epochs_since_last_improvement = 0
                 self.checkpoint(e, save_dir, 'best_val_checkpoint.pth')
                 self.save_stats(save_dir)
                 if verbose:
                     self.logger.info(f'\tVal chkpt updated with acc: {self.best_val_acc:,.3f}')
+            else:
+                self.epochs_since_last_improvement += 1
         else:
             self.checkpoint(e, save_dir, 'checkpoint.pth')
             if verbose:

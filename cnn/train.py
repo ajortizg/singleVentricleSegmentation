@@ -90,8 +90,6 @@ if __name__ == "__main__":
     pbar = tqdm(total=P['epochs'])
     trainer = Trainer(net, opt, pbar, config, device, writer, logger)
     tic = time.time()
-    best_val_acc = 0
-    epochs_since_last_improvement = 0
 
     for e in range(P['epochs']):
         trainer.train_epoch(train_loader)
@@ -104,16 +102,8 @@ if __name__ == "__main__":
         scheduler.step()
         pbar.update(1)
 
-        # record best validation accuracy
-        last_acc = trainer.last_val_accuracy()
-        if last_acc > best_val_acc:
-            best_val_acc = last_acc
-            epochs_since_last_improvement = 0
-        else:
-            epochs_since_last_improvement += 1
-
         # early stop
-        if epochs_since_last_improvement > P['patience']:
+        if trainer.epochs_since_last_improvement > P['patience']:
             logger.info(f'Early stop at epoch: {e}')
             break
 
