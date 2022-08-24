@@ -15,6 +15,7 @@ class BasicUNet3d(nn.Module):
         features_start = config.getint('PARAMETERS', 'FEATURES_START')
         bilinear = config.getboolean('PARAMETERS', 'TRILINEAR')
         self.residual = config.getboolean('PARAMETERS', 'RESIDUAL')
+        self.out_layer = config.get('PARAMETERS', 'OUT_LAYER')
 
         feats = [features_start]
         for i in range(4):
@@ -37,24 +38,37 @@ class BasicUNet3d(nn.Module):
             identity = x[:, 1:2, :, :, :].clone()
 
         x1 = self.inc(x)
+
         x2 = self.down1(x1)
         x3 = self.down2(x2)
         x4 = self.down3(x3)
         x5 = self.down4(x4)
+
         x = self.up1(x5, x4)
+        xu1 = x
+
         x = self.up2(x, x3)
+        r1 = self.up2(xu1, x) + x
+
         x = self.up3(x, x2)
+        r2 = self.up3(r1, x) + x
+
         x = self.up4(x, x1)
-        logits = self.outc(x)
+        r3 = self.up4(r2, x) + x
+
+        # logits = self.outc(x)
+        logits = self.outc(r3)
 
         if self.residual:
             return logits + identity, logits
         else:
-            return torch.sigmoid(logits), logits
+            logits_c = logits
+            logits = torch.sigmoid(logits) if self.out_layer == 'sigmoid' else logits
+            return logits, logits_c
 
 
 class DoubleConv(nn.Module):
-    """(convolution => [BN] => ReLU) * 2"""
+    """(convolution => [IN] => ReLU) * 2"""
 
     def __init__(self, in_channels, out_channels, mid_channels=None):
         super().__init__()

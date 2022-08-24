@@ -12,7 +12,6 @@ import os.path as osp
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../../'))
 sys.path.append(ROOT_DIR)
 from utils import plots
-import utils.quaternary_transforms as T
 from dataset import singleVentricleDataset
 
 from opticalFlow_cuda_ext import opticalFlow

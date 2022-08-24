@@ -46,6 +46,7 @@ class Unet(nn.Module):
         self.num_pool_layers = config.getint('PARAMETERS', 'NUM_LAYERS') - 1
         self.drop_prob = 0.0
         self.residual = config.getboolean('PARAMETERS', 'RESIDUAL')
+        self.out_layer = config.get('PARAMETERS', 'OUT_LAYER')
 
         self.down_sample_layers = nn.ModuleList([ConvBlock(self.in_chans, self.chans, self.drop_prob)])
         ch = self.chans
@@ -113,7 +114,9 @@ class Unet(nn.Module):
         if self.residual:
             return output + identity, output
         else:
-            return torch.sigmoid(output), output
+            output_c = output
+            output = torch.sigmoid(output) if self.out_layer == 'sigmoid' else output
+            return output, output_c
 
 
 class ConvBlock(nn.Module):

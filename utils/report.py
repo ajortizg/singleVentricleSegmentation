@@ -42,7 +42,6 @@ class Report:
             config = configparser.ConfigParser()
             config.read(osp.join(dir, 'config.ini'))
 
-            best_train_loss, best_train_acc, *_ = self.read_checkpoint(dir, 'best_train_checkpoint.pth')
             *_, best_val_loss, best_val_acc, _ = self.read_checkpoint(dir, 'best_val_checkpoint.pth')
             train_loss, train_acc, val_loss, val_acc, test_acc = self.read_checkpoint(dir, 'checkpoint.pth')
 
@@ -57,10 +56,9 @@ class Report:
             df_warping = pd.DataFrame(warping_items, index=[i])
             df_da = pd.DataFrame(da_items, index=[i])
 
-            metrics_row = pd.DataFrame({'best_train_loss': best_train_loss, 'best_train_acc': best_train_acc,
-                                        'best_val_loss': best_val_loss, 'best_val_acc': best_val_acc,
+            metrics_row = pd.DataFrame({'best_val_loss': best_val_loss, 'best_val_acc': best_val_acc,
                                         'train_loss': train_loss, 'train_acc': train_acc,
-                                        'val_loss': val_loss, 'val_acc': val_acc, 'test_acc': test_acc}, index=[i]).round(3)                                       
+                                        'val_loss': val_loss, 'val_acc': val_acc, 'test_acc': test_acc}, index=[i]).round(3)
 
             df_row = df_data.join([df_param, df_warping, df_da, metrics_row])
             df = pd.concat([df_row, df])

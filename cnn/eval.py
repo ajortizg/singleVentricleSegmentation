@@ -14,7 +14,7 @@ ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 from utils import plots
 from utils.collate import collate_fn
-from utils.param_reader import ParamReader
+from utils import param_reader
 import utils.transforms.senary_transforms as T6
 import utils.transforms.unary_transforms as T1
 from cnn.dataset import SingleVentricleDataset, DatasetMode, LoadFlowMode
@@ -37,8 +37,7 @@ if __name__ == "__main__":
     config_eval.read('parser/configCNNEval.ini')
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    reader = ParamReader(config_eval)
-    P = reader.read_eval()
+    P = param_reader.eval_params(config_eval)
 
     if P['fine_tuning']:
         config_tl = configparser.ConfigParser()
@@ -63,7 +62,7 @@ if __name__ == "__main__":
     loader = DataLoader(ds, batch_size=1, shuffle=False, num_workers=P['workers'], collate_fn=collate_fn)
 
     save_dir = plots.createSaveDirectory(config_eval.get('DATA', 'OUTPUT_PATH'), 'EVAL')
-    reader.save(save_dir, 'config.ini')
+    param_reader.save_config(config_eval, save_dir, 'config.ini')
 
     logger = plots.create_logger(save_dir)
     logger.info(f'Device: {device}')
@@ -102,13 +101,13 @@ if __name__ == "__main__":
             masks = masks.to(device)
             times_fwd, times_bwd = ds.create_timeline(times_fwd[0], times_bwd[0], masks.shape[-1])
             acc_cnn, mts_cnn, mtts_cnn = trainer.test_patient(imgs4d, masks, times_fwd, times_bwd, ff, bf, cnn=True)
-            acc_warp, mts_warp, mtts_warp = trainer.test_patient(imgs4d, masks, times_fwd, times_bwd, ff, bf, cnn=False)
+            acc_flow, mts_flow, mtts_flow = trainer.test_patient(imgs4d, masks, times_fwd, times_bwd, ff, bf, cnn=False)
         else:
             acc_cnn, mts_cnn, mtts_cnn = trainer.val_patient(imgs4d, m0s, mks, times_fwd, times_bwd, ff, bf, offsets, cnn=True)
-            acc_warp, mts_warp, mtts_warp = trainer.val_patient(imgs4d, m0s, mks, times_fwd, times_bwd, ff, bf, offsets, cnn=False)
+            acc_flow, mts_flow, mtts_flow = trainer.val_patient(imgs4d, m0s, mks, times_fwd, times_bwd, ff, bf, offsets, cnn=False)
 
         row['Acc_cnn'] = acc_cnn
-        row['Acc_of'] = acc_warp
+        row['Acc_of'] = acc_flow
         df_row = pd.DataFrame(row, index=[i])
         df = pd.concat([df_row, df])
 
@@ -124,9 +123,9 @@ if __name__ == "__main__":
 
                     if P['dataset'] == 'test':
                         mtt_net = mask_posp(mtts_cnn[times_fwd[t]].squeeze())
-                        mtt_of = mask_posp(mtts_warp[times_fwd[t]].squeeze())
+                        mtt_of = mask_posp(mtts_flow[times_fwd[t]].squeeze())
                         mt_net = mask_posp(mts_cnn[times_fwd[t]].squeeze())
-                        mt_of = mask_posp(mts_warp[times_fwd[t]].squeeze())
+                        mt_of = mask_posp(mts_flow[times_fwd[t]].squeeze())
 
                         mgt = masks_gt_posp(masks[..., times_fwd[t]].squeeze())
                         plots.save_img_masks(img3d, [mgt, mtt_net, mtt_of], f'im_t_{times_fwd[t]}', fwd_dir, th=0.5,
@@ -136,9 +135,9 @@ if __name__ == "__main__":
                                              alphas=[0.3, 1.0, 1.0], colors=[[1, 0.7, 0], [0, 1, 0], [0, 0, 1]])
                     else:
                         mtt_net = mask_posp(mtts_cnn[t].squeeze())
-                        mtt_of = mask_posp(mtts_warp[t].squeeze())
+                        mtt_of = mask_posp(mtts_flow[t].squeeze())
                         mt_net = mask_posp(mts_cnn[t].squeeze())
-                        mt_of = mask_posp(mts_warp[t].squeeze())
+                        mt_of = mask_posp(mts_flow[t].squeeze())
                         if t == 0:
                             plots.save_img_masks(img3d, [masks_gt_posp(m0s.squeeze()), mtt_net, mtt_of], 'im_m0_m0tt', fwd_dir, th=0.5,
                                                  alphas=[0.3, 1.0, 1.0], colors=[[1, 0.7, 0], [0, 1, 0], [0, 0, 1]])

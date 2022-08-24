@@ -8,6 +8,7 @@ from torch.utils.tensorboard import SummaryWriter
 import time
 import numpy as np
 import os.path as osp
+import json
 import os
 from torchsummary import summary
 from models.model_factory import create_model, save_model
@@ -16,23 +17,21 @@ from trainer import Trainer
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
-from utils.param_reader import ParamReader
+from utils import param_reader
 import utils.transforms.senary_transforms as T6
 from cnn.dataset import *
 from utils.collate import *
 from utils import plots
-from log import *
 
 
 if __name__ == "__main__":
-    # utils.seeding(42)
+    plots.seeding(42)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     config = configparser.ConfigParser()
     config.read('parser/configCNNTrain.ini')
 
-    param_reader = ParamReader(config)
-    P = param_reader.read_train()
+    P = param_reader.train_params(config)
 
     # Create train and validation datasets
     train_transforms = T6.Compose([
@@ -79,43 +78,23 @@ if __name__ == "__main__":
 
     scheduler = optim.lr_scheduler.StepLR(opt, step_size=P['step_size'], gamma=P['gamma'])
 
-    param_reader.save(save_dir, filename='config')
+    param_reader.save_config(config, save_dir, filename='config.ini')
     save_model(net, save_dir, 'net.txt')
-    train_ds.save_patients(save_dir, 'train.xlsx')
-    val_ds.save_patients(save_dir, 'val.xlsx')
-    test_ds.save_patients(save_dir, 'test.xlsx')
-
-    # Steps per epoch for training and evaluation set
-    train_steps = len(train_loader)
-    val_steps = len(val_loader)
-    test_stepps = len(test_loader)
-    if test_stepps == 0:
-        test_stepps = 1
-
-    # History training info
-    H = {'train_loss': [], 'val_loss': [], 'train_acc': [], 'val_acc': [], 'test_acc': []}
 
     logger.info('Save directory: ' + save_dir)
     logger.info('Trainig CNN')
 
     pbar = tqdm(total=P['epochs'])
-    trainer = Trainer(net, pbar, config, device, writer)
-    best_val_loss = 1e10
-    best_train_loss = 1e10
+    trainer = Trainer(net, opt, pbar, config, device, writer, logger)
     tic = time.time()
 
     for e in range(P['epochs']):
-        train_res = trainer.train_epoch(train_loader, opt)
-        val_res = trainer.val_epoch(val_loader)
-        test_acc = trainer.test_epoch(test_loader, test_ds)
+        trainer.train_epoch(train_loader)
+        trainer.val_epoch(val_loader)
+        trainer.test_epoch(test_loader, test_ds)
 
-        train_avg = tuple(x / train_steps for x in train_res)
-        val_avg = tuple(x / val_steps for x in val_res)
-        test_acc_avg = test_acc / test_stepps
-
-        best_train_loss, best_val_loss = log(logger, writer, e, train_avg, val_avg, test_acc_avg, net, opt,
-                                             best_train_loss, best_val_loss, save_dir)
-        H = update_train_history(H, train_avg, val_avg, test_acc_avg)
+        trainer.log(e)
+        trainer.create_checkpoint(e, save_dir, when_better=True, verbose=True)
 
         scheduler.step()
         pbar.update(1)
@@ -123,9 +102,9 @@ if __name__ == "__main__":
     toc = time.time()
     logger.info('\nTotal time taken to train the model: {:.3f}s'.format(toc - tic))
 
-    plots.save_loss(H, save_dir)
-    plots.save_acc(H, save_dir)
-    checkpoint(e, net, opt, train_avg, val_avg, test_acc_avg, save_dir, 'checkpoint.pth')
+    trainer.create_checkpoint(e, save_dir, when_better=False)
+    trainer.save_stats(save_dir)
+    trainer.plot_stats(save_dir, log_scale=True)
 
     pbar.close()
     writer.close()

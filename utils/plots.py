@@ -17,6 +17,7 @@ import time
 from termcolor import colored
 from PIL import Image
 import logging
+import csv
 
 # scipy
 # from mpl_toolkits.mplot3d.art3d import Poly3DCollection
@@ -341,26 +342,31 @@ def merge_img_mask(img, mask, th=0.5, alpha=0.35, color=[1, 1, 0]):
     return img
 
 
-def save_loss(H, save_dir):
+def plot_accuracy(H, save_dir, filename='acc.png'):
     plt.style.use('ggplot')
     plt.figure()
-    plt.plot(H['train_loss'], label='train_loss')
-    plt.plot(H['val_loss'], label='val_loss')
-    plt.title('Training Loss on Dataset')
-    plt.xlabel('Epoch #')
-    plt.ylabel('Loss')
-    plt.legend(loc='lower left')
-    plt.savefig(os.path.join(save_dir, 'loss.png'))
-
-
-def save_acc(H, save_dir):
-    plt.style.use('ggplot')
-    plt.figure()
-    plt.plot(H['train_acc'], label='train_acc')
-    plt.plot(H['val_acc'], label='val_acc')
-    plt.plot(H['test_acc'], label='test_acc')
-    plt.title('Accuracy on Dataset')
+    plt.plot(H['cnn'], label='cnn')
+    plt.plot(H['flow'], label='flow')
+    plt.title('Accuracy')
     plt.xlabel('Epoch #')
     plt.ylabel('Acc')
     plt.legend(loc='lower left')
     plt.savefig(os.path.join(save_dir, 'acc.png'))
+
+
+def plot_lr_vs_loss(lrs, losses, save_dir, filename):
+    # lrs, losses = trainer.find_lr(train_loader)
+    # plots.plot_lr_vs_loss(lrs, losses, save_dir, 'losses.png')
+    plt.figure()
+    plt.plot(lrs, losses)
+    plt.title('Losses vs LR')
+    plt.xlabel('LR')
+    plt.ylabel('Loss')
+    plt.savefig(os.path.join(save_dir, filename))
+
+
+def write_list(save_dir, filename, lst):
+    with open(osp.join(save_dir, filename), 'w') as fp:
+        writer = csv.writer(fp)
+        for elem in lst:
+            writer.writerow(elem)

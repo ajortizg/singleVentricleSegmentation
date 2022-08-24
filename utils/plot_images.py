@@ -21,7 +21,7 @@ if __name__ == "__main__":
 
     train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, LoadFlowMode.NO_LOAD, img4d_transf, mask_transf)
     val_ds = SingleVentricleDataset(config, DatasetMode.VAL, LoadFlowMode.NO_LOAD, img4d_transf, mask_transf)
-    test_ds = SingleVentricleDataset(config, DatasetMode.TEST, LoadFlowMode.NO_LOAD, img4d_transf, mask_transf)
+    test_ds = SingleVentricleDataset(config, DatasetMode.TEST, LoadFlowMode.NO_LOAD, img4d_transf, mask_transf, test_masks_transforms=mask_transf)
 
     save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'ImageMask')
     plots.save_config(config, save_dir, 'config.ini')

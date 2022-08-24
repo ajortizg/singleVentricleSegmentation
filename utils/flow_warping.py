@@ -19,7 +19,7 @@ from cnn.warp import WarpCNN
 
 
 if __name__ == "__main__":
-    save_imgs = False
+    save_imgs = True
     save_size = (16, 200, 200)
 
     plots.printConsoleOutput_Header('Identity warping')
@@ -52,7 +52,7 @@ if __name__ == "__main__":
     acc = {'0': [], 'k': []}
 
     for loader in [train_loader, val_loader, test_loader]:
-        for (pnames, imgs4d, m0s, mks, _, times_fwd, times_bwd, ff, bf, offsets) in loader:
+        for (pnames, imgs4d, m0s, mks, _, times_fwd, times_bwd, ff, bf, _) in loader:
             imgs4d = imgs4d.to(device)
             m0s = m0s.to(device)
             mks = mks.to(device)
@@ -68,10 +68,10 @@ if __name__ == "__main__":
             for t in range(timesteps):
                 pbar.set_postfix_str(f'P: {pnames[0]}, S: {t+1}/{timesteps}')
 
-                # Forward mask propagation m0 -> mk
+                # Forward mask propagation mi -> mf
                 out['mt'].append(warp(out['mt'][-1], ff[..., t]))
 
-                # Backward mask propagation mk -> m0
+                # Backward mask propagation mf -> mi
                 out['mtt'].append(warp(out['mtt'][-1], bf[..., t]))
 
             assert(len(out['mt']) == len(out['mtt']))

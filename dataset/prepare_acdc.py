@@ -89,7 +89,7 @@ if __name__ == "__main__":
     save_segmentations_dir = plots.createSubDirectory(save_dir, 'NIFTI_Single_Ventricle_Segmentations')
     df_dset = pd.DataFrame(columns=['Name', 'Systole', 'Diastole'])
 
-    train_ds = ACDCDataset('data/0preprocessing/acdc/training', label=labels['right_ventricle'])
+    train_ds = ACDCDataset('data/0preprocessing/acdc/training', label=labels['myocardium'])
     # test_ds = ACDCDataset('data/ACDC/testing/testing', mode='test')
     dsets = [train_ds]
     pbar = tqdm(total=len(train_ds))

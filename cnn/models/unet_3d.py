@@ -15,6 +15,7 @@ import lipschitz as L
 
 __all__ = ["UNet3d", "ResUNet3d"]
 
+
 class UNet3d(nn.Module):
     def __init__(self, config, logger):
         num_layers = config.getint('PARAMETERS', 'NUM_LAYERS')
@@ -32,6 +33,7 @@ class UNet3d(nn.Module):
         power_its = config.getint('PARAMETERS', 'POWER_ITS')
         power_eps = config.getfloat('PARAMETERS', 'POWER_EPS')
         self.residual = config.getboolean('PARAMETERS', 'RESIDUAL')
+        self.out_layer = config.get('PARAMETERS', 'OUT_LAYER')
 
         if num_layers < 1:
             raise ValueError(
@@ -77,10 +79,14 @@ class UNet3d(nn.Module):
         for i, layer in enumerate(self.layers[self.num_layers: -1]):
             xi[-1] = layer(xi[-1], xi[-2 - i])
 
+        output = self.layers[-1](xi[-1])
+        
         if self.residual:
-            return self.layers[-1](xi[-1]) + identity, self.layers[-1](xi[-1])
+            return output + identity, output
         else:
-            return torch.sigmoid(self.layers[-1](xi[-1])), self.layers[-1](xi[-1])
+            output_c = output
+            output = torch.sigmoid(output) if self.out_layer == 'sigmoid' else output
+            return output, output_c
 
 
 class DoubleConv3d(nn.Module):
@@ -199,6 +205,7 @@ class ResUNet3d(nn.Module):
         slope = config.getfloat('PARAMETERS', 'ACTIVATION_SLOPE')
         num_res_units = config.getint('PARAMETERS', 'NUM_RES_UNITS')
         self.residual = config.getboolean('PARAMETERS', 'RESIDUAL')
+        self.out_layer = config.get('PARAMETERS', 'OUT_LAYER')
 
         channels = [features_start]
         strides = []
@@ -220,7 +227,9 @@ class ResUNet3d(nn.Module):
         if self.residual:
             return x + identity, x
         else:
-            return torch.sigmoid(x), x
+            x_c = x
+            x = torch.sigmoid(x) if self.out_layer == 'sigmoid' else x
+            return x, x_c
 
 
 # class UNet3d(nn.Module):
