@@ -81,10 +81,10 @@ if __name__ == "__main__":
     img_posp = T1.Compose([T1.Resize(save_size)])
 
     pbar = tqdm(total=len(ds))
-    trainer = Trainer(net, pbar, config_train, device, None, display_prob=0)
+    trainer = Trainer(net, None, pbar, config_train, device, None, None, display_prob=0)
     df = pd.DataFrame()
 
-    for i, (pnames, imgs4d, m0s, mks, masks, times_fwd, times_bwd, ff, bf, offsets) in enumerate(loader):
+    for i, (pnames, imgs4d, m0s, mks, masks, times_fwd, times_bwd, ff, bf) in enumerate(loader):
         if P['fine_tuning']:
             if pnames[0] != patient_name:
                 continue
@@ -103,11 +103,14 @@ if __name__ == "__main__":
             acc_cnn, mts_cnn, mtts_cnn = trainer.test_patient(imgs4d, masks, times_fwd, times_bwd, ff, bf, cnn=True)
             acc_flow, mts_flow, mtts_flow = trainer.test_patient(imgs4d, masks, times_fwd, times_bwd, ff, bf, cnn=False)
         else:
-            acc_cnn, mts_cnn, mtts_cnn = trainer.val_patient(imgs4d, m0s, mks, times_fwd, times_bwd, ff, bf, offsets, cnn=True)
-            acc_flow, mts_flow, mtts_flow = trainer.val_patient(imgs4d, m0s, mks, times_fwd, times_bwd, ff, bf, offsets, cnn=False)
+            metrics_cnn, mts_cnn, mtts_cnn = trainer.val_patient(imgs4d, m0s, mks, times_fwd, times_bwd, ff, bf, cnn=True)
+            metrics_flow, mts_flow, mtts_flow = trainer.val_patient(imgs4d, m0s, mks, times_fwd, times_bwd, ff, bf, cnn=False)
 
-        row['Acc_cnn'] = acc_cnn
-        row['Acc_of'] = acc_flow
+        for k, v in metrics_cnn.items():
+            row['cnn_' + k] = v
+            # row['flow_'+] = acc_flow
+        for k, v in metrics_flow.items():
+            row['flow_' + k] = v
         df_row = pd.DataFrame(row, index=[i])
         df = pd.concat([df_row, df])
 

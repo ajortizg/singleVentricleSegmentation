@@ -3,6 +3,7 @@ import sys
 import torch
 from torch import nn
 from monai.metrics.meandice import compute_meandice
+from monai.metrics.hausdorff_distance import compute_hausdorff_distance
 import numpy as np
 import os
 import math
@@ -35,11 +36,11 @@ class Trainer:
         self.loss_fn = None
 
         # statistics
-        self.mean_epoch_stat = {'train_loss': [],
-                                'train_acc': [],
-                                'val_loss': [],
-                                'val_acc': [],
-                                'test_acc': []}
+        self.mean_epoch_stat = {'train_loss': [(0, 0, 0, 0, 0)],
+                                'train_acc': [(0, 0, 0)],
+                                'val_loss': [(0, 0, 0, 0, 0)],
+                                'val_acc': [(0, 0, 0)],
+                                'test_acc': [(0, 0, 0)]}
         self.best_val_acc = 0.0
         self.epochs_since_last_improvement = 0
 
@@ -180,14 +181,14 @@ class Trainer:
         self.mean_epoch_stat['test_acc'].append(avg_acc)
         return total_acc
 
-    def time_popagation(self, imgs4d, m0s, mks, times_fwd, times_bwd, ff, bf, cnn=True):
+    def time_popagation(self, img4d, m0, mk, times_fwd, times_bwd, ff, bf, cnn=True):
         BS, NZ, NY, NX, CH, timesteps = ff.shape
-        dtype = m0s.dtype
+        dtype = m0.dtype
         warp = WarpCNN(self.config, NZ, NY, NX)
         mts = torch.empty(size=(timesteps + 1, BS, 1, NZ, NY, NX), dtype=dtype, device=self.device)
-        mts[0] = m0s
+        mts[0] = m0
         mtts = torch.empty_like(mts)
-        mtts[-1] = mks
+        mtts[-1] = mk
 
         if self.penalization:
             mhs = torch.empty(size=(timesteps, BS, 1, NZ, NY, NX), dtype=dtype, device=self.device)
@@ -199,7 +200,7 @@ class Trainer:
             # Forward propagation m0 -> mk
             mt = warp(mts[t], ff[..., t])
             if cnn:
-                x = torch.cat((imgs4d[..., times_fwd[t + 1]], mt), dim=1)
+                x = torch.cat((img4d[..., times_fwd[t + 1]], mt), dim=1)
                 mts[t + 1], mh = self.net(x)
             else:
                 mts[t + 1] = mt
@@ -207,12 +208,12 @@ class Trainer:
             # Backward propagation mk -> m0
             mtt = warp(mtts[timesteps - t], bf[..., t])
             if cnn:
-                x = torch.cat((imgs4d[..., times_bwd[t + 1]], mtt), dim=1)
+                x = torch.cat((img4d[..., times_bwd[t + 1]], mtt), dim=1)
                 mtts[timesteps - t - 1], mhh = self.net(x)
             else:
                 mtts[timesteps - t - 1] = mtt
 
-            if self.penalization:
+            if self.penalization and cnn:
                 mhs[t] = mh
                 mhhs[t] = mhh
         return (mts, mtts, mhs, mhhs)
@@ -287,6 +288,19 @@ class Trainer:
         # dc = 0.5 * (acc0 + acck)
         return acc0.item(), acck.item()
 
+    def compute_hd(self, mts, mtts):
+        m0 = mts[0]
+        m0tt = mtts[0]
+        m0tt = torch.where(m0tt > 0.5, 1.0, 0.0)
+
+        mk = mtts[-1]
+        mkt = mts[-1]
+        mkt = torch.where(mkt > 0.5, 1.0, 0.0)
+
+        hd0 = compute_hausdorff_distance(m0tt, m0).mean().item()
+        hdk = compute_hausdorff_distance(mkt, mk).mean().item()
+        return hd0, hdk
+
     def plot_test_imgs(self, mts, gts, tag):
         b = np.random.randint(mts.shape[0])
         mt = mts[b]
@@ -329,18 +343,18 @@ class Trainer:
 
     def compute_loss(self, mts, mtts, mhs=None, mhhs=None):
         # compute l1
-        m0 = mts[0].unsqueeze(0)
-        m0tt = mtts[0].unsqueeze(0)
+        m0 = mts[0]
+        m0tt = mtts[0]
         l1 = self.loss_fn(m0tt, m0)
 
         # compute l2
-        mk = mtts[-1].unsqueeze(0)
-        mkt = mts[-1].unsqueeze(0)
+        mk = mtts[-1]
+        mkt = mts[-1]
         l2 = self.loss_fn(mkt, mk)
 
         # compute l3
-        mt = mts[1:-1]
-        mtt = mtts[1:-1]
+        mt = mts[1:-1].squeeze(1)
+        mtt = mtts[1:-1].squeeze(1)
         if self.reduction == 'sum':
             l3 = self.loss_fn(mt, mtt) / mt.shape[0]
         else:
@@ -367,11 +381,14 @@ class Trainer:
 
         with torch.no_grad():
             acc0, acck = self.compute_dice_acc(mts, mtts)
-            mean_acc = 0.5 * (acc0 + acck)
-            loss = tuple(l.item() for l in loss)
             if np.random.rand() < self.display_prob:
                 self.plot_imgs(mts, mtts, 'train')
-        return (*loss, mean_acc)
+
+        avg_loss = tuple(x.item() for x in loss)
+        avg_acc = (0.5 * (acc0 + acck), acc0, acck)
+        self.mean_epoch_stat['train_loss'].append(avg_loss)
+        self.mean_epoch_stat['train_acc'].append(avg_acc)
+        return (*avg_loss, avg_acc[0])
 
     @torch.no_grad()
     def val_patient(self, imgs4d, m0s, mks, times_fwd, times_bwd, ff, bf, cnn):
@@ -380,7 +397,12 @@ class Trainer:
 
         acc0, acck = self.compute_dice_acc(mts, mtts)
         mean_acc = 0.5 * (acc0 + acck)
-        return mean_acc, mts, mtts
+
+        hd0, hdk = self.compute_hd(mts, mtts)
+        mean_hd = 0.5 * (hd0 + hdk)
+        metrics = {'mean_acc': mean_acc, 'acc_ed': acck, 'acc_es': acc0,
+                   'mean_hd': mean_hd, 'hd_ed': hdk, 'hd_es': hd0}
+        return metrics, mts, mtts
 
     @torch.no_grad()
     def test_patient(self, img4d, masks, times_fwd, times_bwd, ff, bf, cnn):
@@ -431,9 +453,9 @@ class Trainer:
         # fast
         plt.style.use('seaborn-paper')
         plt.figure()
-        plt.plot(np.array(self.mean_epoch_stat['train_acc'])[:, 0], label='Train')
-        plt.plot(np.array(self.mean_epoch_stat['val_acc'])[:, 0], label='Val')
-        plt.plot(np.array(self.mean_epoch_stat['test_acc'])[:, 0], label='Test')
+        plt.plot(np.array(self.mean_epoch_stat['train_acc'])[1:, 0], label='Train')
+        plt.plot(np.array(self.mean_epoch_stat['val_acc'])[1:, 0], label='Val')
+        plt.plot(np.array(self.mean_epoch_stat['test_acc'])[1:, 0], label='Test')
         plt.title('Accuracy')
         plt.xlabel('Epoch')
         plt.ylabel('Mean Dice')
@@ -445,8 +467,8 @@ class Trainer:
         plt.figure()
         if log_scale:
             plt.yscale('log')
-        plt.plot(np.array(self.mean_epoch_stat['train_loss'])[:, 0], label='Train')
-        plt.plot(np.array(self.mean_epoch_stat['val_loss'])[:, 0], label='Val')
+        plt.plot(np.array(self.mean_epoch_stat['train_loss'])[1:, 0], label='Train')
+        plt.plot(np.array(self.mean_epoch_stat['val_loss'])[1:, 0], label='Val')
         plt.title('Loss')
         plt.xlabel('Epoch')
         plt.ylabel('Loss')

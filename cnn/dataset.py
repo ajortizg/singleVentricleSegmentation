@@ -127,6 +127,12 @@ class SingleVentricleDataset(Dataset):
 
         return (patient_name, img4d_zyxt, m0, mk, masks, init_ts, final_ts, ff, bf)
 
+    def header(self, idx):
+        df_row = self.df.iloc[[idx]]
+        patient_name = df_row.loc[idx, 'Name']
+        mask_nii = nib.load(osp.sep.join([self.segmentations_path, patient_name, patient_name + '_Systole_Labelmap.nii']))
+        return mask_nii.header
+
     def systole_diastole_time(self, idx):
         ts = self.df.iloc[idx]['Systole']
         td = self.df.iloc[idx]['Diastole']

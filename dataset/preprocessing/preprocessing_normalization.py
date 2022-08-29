@@ -17,8 +17,8 @@ import math
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../../'))
 sys.path.append(ROOT_DIR)
 from utils import plots
-# import utils.transforms as T
 from dataset.singleVentricleDataset import SingleVentricleDataset, SingleVentriclePatient
+import utils.transforms.unary_transforms as T1
 
 
 def save_np_to_nifty(file: np.array, saveDir: str, fileName: str, hdr_old):
@@ -49,9 +49,9 @@ def save_data(patient: SingleVentriclePatient, saveDir4D: str, saveDirSegmentati
 if __name__ == "__main__":
     config = configparser.ConfigParser()
     config.read('parser/configPreprocessing.ini')
+    minmax_norm = config.getboolean('NORMALIZATION', 'MIN_MAX_NORM')
 
     ds = SingleVentricleDataset(config, mode='full')
-
     saveDir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'preprocessing_normalization')
 
     print("===========================================================")
@@ -71,41 +71,47 @@ if __name__ == "__main__":
     pbar = tqdm(total=len(ds))
     print(f'Found {len(ds)} patientes')
 
+    norm_fn = T1.Normalize()
+
     for index in range(0, len(ds)):
         patient = ds[index]
         pbar.set_postfix_str(f'{patient.name}')
         print(f'[Patient]: {index} -> {patient.name}')
 
         # normalize data for newPatient
-        per95 = np.percentile(patient.nii_data_zyxt, 95)
-        new_nii_data_zyxt = np.clip(patient.nii_data_zyxt, 0, per95)
+        if minmax_norm:
+            new_nii_data_zyxt = norm_fn(patient.nii_data_zyxt)
+            print(np.min(new_nii_data_zyxt), np.max(new_nii_data_zyxt))
+        else:
+            per95 = np.percentile(patient.nii_data_zyxt, 95)
+            new_nii_data_zyxt = np.clip(patient.nii_data_zyxt, 0, per95)
 
-        # print("old min, max :", np.min(patient.nii_data_zyxt), np.max(patient.nii_data_zyxt) )
-        # print("clip min, max :", np.min(new_nii_data_zyxt), np.max(new_nii_data_zyxt) )
+            # print("old min, max :", np.min(patient.nii_data_zyxt), np.max(patient.nii_data_zyxt) )
+            # print("clip min, max :", np.min(new_nii_data_zyxt), np.max(new_nii_data_zyxt) )
 
-        avg_diastole = np.mean(new_nii_data_zyxt[:, :, :, patient.tDiastole], where=patient.nii_mask_diastole.astype('bool'))
-        avg_systole = np.mean(new_nii_data_zyxt[:, :, :, patient.tSystole], where=patient.nii_mask_systole.astype('bool'))
-        avg = 0.5 * (avg_diastole + avg_systole)
+            avg_diastole = np.mean(new_nii_data_zyxt[:, :, :, patient.tDiastole], where=patient.nii_mask_diastole.astype('bool'))
+            avg_systole = np.mean(new_nii_data_zyxt[:, :, :, patient.tSystole], where=patient.nii_mask_systole.astype('bool'))
+            avg = 0.5 * (avg_diastole + avg_systole)
 
-        # print("avg = ", avg, "per95 = ", per95)
-        # print("denom= ", (per95*avg*(per95-avg)))
+            # print("avg = ", avg, "per95 = ", per95)
+            # print("denom= ", (per95*avg*(per95-avg)))
 
-        # old: quadratic normalization n(I) = a I**2 + b I
-        # norm_a = (per95 - 2.*avg)/(2.*per95*avg*(avg - per95))
-        # norm_b = (2*avg*avg - per95*per95)/(2.*per95*avg*(avg - per95))
-        # new_nii_data_zyxt = norm_a * (new_nii_data_zyxt**2) + norm_b * new_nii_data_zyxt
-        # print("norm(per95) = ", norm_a*per95*per95+norm_b*per95)
-        # print("norm(avg) = ", norm_a*avg*avg+norm_b*avg)
-        # print("norm(0) = ", norm_a*0.+norm_b*0.)
+            # old: quadratic normalization n(I) = a I**2 + b I
+            # norm_a = (per95 - 2.*avg)/(2.*per95*avg*(avg - per95))
+            # norm_b = (2*avg*avg - per95*per95)/(2.*per95*avg*(avg - per95))
+            # new_nii_data_zyxt = norm_a * (new_nii_data_zyxt**2) + norm_b * new_nii_data_zyxt
+            # print("norm(per95) = ", norm_a*per95*per95+norm_b*per95)
+            # print("norm(avg) = ", norm_a*avg*avg+norm_b*avg)
+            # print("norm(0) = ", norm_a*0.+norm_b*0.)
 
-        # new: normalization n(I) = a I/sqrt(1+beta I**2)
-        norm_a = math.sqrt(per95 * per95 - avg * avg) / (math.sqrt(3) * per95 * avg)
-        norm_b = (per95 * per95 - 4. * avg * avg) / (3. * per95 * per95 * avg * avg)
-        new_nii_data_zyxt = norm_a * new_nii_data_zyxt / np.sqrt(1 + norm_b * new_nii_data_zyxt**2)
-        print("norm(per95) = ", norm_a * per95 / math.sqrt(1 + norm_b * per95 * per95))
-        print("norm(avg) = ", norm_a * avg / math.sqrt(1 + norm_b * avg * avg))
+            # new: normalization n(I) = a I/sqrt(1+beta I**2)
+            norm_a = math.sqrt(per95 * per95 - avg * avg) / (math.sqrt(3) * per95 * avg)
+            norm_b = (per95 * per95 - 4. * avg * avg) / (3. * per95 * per95 * avg * avg)
+            new_nii_data_zyxt = norm_a * new_nii_data_zyxt / np.sqrt(1 + norm_b * new_nii_data_zyxt**2)
+            print("norm(per95) = ", norm_a * per95 / math.sqrt(1 + norm_b * per95 * per95))
+            print("norm(avg) = ", norm_a * avg / math.sqrt(1 + norm_b * avg * avg))
 
-        print(np.min(new_nii_data_zyxt), np.max(new_nii_data_zyxt))
+            print(np.min(new_nii_data_zyxt), np.max(new_nii_data_zyxt))
 
         newPatient = SingleVentriclePatient()
         newPatient.name = patient.name

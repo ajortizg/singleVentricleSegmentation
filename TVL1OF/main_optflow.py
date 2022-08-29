@@ -2,6 +2,7 @@ import os.path as osp
 import os
 from enum import Enum
 from TVL1OF3D import *
+import time
 
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
@@ -14,6 +15,9 @@ class OpticalFlowMode(Enum):
     FORWARD = 1
     BACKWARD = 2
     UNKNOWN = 0
+
+
+proc_times = []
 
 
 def compute_optical_flow(ds: SingleVentricleDataset, idx: int, mode: OpticalFlowMode, save_dir: str, device: str, config, logger):
@@ -47,6 +51,7 @@ def compute_optical_flow(ds: SingleVentricleDataset, idx: int, mode: OpticalFlow
         else:
             indices = torch.arange(final_ts, init_ts - 1, -1)
 
+    tic = time.time()
     for i in range(len(indices) - 1):
         # t0, t1 = t + inc_t, t
         t0 = indices[i + 1].item()
@@ -68,6 +73,9 @@ def compute_optical_flow(ds: SingleVentricleDataset, idx: int, mode: OpticalFlow
 
         # warp mask with the computed optical flow
         # mask = alg.warpMask(mask, u, I1, t0, saveDirTimeStep)
+    toc = time.time()
+    proc_times.append(toc - tic)
+    logger.info('OF time: {:.3f}s'.format(proc_times[-1]))
 
 
 if __name__ == "__main__":
@@ -133,3 +141,5 @@ if __name__ == "__main__":
         else:
             compute_optical_flow(train_ds, idx, mode, save_dir, device, config, logger)
             pbar.update(1)
+
+    logger('Mean time taken to compute the optical flow: %.3f' % np.array(proc_times).mean())

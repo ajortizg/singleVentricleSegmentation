@@ -92,6 +92,33 @@ class Report:
         return self.to_dt.strftime(str_fmt)
 
 
+# class ReportTrain(Report):
+#     def __init__(self, from_dt, to_dt, mode):
+#         super().__init__(from_dt, to_dt, mode)
+
+#     def create(self, save_dir, filename):
+#         if len(self.filtered_dirs) == 0:
+#             print('filter files first')
+#             return
+
+#         df = pd.DataFrame()
+#         for i, dir in enumerate(self.filtered_dirs):
+#             config = configparser.ConfigParser()
+#             config.read(osp.join(dir, 'config.ini'))
+
+#             acc = pd.read_csv(osp.join(dir, 'train_acc.csv'))
+#             row = acc.iloc[-1]
+
+#             print(config.get('DATA', 'patient_name'))
+#             print(row.T)
+
+#             df = pd.concat([df, row.to_frame().T], ignore_index=True)
+
+#         # df.to_excel(osp.join(save_dir, filename), index=False)
+#         mean = df.mean(axis=0)
+#         print(mean)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--from_date', help='create report from date')

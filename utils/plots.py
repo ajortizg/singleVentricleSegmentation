@@ -242,31 +242,31 @@ def save_colorbar_slices(img3d, filename, save_dir, max_gray_value=1):
     plt.close('all')
 
 
-def save_img_mask_slices(img3d, mask3d, filename, save_dir, th=0.5, alpha=0.35, color=[1, 1, 0], max_gray_value=1):
-    NZ = img3d.shape[0]
-    aspect_ratio = 16. / 9.
-    cols = int(NZ / aspect_ratio)
-    if(NZ % cols > 0):
-        cols += 1
-    rows = math.ceil(NZ / cols)
+# def save_img_mask_slices(img3d, mask3d, filename, save_dir, th=0.5, alpha=0.35, color=[1, 1, 0], max_gray_value=1):
+#     NZ = img3d.shape[0]
+#     aspect_ratio = 16. / 9.
+#     cols = int(NZ / aspect_ratio)
+#     if(NZ % cols > 0):
+#         cols += 1
+#     rows = math.ceil(NZ / cols)
 
-    fig, axs = plt.subplots(rows, cols, constrained_layout=True, figsize=(18, 10), dpi=4)
-    #fig.canvas.manager.set_window_title('4D Nifti Image')
-    #fig.suptitle('4D_Nifti file: {} \n with {} slices in z-direction'.format(os.path.basename(fileName),numZSlices), fontsize=16)
-    fig.suptitle('file: {}'.format(os.path.basename(filename)), fontsize=16)
-    for z, ax in enumerate(axs.flat):
-        if z < NZ:
-            img = cv2.cvtColor(img3d[z, :, :].cpu().detach().numpy(), cv2.COLOR_GRAY2BGR)
-            mask = mask3d[z, :, :].cpu().detach().numpy()
-            img = merge_img_mask(img, mask, th, alpha, color)
-            ax.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-            ax.set_title("layer {}".format(z))
-            ax.axis('off')
-        else:
-            ax.axis('off')
-    path_name = os.path.join(save_dir, filename)
-    plt.savefig(path_name, dpi=100)
-    plt.close('all')
+#     fig, axs = plt.subplots(rows, cols, constrained_layout=True, figsize=(18, 10), dpi=4)
+#     #fig.canvas.manager.set_window_title('4D Nifti Image')
+#     #fig.suptitle('4D_Nifti file: {} \n with {} slices in z-direction'.format(os.path.basename(fileName),numZSlices), fontsize=16)
+#     fig.suptitle('file: {}'.format(os.path.basename(filename)), fontsize=16)
+#     for z, ax in enumerate(axs.flat):
+#         if z < NZ:
+#             img = cv2.cvtColor(img3d[z, :, :].cpu().detach().numpy(), cv2.COLOR_GRAY2BGR)
+#             mask = mask3d[z, :, :].cpu().detach().numpy()
+#             img = merge_img_mask(img, mask, th, alpha, color)
+#             ax.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+#             ax.set_title("layer {}".format(z))
+#             ax.axis('off')
+#         else:
+#             ax.axis('off')
+#     path_name = os.path.join(save_dir, filename)
+#     plt.savefig(path_name, dpi=100)
+#     plt.close('all')
 
 
 def save_img_mask_single_zslices(image3D, mask3D, saveDir, subdir, th=0.5, alpha=0.35, color=[1, 1, 0], max_gray_value=1):
@@ -370,3 +370,13 @@ def write_list(save_dir, filename, lst):
         writer = csv.writer(fp)
         for elem in lst:
             writer.writerow(elem)
+
+
+def save_nifti_mask(mask, header, save_dir, filename):
+    mask = mask.squeeze()
+    mask = torch.swapaxes(mask, 0, 2)           # xyz format
+    mask = torch.where(mask > 0.5, 1.0, 0.0)    # binarize
+
+    mt_nii = nib.Nifti1Image(mask.detach().cpu().numpy(), affine=None, header=header)
+    outputFile = osp.sep.join([save_dir, filename])
+    nib.save(mt_nii, outputFile)
