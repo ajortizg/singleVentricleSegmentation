@@ -7,6 +7,9 @@ import pandas as pd
 import csv
 from torch.utils.data import DataLoader
 import nibabel as nib
+import matplotlib.pyplot as plt
+import os.path as osp
+import numpy as np
 from monai.metrics.meandice import compute_meandice
 
 
@@ -22,7 +25,7 @@ from cnn.trainer import Trainer
 from cnn.models.model_factory import create_model, save_model
 
 
-def save_nifty(mask, save_dir, filename):
+def save_nifty(mask, hdr, save_dir, filename):
     mask = mask.squeeze()
     mask = torch.swapaxes(mask, 0, 2)           # xyz format
     mask = torch.where(mask > 0.5, 1.0, 0.0)    # binarize
@@ -100,15 +103,34 @@ if __name__ == "__main__":
         if P['dataset'] == 'test':
             masks = masks.to(device)
             times_fwd, times_bwd = ds.create_timeline(times_fwd[0], times_bwd[0], masks.shape[-1])
-            acc_cnn, mts_cnn, mtts_cnn = trainer.test_patient(imgs4d, masks, times_fwd, times_bwd, ff, bf, cnn=True)
-            acc_flow, mts_flow, mtts_flow = trainer.test_patient(imgs4d, masks, times_fwd, times_bwd, ff, bf, cnn=False)
+
+            metrics_cnn, accs_fwd_cnn, accs_bwd_cnn, mts_cnn, mtts_cnn = trainer.test_patient(imgs4d, masks, times_fwd, times_bwd, ff, bf, cnn=True)
+            metrics_flow, accs_fwd_flow, accs_bwd_flow, mts_flow, mtts_flow = trainer.test_patient(imgs4d, masks, times_fwd, times_bwd, ff, bf, cnn=False)
+            # x = np.arange(abs(times_fwd[0] + 1 - times_bwd[0])).tolist()
+            # times = slice(times_fwd[0] + 1, times_bwd[0])
+            # # times_plot[0] = 'ES'
+            # # times_plot[-1] = 'ED'
+            # labels = [None] * len(x)
+            # labels[0] = 'ES'
+            # labels[-1] = 'ED'
+            # # labels[len(labels)//2] = 'Time'
+            # plt.figure(figsize=(3,1), dpi=100)
+            # plt.plot(x, accs_fwd_flow[times], marker='+', label='Forward Flow', linewidth=1.5, markersize=4)
+            # plt.plot(x, accs_bwd_flow[times], marker='*', label='Backward Flow', linewidth=1.5, markersize=4)
+            # plt.plot(x, accs_fwd_cnn[times], marker='o', label='Forward CNN', linewidth=1.5, markersize=4)
+            # plt.plot(x, accs_bwd_cnn[times], marker='x', label='Backward CNN', linewidth=1.5, markersize=4)
+            # plt.xticks(x, labels, fontsize=10)
+            # plt.yticks(fontsize=10)
+            # plt.xlabel('Time', fontsize=10, weight='bold')
+            # plt.ylabel('Dice', fontsize=10, weight='bold')
+            # # plt.legend(loc='lower right',frameon=False, fontsize=8)
+            # plt.savefig(osp.join(save_dir, pnames[0] + '_acc.pdf'))
         else:
             metrics_cnn, mts_cnn, mtts_cnn = trainer.val_patient(imgs4d, m0s, mks, times_fwd, times_bwd, ff, bf, cnn=True)
             metrics_flow, mts_flow, mtts_flow = trainer.val_patient(imgs4d, m0s, mks, times_fwd, times_bwd, ff, bf, cnn=False)
 
         for k, v in metrics_cnn.items():
             row['cnn_' + k] = v
-            # row['flow_'+] = acc_flow
         for k, v in metrics_flow.items():
             row['flow_' + k] = v
         df_row = pd.DataFrame(row, index=[i])
@@ -136,6 +158,13 @@ if __name__ == "__main__":
 
                         plots.save_img_masks(img3d, [mgt, mt_net, mt_of], f'im_t_{times_fwd[t]}', bwd_dir, th=0.5,
                                              alphas=[0.3, 1.0, 1.0], colors=[[1, 0.7, 0], [0, 1, 0], [0, 0, 1]])
+                        if P['save_nifti']:
+                            # save_nifty(mts_cnn[t], fwd_dir, f'mt_{t}.nii')
+                            # save_nifty(mtts_cnn[t], bwd_dir, f'mtt_{t}.nii')
+                            hdr = loader.dataset.header(i)
+                            plots.save_nifti_mask(mts_cnn[t], hdr, fwd_dir, f'mt_{t}.nii')
+                            plots.save_nifti_mask(mtts_cnn[t], hdr, bwd_dir, f'mtt_{t}.nii')
+
                     else:
                         mtt_net = mask_posp(mtts_cnn[t].squeeze())
                         mtt_of = mask_posp(mtts_flow[t].squeeze())
@@ -155,9 +184,10 @@ if __name__ == "__main__":
                         plots.save_img_masks(img3d, [mtt_net, mtt_of], f'im_tt_{times_fwd[t].item()}', bwd_dir, th=0.5,
                                              alphas=[1.0, 1.0], colors=[[0, 1, 0], [0, 0, 1]])
 
-                if P['save_nifti']:
-                    save_nifty(mts_cnn[t], fwd_dir, f'mt_{times_fwd[t].item()}.nii')
-                    save_nifty(mtts_cnn[t], bwd_dir, f'mtt_{times_fwd[t].item()}.nii')
+                        if P['save_nifti']:
+                            hdr = loader.dataset.header(i)
+                            plots.save_nifti_mask(mts_cnn[t], hdr, fwd_dir, f'mt_{times_fwd[t].item()}.nii')
+                            plots.save_nifti_mask(mtts_cnn[t], hdr, bwd_dir, f'mtt_{times_fwd[t].item()}.nii')
         pbar.update(1)
     df = df.round(3)
     logger.info(df.mean(axis=0, numeric_only=True))

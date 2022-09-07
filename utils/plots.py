@@ -354,6 +354,16 @@ def plot_accuracy(H, save_dir, filename='acc.png'):
     plt.savefig(os.path.join(save_dir, 'acc.png'))
 
 
+def plot_test_accuracy(save_dir, fwd, bwd, times, filename):
+    plt.figure(dpi=200)
+    plt.plot(times, fwd, label='fwd')
+    plt.plot(times, bwd, label='bwd')
+    plt.xlabel('Time')
+    plt.ylabel('Dice')
+    plt.legend(loc='lower left')
+    plt.savefig(os.path.join(save_dir, filename))
+
+
 def plot_lr_vs_loss(lrs, losses, save_dir, filename):
     # lrs, losses = trainer.find_lr(train_loader)
     # plots.plot_lr_vs_loss(lrs, losses, save_dir, 'losses.png')
@@ -376,7 +386,8 @@ def save_nifti_mask(mask, header, save_dir, filename):
     mask = mask.squeeze()
     mask = torch.swapaxes(mask, 0, 2)           # xyz format
     mask = torch.where(mask > 0.5, 1.0, 0.0)    # binarize
+    mask = mask.detach().cpu().numpy()
 
-    mt_nii = nib.Nifti1Image(mask.detach().cpu().numpy(), affine=None, header=header)
+    mt_nii = nib.Nifti1Image(mask, affine=None, header=header)
     outputFile = osp.sep.join([save_dir, filename])
     nib.save(mt_nii, outputFile)

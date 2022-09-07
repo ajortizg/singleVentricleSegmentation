@@ -400,8 +400,8 @@ class Trainer:
 
         hd0, hdk = self.compute_hd(mts, mtts)
         mean_hd = 0.5 * (hd0 + hdk)
-        metrics = {'mean_acc': mean_acc, 'acc_ed': acck, 'acc_es': acc0,
-                   'mean_hd': mean_hd, 'hd_ed': hdk, 'hd_es': hd0}
+        metrics = {'mean_acc': mean_acc, 'acc_es': acck, 'acc_ed': acc0,
+                   'mean_hd': mean_hd, 'hd_es': hdk, 'hd_ed': hd0}
         return metrics, mts, mtts
 
     @torch.no_grad()
@@ -437,16 +437,30 @@ class Trainer:
         mts = mts.swapaxes(0, -1).squeeze(-1)
         masks = masks.swapaxes(0, -1).squeeze(-1)
         mts = torch.where(mts > 0.5, 1.0, 0.0)
-        acc_fwd = compute_meandice(mts, masks).mean().item()
+        # acc_fwd = compute_meandice(mts, masks).mean().item()
+        accs_fwd = compute_meandice(mts, masks)
+        mean_acc_fwd = accs_fwd.mean().item()
 
         # Compute backward accuracy
         mtts = mtts.swapaxes(0, -1).squeeze(-1)
         mtts = torch.where(mtts > 0.5, 1.0, 0.0)
-        acc_bwd = compute_meandice(mtts, masks).mean().item()
+        # acc_bwd = compute_meandice(mtts, masks).mean().item()
+        accs_bwd = compute_meandice(mtts, masks)
+        mean_acc_bwd = accs_bwd.mean().item()
+
+        hd_fwd = compute_hausdorff_distance(mts, masks).mean().item()
+        hd_bwd = compute_hausdorff_distance(mtts, masks).mean().item()
+
+        metrics = {'mean_acc': 0.5 * (mean_acc_fwd + mean_acc_bwd),
+                   'mean_acc_fwd': mean_acc_fwd,
+                   'mean_acc_bwd': mean_acc_bwd,
+                   'mean_hd': 0.5 * (hd_fwd + hd_bwd)}
+
+        self.mean_epoch_stat['test_acc'].append((metrics['mean_acc'], metrics['mean_acc_fwd'], metrics['mean_acc_bwd']))
 
         # Mean acc
-        acc = 0.5 * (acc_fwd + acc_bwd)
-        return acc, mts, mtts
+        # acc = 0.5 * (acc_fwd + acc_bwd)
+        return metrics, accs_fwd.squeeze().detach().cpu().tolist(), accs_bwd.squeeze().detach().cpu().tolist(), mts, mtts
 
     def plot_stats(self, save_dir, log_scale=False):
         # Plot accuracy

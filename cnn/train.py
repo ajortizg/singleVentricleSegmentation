@@ -42,10 +42,8 @@ if __name__ == "__main__":
         T6.RandomDepthFlip(P['dflip_prob']),
         T6.GammaScaling(P['gamma_scaling_prob'], P['gamma_scaling_range']),
         T6.MutiplicativeScaling(P['mult_scaling_prob'], P['gamma_scaling_range'], P['clip_interval']),
-        T6.OneOf([
-            T6.AdditiveScaling(P['add_scaling_prob'], P['add_scaling_mean'], P['add_scaling_std'], P['clip_interval']),
-            T6.AdditiveGaussianNoise(P['noise_prob'], P['noise_mu'], P['noise_std'], P['clip_interval'])
-        ]),
+        T6.AdditiveScaling(P['add_scaling_prob'], P['add_scaling_mean'], P['add_scaling_std'], P['clip_interval']),
+        T6.AdditiveGaussianNoise(P['noise_prob'], P['noise_mu'], P['noise_std'], P['clip_interval']),
         T6.BinarizeMasks(th=0.5),
         T6.ToTensor()
     ])

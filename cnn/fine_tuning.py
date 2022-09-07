@@ -98,30 +98,20 @@ if __name__ == "__main__":
     pbar = tqdm(total=P['num_epochs'])
     tic = time.time()
     trainer = Trainer(net, opt, pbar, config, device, writer, logger)
-
-    df = pd.DataFrame({'Patient': pnames[0], 'Lambda': P['loss_lambda']}, index=[0])
-    save_every = 100
     logger.info('Train CNN')
     
     for e in range(P['num_epochs']):
         pbar.set_postfix_str(f'Train: {pnames[0]}')
-        train_res = trainer.train_patient(img4d, m0, mk, times_fwd, times_bwd, ff, bf)
+        trainer.train_patient(img4d, m0, mk, times_fwd, times_bwd, ff, bf)
 
         if P['dataset'] == 'test':
             pbar.set_postfix_str(f'Test: {test_data[0][0]}')
-            test_acc, *_ = trainer.test_patient(test_imgs4d, test_masks, test_times_fwd, test_times_bwd, test_ff, test_bf, cnn=True)
-        else:
-            test_acc = 0.0
-        
+            trainer.test_patient(test_imgs4d, test_masks, test_times_fwd, test_times_bwd, test_ff, test_bf, cnn=True)
+               
         trainer.log(e)
-
-        if e % save_every == 0:
-            df.insert(0, f'{e}', train_res[-1])
-
         scheduler.step()
         pbar.update(1)
 
-    df.to_excel(osp.join(save_dir, 'accuracy.xlsx'), index=False)
     toc = time.time()
     logger.info('\nTotal time taken to train the model: {:.4f}s'.format(toc - tic))
 

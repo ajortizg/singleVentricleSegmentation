@@ -24,7 +24,7 @@ if __name__ == "__main__":
     plots.printConsoleOutput_Header('Identity warping')
 
     config = configparser.ConfigParser()
-    config.read('parser/config_flow_warping.ini')
+    config.read('parser/configFlowWarping.ini')
     save_imgs = config.getboolean('PARAMETERS', 'SAVE_IMGS')
     save_size = (config.getint('PARAMETERS', 'SAVE_NZ'),
                  config.getint('PARAMETERS', 'SAVE_NY'),

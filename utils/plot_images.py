@@ -14,7 +14,7 @@ from cnn.dataset import SingleVentricleDataset, DatasetMode, LoadFlowMode
 if __name__ == "__main__":
     save_size = (16, 200, 200)
     config = configparser.ConfigParser()
-    config.read('parser/configPreprocessing.ini')
+    config.read('parser/configFlowWarping.ini')
 
     img4d_transf = T1.Compose([T1.ToTensor()])
     mask_transf = T1.Compose([T1.ToTensor()])
@@ -31,12 +31,14 @@ if __name__ == "__main__":
     img_posp = T1.Compose([T1.Resize(save_size), T1.Normalize()])
 
     pbar = tqdm(total=len(train_ds) + len(val_ds) + len(test_ds))
-    for ds in [train_ds, val_ds, test_ds]:
+    for ds in [test_ds, train_ds, val_ds]:
         for (pname, data, m0, mk, masks, init_ts, final_ts, _, _) in ds:
             if masks is not None:
                 print(pname, 'full_cycle')
-
-            timesteps = data.shape[3]
+                timesteps = masks.shape[-1]
+            else:
+                timesteps = data.shape[-1]
+            
             for t in range(timesteps):
                 u = img_posp(data[:, :, :, t])
                 # uk= data[:, :, :, final_ts]
