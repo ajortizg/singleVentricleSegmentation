@@ -73,12 +73,3 @@ always use /parser/configPreprocessing.ini
     ```
     Save resulting folder to /data/singleVentricleData_prolongLinear_split.
 
-6. No longer required, data augmentation is now on the fly (i.e. during training).
-<s>Data augmentation only for training the CNN.
-    in parset set BASE_PATH_3D to /data/singleVentricleData_prolongLinear_split
-    ```
-    python ./dataset/preprocessing/preprocessing_data_augmentation.py
-    ```
-    Save resulting folder to /data/singleVentricleData_prolongLinear_split_xN,
-    where N is the number of new patients created per patient.</s>
-
