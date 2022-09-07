@@ -35,7 +35,7 @@ on windows:
 
 
 ## preprocessing 
-always use /parser/configPreprocessing.ini
+Always use /parser/configPreprocessing.ini
 
 1. possibly flip the original data
    in parser set BASE_PATH_3D to data/singleVentricleData
@@ -44,30 +44,30 @@ always use /parser/configPreprocessing.ini
     ```
     save resulting folder to /data/singleVentricleData_flip
 
-2. Data normalization
-    in parset set BASE_PATH_3D to /data/singleVentricleData_flip
-    ```
-    python ./dataset/preprocessing/preprocessing_normalization.py
-    ```
-    Save resulting folder to /data/singleVentricleData_norm
-
-3. cut the (possibly flipped) original data
+2. cut the (possibly flipped) original data
     in parser set BASE_PATH_3D to data/singleVentricleData_norm
     ```
     python ./dataset/preprocessing/preprocessing_cutting.py
     ```
     save resulting folder to /data/singleVentricleData_cut
 
-4. resize the (flipped and cutted) data
+3. resize the (flipped and cutted) data
     in parser set BASE_PATH_3D to data/singleVentricleData_cut
     ```
     python ./dataset/preprocessing/preprocessing_prolongation.py
     ```
-    Save resulting folder to /data/singleVentricleData_prolong.
+    Save resulting folder to /data/singleVentricleData_prol.
     Note that this depends on the Interpolationtype and Bondarytype.
 
-5. split the dataset for training the CNN in validation and training sets, 
-    in parser set BASE_PATH_3D to data/singleVentricleData_prolongLinear
+4. Data normalization
+    in parset set BASE_PATH_3D to /data/singleVentricleData_prol
+    ```
+    python ./dataset/preprocessing/preprocessing_normalization.py
+    ```
+    Save resulting folder to /data/singleVentricleData_norm
+
+5. split the dataset for training the CNN in training, validation and testing sets, 
+    in parser set BASE_PATH_3D to data/singleVentricleData_prol
     ```
     python ./dataset/preprocessing/preprocessing_split.py
     ```
