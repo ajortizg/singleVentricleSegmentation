@@ -67,9 +67,9 @@ Always use /parser/configPreprocessing.ini
     Save resulting folder to /data/singleVentricleData_norm
 
 5. split the dataset for training the CNN in training, validation and testing sets, 
-    in parser set BASE_PATH_3D to data/singleVentricleData_prol
+    in parser set BASE_PATH_3D to data/singleVentricleData_norm
     ```
     python ./dataset/preprocessing/preprocessing_split.py
     ```
-    Save resulting folder to /data/singleVentricleData_prolongLinear_split.
+    Save resulting folder to /data/singleVentricleData_split.
 
