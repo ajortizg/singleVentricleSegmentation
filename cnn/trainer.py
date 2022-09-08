@@ -62,6 +62,12 @@ class Trainer:
     def last_test_accuracy(self):
         return self.mean_epoch_stat['test_acc'][-1][0]
 
+    def last_train_loss(self):
+        return self.mean_epoch_stat['train_loss'][-1][0]
+
+    def last_val_loss(self):
+        return self.mean_epoch_stat['val_loss'][-1][0]
+
     def train_epoch(self, train_loader):
         self.net.train()
         total_loss = (0.0, 0.0, 0.0, 0.0, 0.0)
@@ -263,11 +269,11 @@ class Trainer:
             'epoch': e,
             'model_state_dict': self.net.state_dict(),
             'optimizer_state_dict': self.opt.state_dict(),
-            'train_loss': self.mean_epoch_stat['train_loss'][-1][0],
-            'train_acc': self.mean_epoch_stat['train_acc'][-1][0],
-            'val_loss': self.mean_epoch_stat['val_loss'][-1][0],
-            'val_acc': self.mean_epoch_stat['val_acc'][-1][0],
-            'test_acc': self.mean_epoch_stat['test_acc'][-1][0]
+            'train_loss': self.last_train_loss(),
+            'train_acc': self.last_train_accuracy(),
+            'val_loss': self.last_val_loss(),
+            'val_acc': self.last_val_accuracy(),
+            'test_acc': self.last_test_accuracy()
         }, osp.join(save_dir, filename))
 
     def save_stats(self, save_dir):
@@ -305,8 +311,8 @@ class Trainer:
         b = np.random.randint(mts.shape[0])
         mt = mts[b]
         gt = gts[b]
-        mt = mt.swapaxes_(0, 1)
-        gt = gt.swapaxes_(0, 1)
+        mt = mt.swapaxes(0, 1)
+        gt = gt.swapaxes(0, 1)
         error = torch.abs(gt - mt)
         self.writer.add_images(f'{tag}/gt', gt)
         self.writer.add_images(f'{tag}/est', mt)
@@ -400,8 +406,8 @@ class Trainer:
 
         hd0, hdk = self.compute_hd(mts, mtts)
         mean_hd = 0.5 * (hd0 + hdk)
-        metrics = {'mean_acc': mean_acc, 'acc_es': acck, 'acc_ed': acc0,
-                   'mean_hd': mean_hd, 'hd_es': hdk, 'hd_ed': hd0}
+        metrics = {'mean_acc': mean_acc, 'acc_fwd': acck, 'acc_bwd': acc0,
+                   'mean_hd': mean_hd, 'hd_fwd': hdk, 'hd_bwd': hd0}
         return metrics, mts, mtts
 
     @torch.no_grad()

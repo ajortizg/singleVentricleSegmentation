@@ -36,7 +36,7 @@ if __name__ == "__main__":
     # Create train and validation datasets
     train_transforms = T6.Compose([
         T6.RandomRotate(P['rot_prob'], P['rot_range_x'], P['rot_range_y'], P['rot_range_z'], boundary=P['rot_boundary'], clip_interval=P['clip_interval']),
-        T6.ElasticDeformation(P['ed_prob'], P['ed_sigma_range'], P['ed_grid'], P['ed_boundary'], P['ed_prefilter'], P['ed_axis'], P['clip_interval']),
+        T6.ElasticDeformation(P['ed_prob'], P['ed_sigma_range'], P['ed_grid'], P['ed_boundary'], P['ed_prefilter'], P['ed_axis'], P['ed_order'], P['clip_interval']),
         T6.RandomVerticalFlip(P['vflip_prob']),
         T6.RandomHorizontalFlip(P['hflip_prob']),
         T6.RandomDepthFlip(P['dflip_prob']),
@@ -87,6 +87,7 @@ if __name__ == "__main__":
 
     pbar = tqdm(total=P['epochs'])
     trainer = Trainer(net, opt, pbar, config, device, writer, logger)
+    patience = P['patience']
     tic = time.time()
 
     for e in range(P['epochs']):
@@ -101,7 +102,7 @@ if __name__ == "__main__":
         pbar.update(1)
 
         # early stop
-        if trainer.epochs_since_last_improvement > P['patience']:
+        if trainer.epochs_since_last_improvement > patience:
             logger.info(f'Early stop at epoch: {e}')
             break
 

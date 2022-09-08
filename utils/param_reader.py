@@ -74,9 +74,10 @@ def train_params(config):
         'ed_boundary': config.get('DATA_AUGMENTATION', 'ED_BOUNDARY'),
         'ed_prefilter': config.getboolean('DATA_AUGMENTATION', 'ED_USE_PREFILTER'),
         'ed_axis': config.get('DATA_AUGMENTATION', 'ED_AXIS'),
+        'ed_order': config.getint('DATA_AUGMENTATION', 'ED_ORDER'),
 
         # Clip
-        'clip_interval': clip_interval        
+        'clip_interval': clip_interval
     }
     return params
 
@@ -85,6 +86,7 @@ def eval_params(config):
     params = {
         'trained_model_dir': config.get('DATA', 'TRAINED_MODEL_DIR'),
         'model_name': config.get('DATA', 'MODEL_NAME'),
+        'out_path': config.get('DATA', 'OUTPUT_PATH'),
         'save_imgs': config.getboolean('DEBUG', 'SAVE_IMGS'),
         'save_nifti': config.getboolean('DEBUG', 'SAVE_NIFTI'),
         'workers': config.getint('PARAMETERS', 'NUM_WORKERS'),

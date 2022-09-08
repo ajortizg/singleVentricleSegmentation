@@ -309,7 +309,7 @@ class RandomRotate:
 
 
 class ElasticDeformation:
-    def __init__(self, p, sigma_range, points, boundary, prefilter, axis, clip_interval=(0.0, 1.0)):
+    def __init__(self, p, sigma_range, points, boundary, prefilter, axis, order=3, clip_interval=(0.0, 1.0)):
         self.p = p
         self.sigma_range = sigma_range
         self.points = points
@@ -317,6 +317,7 @@ class ElasticDeformation:
         self.prefilter = prefilter
         self.axis_str = axis
         self.clip_interval = clip_interval
+        self.order = order
 
     def __call__(self, img4d, ms, md, ff, bf, masks):
         if np.random.rand() < self.p:
@@ -328,7 +329,7 @@ class ElasticDeformation:
             [img4d_d, ms_d, md_d, ff_d, bf_d] = ed.deform_random_grid([img4d, ms, md, ff, bf], sigma,
                                                                       points=self.points, mode=self.boundary,
                                                                       prefilter=self.prefilter,
-                                                                      axis=axis)
+                                                                      axis=axis, order=self.order)
             img4d_d = np.clip(img4d_d, self.clip_interval[0], self.clip_interval[1])
             return img4d_d, ms_d, md_d, ff_d, bf_d, masks
         else:
