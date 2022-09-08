@@ -91,8 +91,8 @@ class Evalautor:
         self.pbar = tqdm(total=1) if self.finetuning else tqdm(total=len(self.dset))
         self.trainer = Trainer(self.net, None, self.pbar, self.config_train, self.device, None, self.logger, display_prob=0)
 
-    def evaluate(self, save_report=True):
-        self.df = pd.DataFrame()
+    def evaluate(self):
+        self.report = pd.DataFrame()
 
         if self.finetuning:
             self.finetuned_data()
@@ -102,10 +102,10 @@ class Evalautor:
                 self.prepare_data(data)
                 self.evaluate_patient(i)
 
-        if save_report:
-            self.df = self.df.round(3)
-            self.logger.info(self.df.mean(axis=0, numeric_only=True))
-            self.df.to_excel(osp.join(self.save_dir, 'report.xlsx'), index=False)
+    def save_report(self, filename='report.xlsx', decimals=3):
+        self.report = self.report.round(decimals)
+        self.logger.info(self.report.mean(axis=0, numeric_only=True))
+        self.report.to_excel(osp.join(self.save_dir, filename), index=False)
 
     def evaluate_patient(self, idx):
         if self.is_testset:
@@ -129,7 +129,7 @@ class Evalautor:
             dictrow['flow_' + k] = v
 
         dfrow = pd.DataFrame(dictrow, index=[idx])
-        self.df = pd.concat([dfrow, self.df])
+        self.report = pd.concat([dfrow, self.report])
 
     def finetuned_data(self):
         for data in self.loader:
@@ -146,6 +146,8 @@ class Evalautor:
         self.bf = data[8].to(self.device)
         self.timesfwd = data[5]
         self.timesbwd = data[6]
+
+        self.pbar.set_postfix_str(f'P: {self.cur_patient}')
 
         # Load whole cardiac cycle masks for test dataset
         if self.is_testset:

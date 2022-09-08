@@ -17,7 +17,6 @@ if __name__ == "__main__":
 
     config = configparser.ConfigParser()
     config.read('parser/configCNNEval.ini')
-
     P = param_reader.eval_params(config)
 
     save_dir = plots.createSaveDirectory(P['out_path'], 'EVAL')
@@ -25,4 +24,5 @@ if __name__ == "__main__":
     logger = plots.create_logger(save_dir)
 
     eval = Evalautor(P, device, logger, save_dir, verbose=True)
-    eval.evaluate(save_report=True)
+    eval.evaluate()
+    eval.save_report()
