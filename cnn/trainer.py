@@ -41,7 +41,7 @@ class Trainer:
                                 'val_loss': [(0, 0, 0, 0, 0)],
                                 'val_acc': [(0, 0, 0)],
                                 'test_acc': [(0, 0, 0)]}
-        self.best_val_acc = 0.0
+        self.best_acc = 0.0
         self.epochs_since_last_improvement = 0
 
         if loss_fn_type == 'mse':
@@ -228,7 +228,7 @@ class Trainer:
         self.logger.info('Epoch: %d' % e)
         for k, v in self.mean_epoch_stat.items():
             if len(v) > 0:
-                self.logger.info(f'\t{k}:\t{self.tuple_float_to_str(v[-1])}')
+                self.logger.info(f'\t{k}:\t{self.__tuple_float_to_str(v[-1])}')
 
         # Plot accuracy in tensorboard
         for i, (train, val, test) in enumerate(
@@ -244,19 +244,19 @@ class Trainer:
         # Plot learning rate in tensorboard
         self.writer.add_scalar('lr', self.opt.param_groups[0]['lr'], e)
 
-    def tuple_float_to_str(self, t, precision=3, sep=', '):
+    def __tuple_float_to_str(self, t, precision=3, sep=', '):
         return '{}'.format(sep.join(f'{x:.{precision}f}' for x in t))
 
-    def create_checkpoint(self, e, save_dir, when_better, verbose=False):
+    def create_checkpoint(self, e, save_dir, when_better, which='val', verbose=False):
         if when_better:
-            last_val_acc = self.last_val_accuracy()
-            if last_val_acc > self.best_val_acc:
-                self.best_val_acc = last_val_acc
+            last_acc = self.last_test_accuracy() if which == 'test' else self.last_val_accuracy()
+            if last_acc > self.best_acc:
+                self.best_acc = last_acc
                 self.epochs_since_last_improvement = 0
-                self.checkpoint(e, save_dir, 'best_val_checkpoint.pth')
+                self.checkpoint(e, save_dir, f'best_{which}_checkpoint.pth')
                 self.save_stats(save_dir)
                 if verbose:
-                    self.logger.info(f'\tVal chkpt updated with acc: {self.best_val_acc:,.3f}')
+                    self.logger.info(f'\t{which} chkpt updated with acc: {self.best_acc:,.3f}')
             else:
                 self.epochs_since_last_improvement += 1
         else:

@@ -36,6 +36,7 @@ def train_params(config):
         'pretrained': config.getboolean('PARAMETERS', 'PRETRAINED'),
         'checkpoint_file': config.get('PARAMETERS', 'CHECKPOINT_FILE'),
         'patience': config.getint('PARAMETERS', 'PATIENCE'),
+        'which': config.get('PARAMETERS', 'WHICH'),
 
         # Flip
         'vflip_prob': config.getfloat('DATA_AUGMENTATION', 'VERTICAL_FLIP_PROB'),

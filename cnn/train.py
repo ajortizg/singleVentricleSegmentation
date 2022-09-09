@@ -96,7 +96,7 @@ if __name__ == "__main__":
         trainer.test_epoch(test_loader, test_ds)
 
         trainer.log(e)
-        trainer.create_checkpoint(e, save_dir, when_better=True, verbose=True)
+        trainer.create_checkpoint(e, save_dir, when_better=True, which=P['which'], verbose=True)
 
         scheduler.step()
         pbar.update(1)

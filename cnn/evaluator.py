@@ -115,12 +115,12 @@ class Evalautor:
             self.cnn_res = self.trainer.val_patient(self.img4d, self.m0, self.mk, self.timesfwd, self.timesbwd, self.ff, self.bf, cnn=True)
             self.flow_res = self.trainer.val_patient(self.img4d, self.m0, self.mk, self.timesfwd, self.timesbwd, self.ff, self.bf, cnn=False)
 
-        self.update_dataframe(idx)
+        self.update_report(idx)
         self.save_imgs()
         self.save_nifti()
         self.pbar.update(1)
 
-    def update_dataframe(self, idx):
+    def update_report(self, idx):
         dictrow = {'Patient': self.cur_patient}
         for k, v in self.metrics(cnn=True).items():
             dictrow['cnn_' + k] = v

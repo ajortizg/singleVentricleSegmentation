@@ -36,7 +36,7 @@ if __name__ == "__main__":
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     transforms = T6.Compose([
-        T6.ElasticDeformation(1.0, (1, 3), 8, 'nearest', False, 'yx', order=1),
+        T6.ElasticDeformation(1.0, (1, 5), 5, 'nearest', False, 'yx', order=1),
         # T6.RandomRotate(1.0, (0, 360), (0, 360), (0, 360), 'border'),
         # T6.OneOf([
         #     T6.RandomDepthFlip(1.0),
