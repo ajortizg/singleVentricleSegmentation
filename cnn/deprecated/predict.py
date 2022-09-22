@@ -10,7 +10,7 @@ import nibabel as nib
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 from utils import plots
-import utils.quaternary_transforms as T
+import utils.transforms.senary_transforms as T6
 from cnn.dataset import SingleVentricleDataset, DatasetMode, LoadFlowMode
 from utils import cnn_utils
 
@@ -51,10 +51,11 @@ if __name__ == "__main__":
 
     DATASET = config_eval.get('DATA', 'DATASET')
 
-    data_transf = T.ComposeUnary([T.ToTensor()])
-    mask_transf = T.ComposeUnary([T.Round(th=0.5), T.ToTensor()])
+    transforms = T6.Compose([T6.ToTensor()])
+
+    transforms = T6.Compose([T6.ToTensor()])
     if DATASET == 'train':
-        ds = SingleVentricleDataset(config_train, DatasetMode.TRAIN, LoadFlowMode.PREDICT_OF, data_transf, mask_transf)
+        ds = SingleVentricleDataset(config_train, DatasetMode.TRAIN, LoadFlowMode.PREDICT_OF, transf)
     else:
         ds = SingleVentricleDataset(config_train, DatasetMode.VAL, LoadFlowMode.PREDICT_OF, data_transf, mask_transf)
     loader = DataLoader(ds, batch_size=1, shuffle=False, num_workers=NUM_WORKERS, collate_fn=cnn_utils.collate_fn)

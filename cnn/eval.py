@@ -23,6 +23,9 @@ if __name__ == "__main__":
     param_reader.save_config(config, save_dir, 'config.ini')
     logger = plots.create_logger(save_dir)
 
-    eval = Evalautor(P, device, logger, save_dir, verbose=True)
+    eval = Evalautor(config, P, device, logger, save_dir, verbose=True)
     eval.evaluate()
     eval.save_report()
+
+    if P['ccc']:
+        eval.complete_cardiac_cycle(config)

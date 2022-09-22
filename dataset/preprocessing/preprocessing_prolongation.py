@@ -16,6 +16,8 @@ from dataset import singleVentricleDataset
 
 from opticalFlow_cuda_ext import opticalFlow
 
+__all__ = ['prolongate_patient']
+
 
 def save_torch_to_nifty(file, saveDir, fileName, hdr_old, zooms="old"):
     # convert
@@ -53,6 +55,86 @@ def getMeshLength(config, NZ, NY, NX):
         LY = config.getfloat('PROLONGATION', "LenghtY")
         LX = config.getfloat('PROLONGATION', "LenghtX")
         return LZ, LY, LX
+
+
+def prolongate_patient(config, img4d, md, ms, df):
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    # interpolation
+    interType = config.get('PROLONGATION', 'InterpolationType')
+    InterpolationTypeCuda = None
+    if interType == "NEAREST":
+        InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_NEAREST
+    elif interType == "LINEAR":
+        InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_LINEAR
+    elif interType == "CUBIC_HERMITESPLINE":
+        InterpolationTypeCuda = opticalFlow.InterpolationType.INTERPOLATE_CUBIC_HERMITESPLINE
+    else:
+        raise Exception("wrong InterpolationType in configParser")
+    # boundary
+    boundaryType = config.get('PROLONGATION', 'BoundaryType')
+    BoundaryTypeCuda = None
+    if boundaryType == "NEAREST":
+        BoundaryTypeCuda = opticalFlow.BoundaryType.BOUNDARY_NEAREST
+    elif boundaryType == "MIRROR":
+        BoundaryTypeCuda = opticalFlow.BoundaryType.BOUNDARY_MIRROR
+    elif boundaryType == "REFLECT":
+        BoundaryTypeCuda = opticalFlow.BoundaryType.BOUNDARY_REFLECT
+    else:
+        raise Exception("wrong BoundaryType in configParser")
+
+    # prolongation size
+    NX_prolong = config.getint('PROLONGATION', 'NX_prolong')
+    NY_prolong = config.getint('PROLONGATION', 'NY_prolong')
+    NZ_prolong = config.getint('PROLONGATION', 'NZ_prolong')
+    LZ_prolong, LY_prolong, LX_prolong = getMeshLength(config, NZ_prolong, NY_prolong, NX_prolong)
+
+    use_th = config.getboolean('PROLONGATION', 'USE_TH')
+    bin_th = config.getfloat('PROLONGATION', 'BIN_TH')
+
+    # xprolongfac = np.zeros(len(dataSet))
+    # yprolongfac = np.zeros(len(dataSet))
+    # zprolongfac = np.zeros(len(dataSet))
+
+    # generate old mesh
+    NX, NY, NZ, NT = img4d.shape
+    LZ, LY, LX = getMeshLength(config, NZ, NY, NX)
+    meshInfo_old = opticalFlow.MeshInfo3D(NZ, NY, NX, LZ, LY, LX)
+
+    # generate new mesh for prolongation
+    meshInfo_new = opticalFlow.MeshInfo3D(NZ_prolong, NY_prolong, NX_prolong, LZ_prolong, LY_prolong, LX_prolong)
+    prolongationOp = opticalFlow.Prolongation3D(meshInfo_old, meshInfo_new, InterpolationTypeCuda, BoundaryTypeCuda)
+
+    # convert 4d file to pytorch tensor
+    img4d_zyxt = np.swapaxes(img4d, 0, 2)
+    img4d_zyxt = torch.from_numpy(img4d_zyxt).float().to(device)
+
+    # convert masks to pytorch tensor
+    md_zyx = np.swapaxes(md, 0, 2)
+    ms_zyx = np.swapaxes(ms, 0, 2)
+    md_zyx = torch.from_numpy(md_zyx).float().to(device)
+    ms_zyx = torch.from_numpy(ms_zyx).float().to(device)
+
+    # prolongate
+    prolongation_diastole = prolongationOp.forward(md_zyx)
+    prolongation_systole = prolongationOp.forward(ms_zyx)
+    prolongation_4d = prolongationOp.forwardVectorField(img4d_zyxt.contiguous())
+
+    # binarize prolonganted masks
+    if use_th:
+        prolongation_diastole = torch.where(prolongation_diastole > bin_th, 1.0, 0.0)
+        prolongation_systole = torch.where(prolongation_systole > bin_th, 1.0, 0.0)
+
+    img4d = np.swapaxes(prolongation_4d.cpu().detach().numpy(), 0, 2)
+    md = np.swapaxes(prolongation_diastole.cpu().detach().numpy(), 0, 2)
+    ms = np.swapaxes(prolongation_systole.cpu().detach().numpy(), 0, 2)
+
+    output_df = df.copy()
+    output_df['xprolongfac'] = NX_prolong / NX
+    output_df['yprolongfac'] = NY_prolong / NY
+    output_df['zprolongfac'] = NZ_prolong / NZ
+
+    return img4d, md, ms, output_df
 
 
 if __name__ == "__main__":
@@ -169,12 +251,16 @@ if __name__ == "__main__":
 
         # save as nifty
         saveDirPatient = plots.createSubDirectory(saveDirSegmentations, patient.name)
-        save_torch_to_nifty(prolongation_4d, saveDir4D, patient.name + ".nii.gz", patient.nii_header_xyzt,
-                            zooms=(zoomX * patient.NX / NX_prolong, zoomY * patient.NY / NY_prolong, zoomZ * patient.NZ / NZ_prolong, zoomT))
-        save_torch_to_nifty(prolongation_diastole, saveDirPatient, patient.name + "_Diastole_Labelmap.nii", patient.hdr_mask_diastole,
-                            zooms=(zoomX * patient.NX / NX_prolong, zoomY * patient.NY / NY_prolong, zoomZ * patient.NZ / NZ_prolong))
-        save_torch_to_nifty(prolongation_systole, saveDirPatient, patient.name + "_Systole_Labelmap.nii", patient.hdr_mask_systole,
-                            zooms=(zoomX * patient.NX / NX_prolong, zoomY * patient.NY / NY_prolong, zoomZ * patient.NZ / NZ_prolong))
+        save_torch_to_nifty(
+            prolongation_4d, saveDir4D, patient.name + ".nii.gz", patient.nii_header_xyzt,
+            zooms=(zoomX * patient.NX / NX_prolong, zoomY * patient.NY / NY_prolong, zoomZ * patient.NZ / NZ_prolong,
+                   zoomT))
+        save_torch_to_nifty(
+            prolongation_diastole, saveDirPatient, patient.name + "_Diastole_Labelmap.nii", patient.hdr_mask_diastole,
+            zooms=(zoomX * patient.NX / NX_prolong, zoomY * patient.NY / NY_prolong, zoomZ * patient.NZ / NZ_prolong))
+        save_torch_to_nifty(
+            prolongation_systole, saveDirPatient, patient.name + "_Systole_Labelmap.nii", patient.hdr_mask_systole,
+            zooms=(zoomX * patient.NX / NX_prolong, zoomY * patient.NY / NY_prolong, zoomZ * patient.NZ / NZ_prolong))
 
         if patient.full_cycle:
             for t in range(patient.NT):
@@ -183,8 +269,8 @@ if __name__ == "__main__":
                 if use_th:
                     mask_prolongated = torch.where(mask_prolongated > bin_th, 1.0, 0.0)
                 mask_filename = patient.masks_dirs[t].split('/')[-1]
-                save_torch_to_nifty(mask_prolongated, saveDirPatient, mask_filename, patient.nii_masks_load[t].header,
-                                    zooms=(zoomX * patient.NX / NX_prolong, zoomY * patient.NY / NY_prolong, zoomZ * patient.NZ / NZ_prolong))
+                save_torch_to_nifty(mask_prolongated, saveDirPatient, mask_filename, patient.nii_masks_load[t].header, zooms=(
+                    zoomX * patient.NX / NX_prolong, zoomY * patient.NY / NY_prolong, zoomZ * patient.NZ / NZ_prolong))
 
         #
         xprolongfac[index] = NX_prolong / patient.NX

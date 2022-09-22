@@ -5,6 +5,7 @@ from torch.utils.data import DataLoader
 import sys
 from tqdm import tqdm
 import pandas as pd
+import torch.nn.functional as F
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
@@ -20,7 +21,7 @@ __all__ = ['Evalautor']
 
 
 class Evalautor:
-    def __init__(self, params, device, logger, save_dir, verbose=False):
+    def __init__(self, config, params, device, logger, save_dir, verbose=False):
         self.P = params
         self.device = device
         self.logger = logger
@@ -31,7 +32,7 @@ class Evalautor:
             self.logger.info(f'Device: {self.device}')
 
         self.read_train_config()
-        self.load_data()
+        self.load_data(config)
         self.load_model()
 
         # Transformations for saving
@@ -43,10 +44,10 @@ class Evalautor:
     def read_train_config(self):
         if self.P['fine_tuning']:
             self.finetuning = True
-            config_tl = configparser.ConfigParser()
-            config_tl.read(osp.join(self.P['trained_model_dir'], 'config.ini'))
-            pretrained_dir = config_tl.get('DATA', 'PRETRAINED_DIR')
-            self.finetuned_patient = config_tl.get('DATA', 'PATIENT_NAME')
+            config_ft = configparser.ConfigParser()
+            config_ft.read(osp.join(self.P['trained_model_dir'], 'config.ini'))
+            pretrained_dir = config_ft.get('DATA', 'PRETRAINED_DIR')
+            self.finetuned_patient = config_ft.get('DATA', 'PATIENT_NAME')
 
             self.config_train = configparser.ConfigParser()
             self.config_train.read(osp.join(pretrained_dir, 'config.ini'))
@@ -54,26 +55,32 @@ class Evalautor:
             self.finetuned_patient = None
             self.finetuning = False
             self.config_train = configparser.ConfigParser()
-            self.config_train.read(
-                osp.join(self.P['trained_model_dir'], 'config.ini'))
+            self.config_train.read(osp.join(self.P['trained_model_dir'], 'config.ini'))
 
-    def load_data(self):
+    def load_data(self, config):
         transforms = T6.Compose([T6.ToTensor()])
         dsettype = self.P['dataset']
         self.is_testset = False
         if dsettype == 'train':
-            self.dset = SingleVentricleDataset(self.config_train, DatasetMode.TRAIN, LoadFlowMode.ED_ES, full_transforms=transforms)
+            self.dset = SingleVentricleDataset(config, DatasetMode.TRAIN,
+                                               LoadFlowMode.ED_ES, full_transforms=transforms)
         elif dsettype == 'val':
-            self.dset = SingleVentricleDataset(self.config_train, DatasetMode.VAL, LoadFlowMode.ED_ES, full_transforms=transforms)
+            self.dset = SingleVentricleDataset(config, DatasetMode.VAL,
+                                               LoadFlowMode.ED_ES, full_transforms=transforms)
         elif dsettype == 'test':
             self.is_testset = True
-            self.dset = SingleVentricleDataset(self.config_train, DatasetMode.TEST, LoadFlowMode.WHOLE_CYCLE, full_transforms=transforms)
+            self.dset = SingleVentricleDataset(config, DatasetMode.TEST,
+                                               LoadFlowMode.WHOLE_CYCLE, full_transforms=transforms)
+        elif dsettype == 'full':
+            self.dset = SingleVentricleDataset(config, DatasetMode.FULL,
+                                               LoadFlowMode.ED_ES, full_transforms=transforms)
         else:
             self.dset = None
             self.logger.info('Dataset not found: %s' % dsettype)
             sys.exit()
 
-        self.loader = DataLoader(self.dset, batch_size=1, shuffle=False, num_workers=self.P['workers'], collate_fn=collate_fn)
+        self.loader = DataLoader(self.dset, batch_size=1, shuffle=False,
+                                 num_workers=self.P['workers'], collate_fn=collate_fn)
         if self.verbose:
             self.logger.info('Dataset: %s' % dsettype)
 
@@ -89,7 +96,8 @@ class Evalautor:
 
         # Create trainer for prediction
         self.pbar = tqdm(total=1) if self.finetuning else tqdm(total=len(self.dset))
-        self.trainer = Trainer(self.net, None, self.pbar, self.config_train, self.device, None, self.logger, display_prob=0)
+        self.trainer = Trainer(self.net, None, self.pbar, self.config_train,
+                               self.device, None, self.logger, display_prob=0)
 
     def evaluate(self):
         self.report = pd.DataFrame()
@@ -109,11 +117,15 @@ class Evalautor:
 
     def evaluate_patient(self, idx):
         if self.is_testset:
-            self.cnn_res = self.trainer.test_patient(self.img4d, self.masks, self.timesfwd, self.timesbwd, self.ff, self.bf, cnn=True)
-            self.flow_res = self.trainer.test_patient(self.img4d, self.masks, self.timesfwd, self.timesbwd, self.ff, self.bf, cnn=False)
+            self.cnn_res = self.trainer.test_patient(
+                self.img4d, self.masks, self.timesfwd, self.timesbwd, self.ff, self.bf, cnn=True)
+            self.flow_res = self.trainer.test_patient(
+                self.img4d, self.masks, self.timesfwd, self.timesbwd, self.ff, self.bf, cnn=False)
         else:
-            self.cnn_res = self.trainer.val_patient(self.img4d, self.m0, self.mk, self.timesfwd, self.timesbwd, self.ff, self.bf, cnn=True)
-            self.flow_res = self.trainer.val_patient(self.img4d, self.m0, self.mk, self.timesfwd, self.timesbwd, self.ff, self.bf, cnn=False)
+            self.cnn_res = self.trainer.val_patient(
+                self.img4d, self.m0, self.mk, self.timesfwd, self.timesbwd, self.ff, self.bf, cnn=True)
+            self.flow_res = self.trainer.val_patient(
+                self.img4d, self.m0, self.mk, self.timesfwd, self.timesbwd, self.ff, self.bf, cnn=False)
 
         self.update_report(idx)
         self.save_imgs()
@@ -152,7 +164,8 @@ class Evalautor:
         # Load whole cardiac cycle masks for test dataset
         if self.is_testset:
             self.masks = data[4].to(self.device)
-            self.timesfwd, self.timesbwd = self.dset.create_timeline(self.timesfwd[0], self.timesbwd[0], self.masks.shape[-1])
+            self.timesfwd, self.timesbwd = self.dset.create_timeline(
+                self.timesfwd[0], self.timesbwd[0], self.masks.shape[-1])
         else:
             self.masks = None
 
@@ -238,3 +251,50 @@ class Evalautor:
             hdr = self.loader.dataset.header(0)
             plots.save_nifti_mask(cnn_fms[t], hdr, fwd_dir, f'm_fwd_{st}.nii')
             plots.save_nifti_mask(cnn_bms[t], hdr, bwd_dir, f'm_bwd_{st}.nii')
+
+    def complete_cardiac_cycle(self, config):
+        transforms = T6.Compose([T6.ToTensor()])
+        self.dset = SingleVentricleDataset(config, DatasetMode.FULL, LoadFlowMode.WHOLE_CYCLE, full_transforms=transforms)
+        self.loader = DataLoader(self.dset, batch_size=1, shuffle=False, num_workers=self.P['workers'], collate_fn=collate_fn)
+
+        idx, found = self.dset.index_for_patient(self.P['patient_name'])
+        if not found:
+            self.logger.info('Patient not found %s' % self.P['patient_name'])
+            sys.exit()
+
+        mts, mtts = self.trainer.cardiac_cycle_propagation(self.dset, self.loader)
+        mts = mts.squeeze(0)
+        mts = torch.permute(mts, (4, 0, 1, 2, 3))
+        mtts = mtts.squeeze(0)
+        mtts = torch.permute(mtts, (4, 0, 1, 2, 3))
+
+        cut_shape = self.dset.cutted_shape(0)
+        orig_shape = self.dset.orig_shape(0)
+        z_min, z_max, y_min, y_max, x_min, x_max = self.dset.cut_bounds(0)
+
+        mts = F.interpolate(mts, size=cut_shape, align_corners=True, mode='trilinear')
+        mtts = F.interpolate(mtts, size=cut_shape, align_corners=True, mode='trilinear')
+
+        orig_mts = torch.zeros(size=(*mts.shape[:2], *orig_shape), dtype=mts.dtype, device=self.device)
+        orig_mts[..., z_min:z_max + 1, y_min:y_max + 1, x_min:x_max + 1] = mts
+        orig_mtts = torch.zeros_like(orig_mts)
+        orig_mtts[..., z_min:z_max + 1, y_min:y_max + 1, x_min:x_max + 1] = mtts
+
+        # Create save dirs
+        patient_dir = plots.createSubDirectory(self.save_dir, self.cur_patient)
+        fwd_dir = plots.createSubDirectory(patient_dir, 'ccc/fwd')
+        bwd_dir = plots.createSubDirectory(patient_dir, 'ccc/bwd')
+
+        ts = mts.shape[0]
+        mts = mts.squeeze()
+        mtts = mtts.squeeze()
+        mts = torch.where(mts > 0.5, 1.0, 0.0)
+        mtts = torch.where(mtts > 0.5, 1.0, 0.0)
+
+        hdr = self.dset.header(0)
+        for t in range(ts):
+            plots.save_slices(mts[t], f'mask_t{t}.png', fwd_dir)
+            plots.save_slices(mtts[t], f'mask_t{t}.png', bwd_dir)
+
+            plots.save_nifti_mask(mts[t], hdr, fwd_dir, f'mask_{t}.nii')
+            plots.save_nifti_mask(mtts[t], hdr, bwd_dir, f'mask_{t}.nii')

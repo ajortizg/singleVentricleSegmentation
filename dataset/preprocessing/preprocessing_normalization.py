@@ -20,6 +20,8 @@ from utils import plots
 from dataset.singleVentricleDataset import SingleVentricleDataset, SingleVentriclePatient
 import utils.transforms.unary_transforms as T1
 
+__all__ = ['normalize_patient']
+
 
 def save_np_to_nifty(file: np.array, saveDir: str, fileName: str, hdr_old):
     # header
@@ -38,12 +40,45 @@ def save_np_to_nifty(file: np.array, saveDir: str, fileName: str, hdr_old):
 def save_data(patient: SingleVentriclePatient, saveDir4D: str, saveDirSegmentations: str):
     saveDirPatient = plots.createSubDirectory(saveDirSegmentations, patient.name)
     save_np_to_nifty(patient.nii_data_xyzt, saveDir4D, patient.name + ".nii.gz", patient.nii_header_xyzt)
-    save_np_to_nifty(patient.nii_mask_diastole_xyz, saveDirPatient, patient.name + "_Diastole_Labelmap.nii", patient.hdr_mask_diastole)
-    save_np_to_nifty(patient.nii_mask_systole_xyz, saveDirPatient, patient.name + "_Systole_Labelmap.nii", patient.hdr_mask_systole)
+    save_np_to_nifty(patient.nii_mask_diastole_xyz, saveDirPatient,
+                     patient.name + "_Diastole_Labelmap.nii", patient.hdr_mask_diastole)
+    save_np_to_nifty(patient.nii_mask_systole_xyz, saveDirPatient,
+                     patient.name + "_Systole_Labelmap.nii", patient.hdr_mask_systole)
 
     if patient.full_cycle:
         for t in range(patient.NT):
-            save_np_to_nifty(patient.nii_masks_xyz[t], saveDirPatient, patient.masks_dirs[t].split('/')[-1], patient.nii_masks_load[t].header)
+            save_np_to_nifty(
+                patient.nii_masks_xyz[t],
+                saveDirPatient, patient.masks_dirs[t].split('/')[-1],
+                patient.nii_masks_load[t].header)
+
+
+def normalize_patient(config, img4d, md, ms, td, ts):
+    minmax_norm = config.getboolean('NORMALIZATION', 'MIN_MAX_NORM')
+
+    # normalize data for newPatient
+    if minmax_norm:
+        norm_fn = T1.Normalize()
+        img4d_norm = norm_fn(img4d)
+        print(np.min(img4d_norm), np.max(img4d_norm))
+    else:
+        per95 = np.percentile(img4d, 95)
+        img4d_clipped = np.clip(img4d, 0, per95)
+
+        avg_diastole = np.mean(img4d_clipped[..., td], where=md.astype('bool'))
+        avg_systole = np.mean(img4d_clipped[..., ts], where=ms.astype('bool'))
+        avg = 0.5 * (avg_diastole + avg_systole)
+
+        # normalization n(I) = a I/sqrt(1+beta I**2)
+        norm_a = math.sqrt(per95 * per95 - avg * avg) / (math.sqrt(3) * per95 * avg)
+        norm_b = (per95 * per95 - 4. * avg * avg) / (3. * per95 * per95 * avg * avg)
+        img4d_norm = norm_a * img4d_clipped / np.sqrt(1 + norm_b * img4d_clipped**2)
+        print("norm(per95) = ", norm_a * per95 / math.sqrt(1 + norm_b * per95 * per95))
+        print("norm(avg) = ", norm_a * avg / math.sqrt(1 + norm_b * avg * avg))
+
+        print(np.min(img4d_norm), np.max(img4d_norm))
+    
+    return img4d_norm
 
 
 if __name__ == "__main__":
@@ -89,8 +124,10 @@ if __name__ == "__main__":
             # print("old min, max :", np.min(patient.nii_data_zyxt), np.max(patient.nii_data_zyxt) )
             # print("clip min, max :", np.min(new_nii_data_zyxt), np.max(new_nii_data_zyxt) )
 
-            avg_diastole = np.mean(new_nii_data_zyxt[:, :, :, patient.tDiastole], where=patient.nii_mask_diastole.astype('bool'))
-            avg_systole = np.mean(new_nii_data_zyxt[:, :, :, patient.tSystole], where=patient.nii_mask_systole.astype('bool'))
+            avg_diastole = np.mean(new_nii_data_zyxt[:, :, :, patient.tDiastole],
+                                   where=patient.nii_mask_diastole.astype('bool'))
+            avg_systole = np.mean(new_nii_data_zyxt[:, :, :, patient.tSystole],
+                                  where=patient.nii_mask_systole.astype('bool'))
             avg = 0.5 * (avg_diastole + avg_systole)
 
             # print("avg = ", avg, "per95 = ", per95)

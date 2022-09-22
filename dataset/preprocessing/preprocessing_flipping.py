@@ -14,6 +14,8 @@ sys.path.append(ROOT_DIR)
 from utils import plots
 from dataset.singleVentricleDataset import SingleVentricleDataset
 
+__all__ = ['flip_patient']
+
 
 def flip_mask(patient_name, mask_xyz, flip_all):
     mask_zyx = np.swapaxes(mask_xyz, 0, 2)
@@ -37,6 +39,27 @@ def save_np_to_nifty(file, saveDir, fileName, hdr_old):
     # save
     outputFile = os.path.sep.join([saveDir, fileName])
     nib.save(ni_img, outputFile)
+
+
+def flip_patient(config, name, md, ms, df):
+    flip_all = set(config.get('FLIPPING', 'flip_all').replace('{', '').replace('}', '').replace('\n', '').split(','))
+    mask_diastole_xyz_flip = flip_mask(name, md, flip_all)
+    mask_systole_xyz_flip = flip_mask(name, ms, flip_all)
+
+    if name in flip_all:
+        xflip = 1
+        yflip = 1
+        zflip = 1
+    else:
+        xflip = 0
+        yflip = 1
+        zflip = 0
+
+    output_df = df.copy()
+    output_df['xflip'] = xflip
+    output_df['yflip'] = yflip
+    output_df['zflip'] = zflip
+    return mask_diastole_xyz_flip, mask_systole_xyz_flip, output_df
 
 
 if __name__ == "__main__":
@@ -81,8 +104,10 @@ if __name__ == "__main__":
         # save to nifty
         saveDirPatient = plots.createSubDirectory(saveDirSegmentations, patient.name)
         save_np_to_nifty(patient.nii_data_xyzt, saveDir4D, patient.name + ".nii.gz", patient.nii_header_xyzt)
-        save_np_to_nifty(nii_mask_diastole_xyz_flip, saveDirPatient, patient.name + "_Diastole_Labelmap.nii", patient.hdr_mask_diastole)
-        save_np_to_nifty(nii_mask_systole_xyz_flip, saveDirPatient, patient.name + "_Systole_Labelmap.nii", patient.hdr_mask_systole)
+        save_np_to_nifty(nii_mask_diastole_xyz_flip, saveDirPatient,
+                         patient.name + "_Diastole_Labelmap.nii", patient.hdr_mask_diastole)
+        save_np_to_nifty(nii_mask_systole_xyz_flip, saveDirPatient,
+                         patient.name + "_Systole_Labelmap.nii", patient.hdr_mask_systole)
 
         # flip masks for the whole cycle
         if patient.full_cycle:

@@ -36,7 +36,7 @@ if __name__ == "__main__":
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     transforms = T6.Compose([
-        T6.ElasticDeformation(1.0, (1, 5), 5, 'nearest', False, 'yx', order=1),
+        # T6.ElasticDeformation(1.0, (1, 5), 5, 'nearest', False, 'yx', order=1),
         # T6.RandomRotate(1.0, (0, 360), (0, 360), (0, 360), 'border'),
         # T6.OneOf([
         #     T6.RandomDepthFlip(1.0),
@@ -47,13 +47,21 @@ if __name__ == "__main__":
         T6.ToTensor()
     ])
 
-    train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, LoadFlowMode.ED_ES, full_transforms=transforms)
-    val_ds = SingleVentricleDataset(config, DatasetMode.VAL, LoadFlowMode.ED_ES, full_transforms=transforms)
-    test_ds = SingleVentricleDataset(config, DatasetMode.TEST, LoadFlowMode.ED_ES, full_transforms=transforms)
+    try:
+        train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, LoadFlowMode.ED_ES, full_transforms=transforms)
+        val_ds = SingleVentricleDataset(config, DatasetMode.VAL, LoadFlowMode.ED_ES, full_transforms=transforms)
+        test_ds = SingleVentricleDataset(config, DatasetMode.TEST, LoadFlowMode.ED_ES, full_transforms=transforms)
 
-    train_loader = DataLoader(train_ds, batch_size=1, shuffle=False, num_workers=num_workers, collate_fn=collate_fn)
-    val_loader = DataLoader(val_ds, batch_size=1, shuffle=False, num_workers=num_workers, collate_fn=collate_fn)
-    test_loader = DataLoader(test_ds, batch_size=1, shuffle=False, num_workers=num_workers, collate_fn=collate_fn)
+        train_loader = DataLoader(train_ds, batch_size=1, shuffle=False, num_workers=num_workers, collate_fn=collate_fn)
+        val_loader = DataLoader(val_ds, batch_size=1, shuffle=False, num_workers=num_workers, collate_fn=collate_fn)
+        test_loader = DataLoader(test_ds, batch_size=1, shuffle=False, num_workers=num_workers, collate_fn=collate_fn)
+        loaders = [train_loader, val_loader, test_loader]
+        pbar = tqdm(total=len(train_ds) + len(val_ds) + len(test_ds))
+    except FileNotFoundError:
+        full_ds = SingleVentricleDataset(config, DatasetMode.FULL, LoadFlowMode.ED_ES, full_transforms=transforms)
+        full_loader = DataLoader(full_ds, batch_size=1, shuffle=False, num_workers=num_workers, collate_fn=collate_fn)
+        loaders = [full_loader]
+        pbar = tqdm(total=len(full_ds))
 
     save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'Warping')
     plots.save_config(config, save_dir, filename='config.ini')
@@ -61,7 +69,6 @@ if __name__ == "__main__":
     csv_file = open(osp.join(save_dir, 'metrics.csv'), 'w')
     writer = csv.writer(csv_file)
     writer.writerow(['Patient', 'dc_0', 'dc_k', 'hd_0', 'hd_k'])
-    pbar = tqdm(total=len(train_ds) + len(val_ds) + len(test_ds))
 
     rre_transf = T1.Compose([T1.Resize(save_size), T1.Round(th=0.5), T1.Erode()])
     rr_transf = T1.Compose([T1.Resize(save_size), T1.Round(th=0.5)])
@@ -69,7 +76,7 @@ if __name__ == "__main__":
 
     metrics = {'dc_0': [], 'dc_k': [], 'hd_0': [], 'hd_k': []}
 
-    for loader in [train_loader, val_loader, test_loader]:
+    for loader in loaders:
         for i, (pnames, imgs4d, m0, mk, _, times_fwd, times_bwd, ff, bf) in enumerate(loader):
             imgs4d = imgs4d.to(device)
             m0 = m0.to(device)

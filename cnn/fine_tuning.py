@@ -39,21 +39,20 @@ if __name__ == "__main__":
     config.read('parser/configFineTuning.ini')
     P = param_reader.fine_tuning_params(config)
 
-    config_train = configparser.ConfigParser()
-    config_train.read(osp.join(P['pretrained_model_dir'], 'config.ini'))
-
     # Create dataset and loader
     transforms = T6.Compose([T6.ToTensor()])
 
     if P['dataset'] == 'train':
-        train_ds = SingleVentricleDataset(config_train, DatasetMode.TRAIN, LoadFlowMode.ED_ES, full_transforms=transforms)
+        train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, LoadFlowMode.ED_ES, full_transforms=transforms)
     elif P['dataset'] == 'val':
-        train_ds = SingleVentricleDataset(config_train, DatasetMode.VAL, LoadFlowMode.ED_ES, full_transforms=transforms)
+        train_ds = SingleVentricleDataset(config, DatasetMode.VAL, LoadFlowMode.ED_ES, full_transforms=transforms)
     elif P['dataset'] == 'test':
-        train_ds = SingleVentricleDataset(config_train, DatasetMode.TEST, LoadFlowMode.ED_ES, full_transforms=transforms)
-        test_ds = SingleVentricleDataset(config_train, DatasetMode.TEST, LoadFlowMode.WHOLE_CYCLE, full_transforms=transforms)
+        train_ds = SingleVentricleDataset(config, DatasetMode.TEST, LoadFlowMode.ED_ES, full_transforms=transforms)
+        test_ds = SingleVentricleDataset(config, DatasetMode.TEST, LoadFlowMode.WHOLE_CYCLE, full_transforms=transforms)
         test_loader = DataLoader(test_ds, batch_size=P['batch_size'], shuffle=False, num_workers=P['num_workers'], collate_fn=collate_fn)
-    
+    elif P['dataset'] == 'full':
+        train_ds = SingleVentricleDataset(config, DatasetMode.FULL, LoadFlowMode.ED_ES, full_transforms=transforms)
+        
     train_loader = DataLoader(train_ds, batch_size=P['batch_size'], shuffle=False, num_workers=P['num_workers'], collate_fn=collate_fn)
 
     save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'FT')
@@ -62,6 +61,8 @@ if __name__ == "__main__":
     plots.save_config(config, save_dir, 'config.ini')
 
     # Create model and load weights
+    config_train = configparser.ConfigParser()
+    config_train.read(osp.join(P['pretrained_model_dir'], 'config.ini'))
     net = create_model(config_train, logger).to(device)
     net = torch.nn.DataParallel(net, device_ids=np.arange(P['num_gpus']).tolist())
     checkpoint = torch.load(osp.join(P['pretrained_model_dir'], P['weights_filename']))
@@ -106,11 +107,14 @@ if __name__ == "__main__":
 
         if P['dataset'] == 'test':
             pbar.set_postfix_str(f'Test: {test_data[0][0]}')
-            trainer.test_patient(test_imgs4d, test_masks, test_times_fwd, test_times_bwd, test_ff, test_bf, cnn=True)
+            trainer.test_patient(test_imgs4d, test_masks, test_times_fwd, test_times_bwd, test_ff, test_bf, cnn=True, hd=False)
                
         trainer.log(e)
         scheduler.step()
         pbar.update(1)
+
+        if e % 20 == 0:
+            trainer.create_checkpoint(e, save_dir, when_better=False)
 
     toc = time.time()
     logger.info('\nTotal time taken to train the model: {:.4f}s'.format(toc - tic))

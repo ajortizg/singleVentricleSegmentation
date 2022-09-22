@@ -95,7 +95,9 @@ def eval_params(config):
         'fine_tuning': config.getboolean('DATA', 'FINE_TUNING'),
         'save_nz': config.getint('PARAMETERS', 'save_NZ'),
         'save_ny': config.getint('PARAMETERS', 'save_NY'),
-        'save_nx': config.getint('PARAMETERS', 'save_NX')
+        'save_nx': config.getint('PARAMETERS', 'save_NX'),
+        'ccc': config.getboolean('PARAMETERS', 'PREDICT_CARDIAC_CYCLE'),
+        'patient_name': config.get('DATA', 'PATIENT_NAME')
     }
     return params
 

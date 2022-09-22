@@ -187,6 +187,42 @@ class Trainer:
         self.mean_epoch_stat['test_acc'].append(avg_acc)
         return total_acc
 
+    @torch.no_grad()
+    def cardiac_cycle_propagation(self, dset, loader):
+        self.net.eval()
+        steps = len(loader)
+        if steps == 0:
+            return None
+
+        for i, (_, img4d, m0, mk, _, times_fwd, times_bwd, ff, bf) in enumerate(loader):
+            self.pbar.set_postfix_str(f'ccc: {i+1}/{steps}')
+            img4d = img4d.to(self.device)
+            m0 = m0.to(self.device)
+            mk = mk.to(self.device)
+            ff = ff.to(self.device)
+            bf = bf.to(self.device)
+
+            BS, NZ, NY, NX, _, timesteps = ff.shape
+            times_fwd, times_bwd = dset.create_timeline(times_fwd[0], times_bwd[0], timesteps)
+            warp = WarpCNN(self.config, NZ, NY, NX)
+            mts = torch.empty(size=(BS, 1, NZ, NY, NX, timesteps), device=self.device, dtype=m0.dtype)
+            mts[..., times_fwd[0]] = m0
+            mtts = torch.empty_like(mts)
+            mtts[..., times_bwd[0]] = mk
+
+            for t in range(timesteps - 1):
+                # Forward mask propagation
+                mt = warp(mts[..., times_fwd[t]], ff[..., t])
+                x = torch.cat((img4d[..., times_fwd[t + 1]], mt), dim=1)
+                mts[..., times_fwd[t + 1]], _ = self.net(x)
+
+                # Backward mask propagation
+                mtt = warp(mtts[..., times_bwd[t]], bf[..., t])
+                x = torch.cat((img4d[..., times_bwd[t + 1]], mtt), dim=1)
+                mtts[..., times_bwd[t + 1]], _ = self.net(x)
+
+        return mts, mtts
+
     def time_popagation(self, img4d, m0, mk, times_fwd, times_bwd, ff, bf, cnn=True):
         BS, NZ, NY, NX, CH, timesteps = ff.shape
         dtype = m0.dtype
@@ -238,7 +274,9 @@ class Trainer:
             self.writer.add_scalars(f'acc/a{i}', {'train': train, 'val': val, 'test': test}, e)
 
         # Plot loss in tensorboard
-        for i, (train, val) in enumerate(zip(self.mean_epoch_stat['train_loss'][-1], self.mean_epoch_stat['val_loss'][-1])):
+        for i, (train, val) in enumerate(
+            zip(self.mean_epoch_stat['train_loss'][-1],
+                self.mean_epoch_stat['val_loss'][-1])):
             self.writer.add_scalars(f'loss/l{i}', {'train': train, 'val': val}, e)
 
         # Plot learning rate in tensorboard
@@ -376,9 +414,9 @@ class Trainer:
         total_loss = l1 + l2 + l3 + l4
         return (total_loss, l1, l2, l3, l4)
 
-    def train_patient(self, imgs4d, m0s, mks, times_fwd, times_bwd, ff, bf):
+    def train_patient(self, img4d, m0, mk, timesfwd, timesbwd, ff, bf):
         self.net.train()
-        mts, mtts, mhs, mhhs = self.time_popagation(imgs4d, m0s, mks, times_fwd, times_bwd, ff, bf)
+        mts, mtts, mhs, mhhs = self.time_popagation(img4d, m0, mk, timesfwd, timesbwd, ff, bf)
         loss = self.compute_loss(mts, mtts, mhs, mhhs)
 
         self.opt.zero_grad()
@@ -411,7 +449,7 @@ class Trainer:
         return metrics, mts, mtts
 
     @torch.no_grad()
-    def test_patient(self, img4d, masks, times_fwd, times_bwd, ff, bf, cnn):
+    def test_patient(self, img4d, masks, times_fwd, times_bwd, ff, bf, cnn, hd=True):
         if cnn:
             self.net.eval()
 
@@ -454,8 +492,12 @@ class Trainer:
         accs_bwd = compute_meandice(mtts, masks)
         mean_acc_bwd = accs_bwd.mean().item()
 
-        hd_fwd = compute_hausdorff_distance(mts, masks).mean().item()
-        hd_bwd = compute_hausdorff_distance(mtts, masks).mean().item()
+        if hd:
+            hd_fwd = compute_hausdorff_distance(mts, masks).mean().item()
+            hd_bwd = compute_hausdorff_distance(mtts, masks).mean().item()
+        else:
+            hd_fwd = 0
+            hd_bwd = 0
 
         metrics = {'mean_acc': 0.5 * (mean_acc_fwd + mean_acc_bwd),
                    'mean_acc_fwd': mean_acc_fwd,

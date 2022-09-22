@@ -20,7 +20,7 @@ class OpticalFlowMode(Enum):
 proc_times = []
 
 
-def compute_optical_flow(ds: SingleVentricleDataset, idx: int, mode: OpticalFlowMode, save_dir: str, device: str, config, logger):
+def compute_optical_flow(ds: SingleVentricleDataset, idx: int, mode: OpticalFlowMode, save_dir: str, device: str, config, logger, direction):
     pname, data, _, _, _, init_ts, final_ts, _, _ = ds[idx]
     data = data.to(device)
     NZ, NY, NX, NT = data.shape
@@ -33,19 +33,22 @@ def compute_optical_flow(ds: SingleVentricleDataset, idx: int, mode: OpticalFlow
     p = torch.zeros([NZ, NY, NX, 3, 3]).float().to(device)
 
     original_NT = ds.get_original_NT(idx)
-    full_cycle = ds.full_cycle(idx)
-    if full_cycle:
-        logger.info(f'{pname}, full_cycle, {original_NT}')
+    # full_cycle = ds.full_cycle(idx)
+    if direction == 'cycle':
+        logger.info(f'{pname}, cycle, {original_NT}')
+        cycle = True
+    else:
+        cycle = False
 
     indices = None
     if mode == OpticalFlowMode.FORWARD:
-        if full_cycle:
+        if cycle:
             indices = torch.arange(0, original_NT + 1, 1)
             indices[-1] = 0
         else:
             indices = torch.arange(init_ts, final_ts + 1, 1)
     elif mode == OpticalFlowMode.BACKWARD:
-        if full_cycle:
+        if cycle:
             indices = torch.arange(original_NT - 1, -2, -1)
             indices[-1] = original_NT - 1
         else:
@@ -84,8 +87,9 @@ if __name__ == "__main__":
     config.read('parser/configTVL1OF3D.ini')
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-    mode_str = config.get('PARAMETERS', 'mode')
-    mode = OpticalFlowMode.FORWARD if mode_str == 'Forward' else OpticalFlowMode.BACKWARD
+    mode_str = config.get('PARAMETERS', 'mode').lower()
+    mode = OpticalFlowMode.FORWARD if mode_str == 'forward' else OpticalFlowMode.BACKWARD
+    direction = config.get('PARAMETERS', 'direction').lower()
 
     # create save directory
     save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), f'TVL1OF3D{mode_str}')
@@ -100,11 +104,17 @@ if __name__ == "__main__":
 
     img_transforms = T1.Compose([T1.ToTensor()])
 
-    train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, LoadFlowMode.NO_LOAD, img_transforms)
-    val_ds = SingleVentricleDataset(config, DatasetMode.VAL, LoadFlowMode.NO_LOAD, img_transforms)
-    test_ds = SingleVentricleDataset(config, DatasetMode.TEST, LoadFlowMode.NO_LOAD, img_transforms)
+    try:
+        train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, LoadFlowMode.NO_LOAD, img_transforms)
+        val_ds = SingleVentricleDataset(config, DatasetMode.VAL, LoadFlowMode.NO_LOAD, img_transforms)
+        test_ds = SingleVentricleDataset(config, DatasetMode.TEST, LoadFlowMode.NO_LOAD, img_transforms)
+    except FileNotFoundError:
+        train_ds = None
+        val_ds = None
+        test_ds = None
+        full_ds = SingleVentricleDataset(config, DatasetMode.FULL, LoadFlowMode.NO_LOAD, img_transforms)
 
-    compute_all_patients = config.get('DATA', 'COMPUTE_ALL_PATIENTS')
+    compute_all_patients = config.getboolean('DATA', 'COMPUTE_ALL_PATIENTS')
 
     ds_list = []
     use_indices = config.getboolean('PARAMETERS', 'use_indices')
@@ -134,12 +144,13 @@ if __name__ == "__main__":
     else:
         pbar = tqdm(total=1)
         patient_name = config.get('DATA', 'PATIENT_NAME')
-        idx, found = train_ds.index_for_patient(patient_name)
+        idx, found = full_ds.index_for_patient(patient_name)
+
         if not found:
             logger.info(patient_name + " not found!")
             sys.exit()
         else:
-            compute_optical_flow(train_ds, idx, mode, save_dir, device, config, logger)
+            compute_optical_flow(full_ds, idx, mode, save_dir, device, config, logger, direction)
             pbar.update(1)
 
-    logger('Mean time taken to compute the optical flow: %.3f' % np.array(proc_times).mean())
+    logger.info('Mean time taken to compute the optical flow: %.3f' % np.array(proc_times).mean())

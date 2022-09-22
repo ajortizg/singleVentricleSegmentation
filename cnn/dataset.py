@@ -63,7 +63,8 @@ class SingleVentricleDataset(Dataset):
         self.load_flow = False
         if self.flow_mode != LoadFlowMode.NO_LOAD:
             self.load_flow = True
-            use_filtered_flow = config.getboolean('PARAMETERS', 'USE_MEDIAN_FILTERED_FLOW')
+            # use_filtered_flow = config.getboolean('PARAMETERS', 'USE_MEDIAN_FILTERED_FLOW')
+            use_filtered_flow = True
             self.flow_name = 'flow_m_it0.npy' if use_filtered_flow else 'flow_it0.npy'
             self.flow_level = 'it0'
             self.fwdof_dir = osp.sep.join([config.get('DATA', 'BASE_PATH_3D'), 'optical_flow', 'forward'])
@@ -77,7 +78,10 @@ class SingleVentricleDataset(Dataset):
         patient_name = df_row.loc[idx, 'Name']
         tsyst = df_row.loc[idx, 'Systole']
         tdias = df_row.loc[idx, 'Diastole']
-        full_cycle = df_row.loc[idx, 'Full']
+        try:
+            full_cycle = df_row.loc[idx, 'Full']
+        except:
+            full_cycle = False
 
         # Load 4D nifty
         img4d = nib.load(osp.join(self.volumes_path, patient_name + '.nii.gz'))
@@ -130,7 +134,8 @@ class SingleVentricleDataset(Dataset):
     def header(self, idx):
         df_row = self.df.iloc[[idx]]
         patient_name = df_row.loc[idx, 'Name']
-        mask_nii = nib.load(osp.sep.join([self.segmentations_path, patient_name, patient_name + '_Systole_Labelmap.nii']))
+        mask_nii = nib.load(osp.sep.join([self.segmentations_path, patient_name,
+                            patient_name + '_Systole_Labelmap.nii']))
         return mask_nii.header
 
     def systole_diastole_time(self, idx):
@@ -150,7 +155,32 @@ class SingleVentricleDataset(Dataset):
         return self.df.iloc[idx]['Systole']
 
     def full_cycle(self, idx):
-        return self.df.iloc[idx]['Full']
+        try:
+            full_cycle = self.df.iloc[idx]['Full']
+        except:
+            full_cycle = False
+        return full_cycle
+
+    def cutted_shape(self, idx):
+        NX = self.df.iloc[idx]['cut_NX']
+        NY = self.df.iloc[idx]['cut_NY']
+        NZ = self.df.iloc[idx]['cut_NZ']
+        return NZ, NY, NX
+
+    def orig_shape(self, idx):
+        NX = self.df.iloc[idx]['original_NX']
+        NY = self.df.iloc[idx]['original_NY']
+        NZ = self.df.iloc[idx]['original_NZ']
+        return NZ, NY, NX
+
+    def cut_bounds(self, idx):
+        x_min = self.df.iloc[idx]['x_min']
+        x_max = self.df.iloc[idx]['x_max']
+        y_min = self.df.iloc[idx]['y_min']
+        y_max = self.df.iloc[idx]['y_max']
+        z_min = self.df.iloc[idx]['z_min']
+        z_max = self.df.iloc[idx]['z_max']
+        return z_min, z_max, y_min, y_max, x_min, x_max
 
     def get_diastole_time(self, idx):
         return self.df.iloc[idx]['Diastole']
@@ -164,9 +194,12 @@ class SingleVentricleDataset(Dataset):
         return mask
 
     def index_for_patient(self, patient_name):
-        row_patient = self.df[self.df['Name'] == patient_name]
-        index_patient = row_patient.index[0]
-        return index_patient
+        try:
+            row_patient = self.df[self.df['Name'] == patient_name]
+            index_patient = row_patient.index[0]
+        except:
+            return -1, False
+        return index_patient, True
 
     def optflow_for_patient(self, patient, init_ts, final_ts, idx):
         fwd_flows = []

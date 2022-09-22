@@ -50,7 +50,11 @@ class SingleVentriclePatient:
             self.nii_mask_systole_xyz = self.nii_mask_systole_load.get_fdata()
             self.nii_mask_systole = np.swapaxes(self.nii_mask_systole_xyz, 0, 2)
 
-            self.full_cycle = df_row.loc[idx, "Full"]
+            try:
+                self.full_cycle = df_row.loc[idx, "Full"]
+            except KeyError:
+                self.full_cycle = False
+                
             # Load whole cycle segmentations 
             if self.full_cycle:
                 self.nii_masks_load = []
