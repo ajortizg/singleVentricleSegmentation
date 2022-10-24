@@ -396,18 +396,19 @@ class Trainer:
         mkt = mts[-1]
         l2 = self.loss_fn(mkt, mk)
 
+        kl = mts.shape[0]
+
         # compute l3
         mt = mts[1:-1].squeeze(1)
         mtt = mtts[1:-1].squeeze(1)
         if self.reduction == 'sum':
-            l3 = self.loss_fn(mt, mtt) / mt.shape[0]
+            l3 = self.loss_fn(mt, mtt) / kl
         else:
             l3 = self.loss_fn(mt, mtt)
 
         # compute l4 - penalization term
-        print(mhs.shape, mhhs.shape)
         if self.penalization:
-            l4 = self.mu * (torch.norm(mhs)**2 + torch.norm(mhhs)**2) / mhs.shape[0]
+            l4 = self.mu * (torch.norm(mhs[0:-1])**2 + torch.norm(mhhs[0:-1])**2) / kl
         else:
             l4 = torch.tensor([0.0], dtype=l1.dtype, device=l1.device)
 
