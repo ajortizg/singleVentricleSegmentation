@@ -225,8 +225,8 @@ class RandomRotate:
             img4d_rot = torch.clip(img4d_rot, min=self.clip_interval[0], max=self.clip_interval[1])
 
             # Rotate optical flow imgs and vectors
-            ff_rot = self.rototate_flow_img(ff, grid_t)
-            bf_rot = self.rototate_flow_img(bf, grid_t)
+            ff_rot = self.rotate_flow_img(ff, grid_t)
+            bf_rot = self.rotate_flow_img(bf, grid_t)
             ff_rot = self.rotate_flow_vectors(ff_rot, R)
             bf_rot = self.rotate_flow_vectors(bf_rot, R)
 
@@ -242,7 +242,7 @@ class RandomRotate:
         grid[..., 2] = 2.0 * grid[..., 2] / max(NZ - 1, 1) - 1.0
         return grid
 
-    def rototate_flow_img(self, of, grid_t):
+    def rotate_flow_img(self, of, grid_t):
         NT = of.shape[-1]
         grid_t = grid_t[:NT]
         of = np.transpose(of, (4, 3, 0, 1, 2))

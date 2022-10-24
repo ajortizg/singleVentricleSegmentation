@@ -139,7 +139,7 @@ if __name__ == "__main__":
             to_idx = to_idx if use_indices else len(ds)
 
             for idx in range(from_idx, to_idx):
-                compute_optical_flow(ds, idx, mode, save_dir, device, config, logger)
+                compute_optical_flow(ds, idx, mode, save_dir, device, config, logger, direction)
                 pbar.update(1)
     else:
         pbar = tqdm(total=1)

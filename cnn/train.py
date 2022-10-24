@@ -12,7 +12,8 @@ import json
 import os
 from torchsummary import summary
 from models.model_factory import create_model, save_model
-from trainer import Trainer
+# from trainer_single_batch import Trainer
+from trainer_multi_batch import Trainer
 
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
@@ -25,7 +26,7 @@ from utils import plots
 
 
 if __name__ == "__main__":
-    # plots.seeding(42)
+    plots.seeding(42)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     config = configparser.ConfigParser()
@@ -54,9 +55,9 @@ if __name__ == "__main__":
     val_ds = SingleVentricleDataset(config, DatasetMode.VAL, LoadFlowMode.ED_ES, full_transforms=val_transforms)
     test_ds = SingleVentricleDataset(config, DatasetMode.TEST, LoadFlowMode.WHOLE_CYCLE, full_transforms=val_transforms)
 
-    train_loader = DataLoader(train_ds, batch_size=P['batch_size'], shuffle=True, num_workers=P['workers'], collate_fn=collate_fn)
-    val_loader = DataLoader(val_ds, batch_size=P['batch_size'], shuffle=False, num_workers=P['workers'], collate_fn=collate_fn)
-    test_loader = DataLoader(test_ds, batch_size=1, shuffle=False, num_workers=3, collate_fn=collate_fn)
+    train_loader = DataLoader(train_ds, batch_size=P['batch_size'], shuffle=True, num_workers=P['workers'], collate_fn=collate_fn_batch)
+    val_loader = DataLoader(val_ds, batch_size=P['batch_size'], shuffle=False, num_workers=P['workers'], collate_fn=collate_fn_batch)
+    test_loader = DataLoader(test_ds, batch_size=1, shuffle=False, num_workers=3, collate_fn=collate_fn_batch)
 
     save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'CNN')
     logger = plots.create_logger(save_dir)

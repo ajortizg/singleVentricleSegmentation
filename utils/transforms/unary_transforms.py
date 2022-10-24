@@ -138,17 +138,17 @@ class Resize:
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}()"
 
-# class PadTime:
-#     def __init__(self, maxt=40):
-#         self.maxt = maxt
+class PadTime:
+    def __init__(self, maxt=40):
+        self.maxt = maxt
 
-#     def __call__(self, img4d: torch.Tensor) -> torch.Tensor:
-#         *_, NT = img4d.shape
-#         diff_t = self.maxt - NT
-#         return F.pad(img4d, [0, diff_t,
-#                              0, 0,
-#                              0, 0,
-#                              0, 0])
+    def __call__(self, img4d: torch.Tensor) -> torch.Tensor:
+        *_, NT = img4d.shape
+        diff_t = self.maxt - NT
+        return F.pad(img4d, [0, diff_t,
+                             0, 0,
+                             0, 0,
+                             0, 0])
 
-#     def __repr__(self) -> str:
-#         return f"{self.__class__.__name__}()"
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}()"

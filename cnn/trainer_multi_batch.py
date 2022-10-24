@@ -74,16 +74,19 @@ class Trainer:
         total_acc = (0.0, 0.0, 0.0)
         steps = len(train_loader)
 
-        for i, (_, img4d, m0, mk, _, times_fwd, times_bwd, ff, bf) in enumerate(train_loader):
+        for i, (pnames, img4d, m0, mk, _, times_fwd, times_bwd, ff, bf, offsets) in enumerate(train_loader):
             self.pbar.set_postfix_str(f'Train: {i+1}/{steps}')
+            print(pnames)
             img4d = img4d.to(self.device)
             m0 = m0.to(self.device)
             mk = mk.to(self.device)
             ff = ff.to(self.device)
             bf = bf.to(self.device)
+            offsets = offsets.to(torch.long)
+            batch_indices = torch.arange(offsets.shape[0])
 
-            mts, mtts, mhs, mhhs = self.time_popagation(img4d, m0, mk, times_fwd, times_bwd, ff, bf, True)
-            loss = self.compute_loss(mts, mtts, mhs, mhhs)
+            mts, mtts, mhs, mhhs = self.time_popagation(img4d, m0, mk, times_fwd, times_bwd, ff, bf, batch_indices, True)
+            loss = self.compute_loss(mts, mtts, offsets, batch_indices, mhs, mhhs)
 
             self.opt.zero_grad()
             loss[0].backward()
@@ -91,10 +94,10 @@ class Trainer:
 
             with torch.no_grad():
                 total_loss = tuple(tl + l.item() for tl, l in zip(total_loss, loss))
-                acc0, acck = self.compute_dice_acc(mts, mtts)
+                acc0, acck = self.compute_dice_acc(mts, mtts, offsets, batch_indices)
                 total_acc = tuple(ta + a for ta, a in zip(total_acc, (0.5 * (acc0 + acck), acc0, acck)))
                 if np.random.rand() < self.display_prob:
-                    self.plot_imgs(mts, mtts, 'train')
+                    self.plot_imgs(mts, mtts, offsets, batch_indices, 'train')
 
         avg_loss = tuple(x / steps for x in total_loss)
         avg_acc = tuple(x / steps for x in total_acc)
@@ -109,22 +112,24 @@ class Trainer:
         total_acc = (0.0, 0.0, 0.0)
         steps = len(val_loader)
 
-        for i, (_, img4d, m0, mk, _, times_fwd, times_bwd, ff, bf) in enumerate(val_loader):
+        for i, (_, img4d, m0, mk, _, times_fwd, times_bwd, ff, bf, offsets) in enumerate(val_loader):
             self.pbar.set_postfix_str(f'Val: {i+1}/{steps}')
             img4d = img4d.to(self.device)
             m0 = m0.to(self.device)
             mk = mk.to(self.device)
             ff = ff.to(self.device)
             bf = bf.to(self.device)
+            offsets = offsets.to(torch.long)
+            batch_indices = torch.arange(offsets.shape[0])
 
-            mts, mtts, mhs, mhhs = self.time_popagation(img4d, m0, mk, times_fwd, times_bwd, ff, bf, cnn)
-            loss = self.compute_loss(mts, mtts, mhs, mhhs)
+            mts, mtts, mhs, mhhs = self.time_popagation(img4d, m0, mk, times_fwd, times_bwd, ff, bf, batch_indices, cnn)
+            loss = self.compute_loss(mts, mtts, offsets, batch_indices, mhs, mhhs)
 
             total_loss = tuple(tl + l.item() for tl, l in zip(total_loss, loss))
-            acc0, acck = self.compute_dice_acc(mts, mtts)
+            acc0, acck = self.compute_dice_acc(mts, mtts, offsets, batch_indices)
             total_acc = tuple(ta + a for ta, a in zip(total_acc, (0.5 * (acc0 + acck), acc0, acck)))
             if np.random.rand() < self.display_prob:
-                self.plot_imgs(mts, mtts, 'val')
+                self.plot_imgs(mts, mtts, offsets, batch_indices, 'val')
 
         avg_loss = tuple(x / steps for x in total_loss)
         avg_acc = tuple(x / steps for x in total_acc)
@@ -141,7 +146,7 @@ class Trainer:
             self.mean_epoch_stat['test_acc'].append(total_acc)
             return total_acc
 
-        for i, (_, img4d, _, _, masks, times_fwd, times_bwd, ff, bf) in enumerate(test_loader):
+        for i, (_, img4d, _, _, masks, times_fwd, times_bwd, ff, bf, _) in enumerate(test_loader):
             self.pbar.set_postfix_str(f'Test: {i+1}/{steps}')
             times_fwd, times_bwd = test_ds.create_timeline(times_fwd[0], times_bwd[0], masks.shape[-1])
             img4d = img4d.to(self.device)
@@ -194,7 +199,7 @@ class Trainer:
         if steps == 0:
             return None
 
-        for i, (_, img4d, m0, mk, _, times_fwd, times_bwd, ff, bf) in enumerate(loader):
+        for i, (_, img4d, m0, mk, _, times_fwd, times_bwd, ff, bf, _) in enumerate(loader):
             self.pbar.set_postfix_str(f'ccc: {i+1}/{steps}')
             img4d = img4d.to(self.device)
             m0 = m0.to(self.device)
@@ -223,7 +228,7 @@ class Trainer:
 
         return mts, mtts
 
-    def time_popagation(self, img4d, m0, mk, times_fwd, times_bwd, ff, bf, cnn=True):
+    def time_popagation(self, img4d, m0, mk, times_fwd, times_bwd, ff, bf, batch_indices, cnn=True):
         BS, NZ, NY, NX, CH, timesteps = ff.shape
         dtype = m0.dtype
         warp = WarpCNN(self.config, NZ, NY, NX)
@@ -242,7 +247,7 @@ class Trainer:
             # Forward propagation m0 -> mk
             mt = warp(mts[t], ff[..., t])
             if cnn:
-                x = torch.cat((img4d[..., times_fwd[t + 1]], mt), dim=1)
+                x = torch.cat((img4d[batch_indices, ..., times_fwd[t + 1][batch_indices]], mt), dim=1)
                 mts[t + 1], mh = self.net(x)
             else:
                 mts[t + 1] = mt
@@ -250,7 +255,7 @@ class Trainer:
             # Backward propagation mk -> m0
             mtt = warp(mtts[timesteps - t], bf[..., t])
             if cnn:
-                x = torch.cat((img4d[..., times_bwd[t + 1]], mtt), dim=1)
+                x = torch.cat((img4d[batch_indices, ..., times_bwd[t + 1][batch_indices]], mtt), dim=1)
                 mtts[timesteps - t - 1], mhh = self.net(x)
             else:
                 mtts[timesteps - t - 1] = mtt
@@ -318,13 +323,13 @@ class Trainer:
         for k, v in self.mean_epoch_stat.items():
             plots.write_list(save_dir, k + '.csv', v)
 
-    def compute_dice_acc(self, mts, mtts):
-        m0 = mts[0]
-        m0tt = mtts[0]
+    def compute_dice_acc(self, mts, mtts, offsets, batch_indices):
+        m0 = mts[0, batch_indices]
+        m0tt = mtts[offsets[batch_indices], batch_indices]
         m0tt = torch.where(m0tt > 0.5, 1.0, 0.0)
 
-        mk = mtts[-1]
-        mkt = mts[-1]
+        mk = mtts[-1, batch_indices]
+        mkt = mts[-offsets[batch_indices] - 1, batch_indices]
         mkt = torch.where(mkt > 0.5, 1.0, 0.0)
 
         acc0 = compute_meandice(m0tt, m0).mean()
@@ -332,13 +337,13 @@ class Trainer:
         # dc = 0.5 * (acc0 + acck)
         return acc0.item(), acck.item()
 
-    def compute_hd(self, mts, mtts):
-        m0 = mts[0]
-        m0tt = mtts[0]
+    def compute_hd(self, mts, mtts, offsets, batch_indices):
+        m0 = mts[0, batch_indices]
+        m0tt = mtts[offsets[batch_indices], batch_indices]
         m0tt = torch.where(m0tt > 0.5, 1.0, 0.0)
 
-        mk = mtts[-1]
-        mkt = mts[-1]
+        mk = mtts[-1, batch_indices]
+        mkt = mts[-offsets[batch_indices] - 1, batch_indices]
         mkt = torch.where(mkt > 0.5, 1.0, 0.0)
 
         hd0 = compute_hausdorff_distance(m0tt, m0).mean().item()
@@ -356,17 +361,17 @@ class Trainer:
         self.writer.add_images(f'{tag}/est', mt)
         self.writer.add_images(f'{tag}/error', error)
 
-    def plot_imgs(self, mts, mtts, tag):
-        m0 = mts[0]
-        m0tt = mtts[0]
+    def plot_imgs(self, mts, mtts, offsets, batch_indices, tag):
+        m0 = mts[0, batch_indices]
+        m0tt = mtts[offsets[batch_indices], batch_indices]
         m0tt = torch.where(m0tt > 0.5, 1.0, 0.0)
 
-        mk = mtts[-1]
-        mkt = mts[-1]
+        mk = mtts[-1, batch_indices]
+        mkt = mts[-offsets[batch_indices] - 1, batch_indices]
         mkt = torch.where(mkt > 0.5, 1.0, 0.0)
 
         # take batch randomly
-        b = 0
+        b = np.random.randint(len(offsets))
         m0_b = m0[b]
         m0tt_b = m0tt[b]
         m0_b.swapaxes_(0, 1)
@@ -385,48 +390,66 @@ class Trainer:
         self.writer.add_images(f'{tag}/mk_b{b}/est', mkt_b)
         self.writer.add_images(f'{tag}/mk_b{b}/error', mk_e)
 
-    def compute_loss(self, mts, mtts, mhs=None, mhhs=None):
+    def compute_loss(self, mts, mtts, offsets, batch_indices, mhs=None, mhhs=None):
+        BS = mts.shape[1]
+
         # compute l1
-        m0 = mts[0]
-        m0tt = mtts[0]
+        m0 = mts[0, batch_indices]
+        m0tt = mtts[offsets[batch_indices], batch_indices]
         l1 = self.loss_fn(m0tt, m0)
 
         # compute l2
-        mk = mtts[-1]
-        mkt = mts[-1]
+        mk = mtts[-1, batch_indices]
+        mkt = mts[-offsets[batch_indices] - 1, batch_indices]
         l2 = self.loss_fn(mkt, mk)
 
-        # compute l3
-        mt = mts[1:-1].squeeze(1)
-        mtt = mtts[1:-1].squeeze(1)
+        kl = mts.shape[0] - offsets
+
+        ts_tildes = mts.shape[0] 
+        l3 = 0 # l3
+        l4 = torch.tensor([0.0], dtype=l1.dtype, device=l1.device)  # l4 - penalization term
+        ts_hats = mhs.shape[0] if self.penalization else 0
+
+        for b in range(BS):
+            # compute l3
+            mt = mts[1:ts_tildes - offsets[b] - 1, b]
+            mtt = mtts[1 + offsets[b]:-1, b]
+            if self.reduction == 'sum':
+                l3 += self.loss_fn(mt, mtt) / kl[b]
+            else:
+                l3 += self.loss_fn(mt, mtt)
+
+            # compute l4
+            if self.penalization:
+                mh = mhs[0:ts_hats - offsets[b] - 1, b]
+                mhh = mhhs[0:ts_hats - offsets[b] - 1, b]
+                l4 += (torch.norm(mh)**2 + torch.norm(mhh)**2) / kl[b]
+
         if self.reduction == 'sum':
-            l3 = self.loss_fn(mt, mtt) / mt.shape[0]
-        else:
-            l3 = self.loss_fn(mt, mtt)
-
-        # compute l4 - penalization term
-        if self.penalization:
-            l4 = self.mu * (torch.norm(mhs)**2 + torch.norm(mhhs)**2)
-        else:
-            l4 = torch.tensor([0.0], dtype=l1.dtype, device=l1.device)
-
-        l3 = self.loss_lambda * l3
+            l1 = l1 / BS
+            l2 = l2 / BS
+        l3 = self.loss_lambda * l3 / BS
+        l4 = self.mu * l4 / BS
         total_loss = l1 + l2 + l3 + l4
         return (total_loss, l1, l2, l3, l4)
 
-    def train_patient(self, img4d, m0, mk, timesfwd, timesbwd, ff, bf):
+    def train_patient(self, img4d, m0, mk, timesfwd, timesbwd, ff, bf, offsets):
+        offsets = offsets.to(torch.long)
+        BS = offsets.shape[0]
+        batch_indices = torch.arange(BS)
+
         self.net.train()
-        mts, mtts, mhs, mhhs = self.time_popagation(img4d, m0, mk, timesfwd, timesbwd, ff, bf)
-        loss = self.compute_loss(mts, mtts, mhs, mhhs)
+        mts, mtts, mhs, mhhs = self.time_popagation(img4d, m0, mk, timesfwd, timesbwd, ff, bf, batch_indices)
+        loss = self.compute_loss(mts, mtts, offsets, batch_indices, mhs, mhhs)
 
         self.opt.zero_grad()
         loss[0].backward()
         self.opt.step()
 
         with torch.no_grad():
-            acc0, acck = self.compute_dice_acc(mts, mtts)
+            acc0, acck = self.compute_dice_acc(mts, mtts, offsets, batch_indices)
             if np.random.rand() < self.display_prob:
-                self.plot_imgs(mts, mtts, 'train')
+                self.plot_imgs(mts, mtts, offsets, batch_indices, 'train')
 
         avg_loss = tuple(x.item() for x in loss)
         avg_acc = (0.5 * (acc0 + acck), acc0, acck)
@@ -435,14 +458,18 @@ class Trainer:
         return (*avg_loss, avg_acc[0])
 
     @torch.no_grad()
-    def val_patient(self, imgs4d, m0s, mks, times_fwd, times_bwd, ff, bf, cnn):
-        self.net.eval()
-        mts, mtts, *_ = self.time_popagation(imgs4d, m0s, mks, times_fwd, times_bwd, ff, bf, cnn)
+    def val_patient(self, imgs4d, m0s, mks, times_fwd, times_bwd, ff, bf, offsets, cnn):
+        offsets = offsets.to(torch.long)
+        BS = offsets.shape[0]
+        batch_indices = torch.arange(BS)
 
-        acc0, acck = self.compute_dice_acc(mts, mtts)
+        self.net.eval()
+        mts, mtts, *_ = self.time_popagation(imgs4d, m0s, mks, times_fwd, times_bwd, ff, bf, batch_indices, cnn)
+
+        acc0, acck = self.compute_dice_acc(mts, mtts, offsets, batch_indices)
         mean_acc = 0.5 * (acc0 + acck)
 
-        hd0, hdk = self.compute_hd(mts, mtts)
+        hd0, hdk = self.compute_hd(mts, mtts, offsets, batch_indices)
         mean_hd = 0.5 * (hd0 + hdk)
         metrics = {'mean_acc': mean_acc, 'acc_fwd': acck, 'acc_bwd': acc0,
                    'mean_hd': mean_hd, 'hd_fwd': hdk, 'hd_bwd': hd0}

@@ -122,6 +122,9 @@ if __name__ == "__main__":
     xshifts = np.zeros(len(dataSet))
     yshifts = np.zeros(len(dataSet))
     zshifts = np.zeros(len(dataSet))
+    original_NX = np.zeros(len(dataSet))
+    original_NY = np.zeros(len(dataSet))
+    original_NZ = np.zeros(len(dataSet))
     original_NT = np.zeros(len(dataSet))
 
     #
@@ -141,6 +144,9 @@ if __name__ == "__main__":
         zmin_sys, zmax_sys, ymin_sys, ymax_sys, xmin_sys, xmax_sys = getRangeOfMask_xyz(
             patient.nii_mask_systole_xyz, printRange=False, name="systole")
 
+        # Original shape
+        NX, NY, NZ, NT = patient.nii_data_xyzt.shape
+
         # extend range by tolerance
         xmin_total = max(0, min(xmin_dia, xmin_sys) - xTol)
         xmax_total = min(patient.NX - 1, max(xmax_dia, xmax_sys) + xTol)
@@ -156,7 +162,10 @@ if __name__ == "__main__":
         xshifts[index] = xmin_total
         yshifts[index] = ymin_total
         zshifts[index] = zmin_total
-        original_NT[index] = patient.nii_data_xyzt.shape[3]
+        original_NX[index] = NX
+        original_NY[index] = NY
+        original_NZ[index] = NZ
+        original_NT[index] = NT
 
         NX_cut = xmax_total - xmin_total + 1
         NY_cut = ymax_total - ymin_total + 1
@@ -188,6 +197,9 @@ if __name__ == "__main__":
     output_df['xshift'] = xshifts
     output_df['yshift'] = yshifts
     output_df['zshift'] = zshifts
+    output_df['original_NX'] = original_NX
+    output_df['original_NY'] = original_NY
+    output_df['original_NZ'] = original_NZ
     output_df['original_NT'] = original_NT
     output_df_file = os.path.sep.join([saveDir, dataSet.segmentations_filename])
     output_df.to_excel(output_df_file, index=False)

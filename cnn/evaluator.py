@@ -14,7 +14,7 @@ import utils.transforms.senary_transforms as T6
 import utils.transforms.unary_transforms as T1
 from utils.collate import collate_fn
 from cnn.models.model_factory import create_model
-from cnn.trainer import Trainer
+from cnn.trainer_single_batch import Trainer
 from utils import plots
 
 __all__ = ['Evalautor']

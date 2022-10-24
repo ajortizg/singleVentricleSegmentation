@@ -13,6 +13,7 @@ ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../../'))
 sys.path.append(ROOT_DIR)
 from utils import plots
 from dataset import singleVentricleDataset
+import utils.transforms.unary_transforms as T1
 
 from opticalFlow_cuda_ext import opticalFlow
 
@@ -91,6 +92,8 @@ def prolongate_patient(config, img4d, md, ms, df):
 
     use_th = config.getboolean('PROLONGATION', 'USE_TH')
     bin_th = config.getfloat('PROLONGATION', 'BIN_TH')
+    time_pad = config.getint('PROLONGATION', 'PAD_TIME')
+    time_padder = T1.PadTime(maxt=time_pad)
 
     # xprolongfac = np.zeros(len(dataSet))
     # yprolongfac = np.zeros(len(dataSet))
@@ -120,6 +123,9 @@ def prolongate_patient(config, img4d, md, ms, df):
     prolongation_systole = prolongationOp.forward(ms_zyx)
     prolongation_4d = prolongationOp.forwardVectorField(img4d_zyxt.contiguous())
 
+    # Time padding
+    prolongation_4d = time_padder(prolongation_4d)
+
     # binarize prolonganted masks
     if use_th:
         prolongation_diastole = torch.where(prolongation_diastole > bin_th, 1.0, 0.0)
@@ -133,6 +139,7 @@ def prolongate_patient(config, img4d, md, ms, df):
     output_df['xprolongfac'] = NX_prolong / NX
     output_df['yprolongfac'] = NY_prolong / NY
     output_df['zprolongfac'] = NZ_prolong / NZ
+    output_df['timeprolongfac'] = time_pad / patient.NT
 
     return img4d, md, ms, output_df
 
@@ -178,8 +185,8 @@ if __name__ == "__main__":
 
     use_th = config.getboolean('PROLONGATION', 'USE_TH')
     bin_th = config.getfloat('PROLONGATION', 'BIN_TH')
-    # time_pad = config.getint('PROLONGATION', 'PAD_TIME')
-    # time_padder = T.PadTime(maxt=time_pad)
+    time_pad = config.getint('PROLONGATION', 'PAD_TIME')
+    time_padder = T1.PadTime(maxt=time_pad)
 
     # create save directory
     saveDir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), "preprocessing_prolongation")
@@ -200,7 +207,7 @@ if __name__ == "__main__":
     xprolongfac = np.zeros(len(dataSet))
     yprolongfac = np.zeros(len(dataSet))
     zprolongfac = np.zeros(len(dataSet))
-    # timeprolongfac = np.zeros(len(dataSet))
+    timeprolongfac = np.zeros(len(dataSet))
 
     # iterate over all patients
     pbar = tqdm(total=len(dataSet))
@@ -242,7 +249,7 @@ if __name__ == "__main__":
         prolongation_4d = prolongationOp.forwardVectorField(data_4d.contiguous())
 
         # Time padding
-        # prolongation_4d = time_padder(prolongation_4d)
+        prolongation_4d = time_padder(prolongation_4d)
 
         # binarize prolonganted masks
         if use_th:
@@ -254,7 +261,7 @@ if __name__ == "__main__":
         save_torch_to_nifty(
             prolongation_4d, saveDir4D, patient.name + ".nii.gz", patient.nii_header_xyzt,
             zooms=(zoomX * patient.NX / NX_prolong, zoomY * patient.NY / NY_prolong, zoomZ * patient.NZ / NZ_prolong,
-                   zoomT))
+                   zoomT / time_pad))
         save_torch_to_nifty(
             prolongation_diastole, saveDirPatient, patient.name + "_Diastole_Labelmap.nii", patient.hdr_mask_diastole,
             zooms=(zoomX * patient.NX / NX_prolong, zoomY * patient.NY / NY_prolong, zoomZ * patient.NZ / NZ_prolong))
@@ -276,7 +283,7 @@ if __name__ == "__main__":
         xprolongfac[index] = NX_prolong / patient.NX
         yprolongfac[index] = NY_prolong / patient.NY
         zprolongfac[index] = NZ_prolong / patient.NZ
-        # timeprolongfac[index] = time_pad / patient.NT
+        timeprolongfac[index] = time_pad / patient.NT
 
         pbar.update(1)
 
@@ -288,6 +295,6 @@ if __name__ == "__main__":
     output_df['xprolongfac'] = xprolongfac
     output_df['yprolongfac'] = yprolongfac
     output_df['zprolongfac'] = zprolongfac
-    # output_df['timeprolongfac'] = timeprolongfac
+    output_df['timeprolongfac'] = timeprolongfac
     output_df_file = os.path.sep.join([saveDir, dataSet.segmentations_filename])
     output_df.to_excel(output_df_file, index=False)
