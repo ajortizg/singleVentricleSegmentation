@@ -74,9 +74,8 @@ class Trainer:
         total_acc = (0.0, 0.0, 0.0)
         steps = len(train_loader)
 
-        for i, (pnames, img4d, m0, mk, _, times_fwd, times_bwd, ff, bf, offsets) in enumerate(train_loader):
+        for i, (_, img4d, m0, mk, _, times_fwd, times_bwd, ff, bf, offsets) in enumerate(train_loader):
             self.pbar.set_postfix_str(f'Train: {i+1}/{steps}')
-            print(pnames)
             img4d = img4d.to(self.device)
             m0 = m0.to(self.device)
             mk = mk.to(self.device)
@@ -405,8 +404,8 @@ class Trainer:
 
         kl = mts.shape[0] - offsets
 
-        ts_tildes = mts.shape[0] 
-        l3 = 0 # l3
+        ts_tildes = mts.shape[0]
+        l3 = 0  # l3
         l4 = torch.tensor([0.0], dtype=l1.dtype, device=l1.device)  # l4 - penalization term
         ts_hats = mhs.shape[0] if self.penalization else 0
 
@@ -421,9 +420,10 @@ class Trainer:
 
             # compute l4
             if self.penalization:
-                mh = mhs[0:ts_hats - offsets[b] - 1, b]
-                mhh = mhhs[0:ts_hats - offsets[b] - 1, b]
-                l4 += (torch.norm(mh)**2 + torch.norm(mhh)**2) / kl[b]
+                mh = mhs[0:ts_hats - offsets[b], b]
+                mhh = mhhs[0:ts_hats - offsets[b], b]
+                # l4 += (torch.norm(mh)**2 + torch.norm(mhh)**2) / kl[b]
+                l4 += (mh.pow(2).sum() + mhh.pow(2).sum()) / kl[b]
 
         if self.reduction == 'sum':
             l1 = l1 / BS

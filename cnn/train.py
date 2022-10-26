@@ -26,7 +26,7 @@ from utils import plots
 
 
 if __name__ == "__main__":
-    plots.seeding(42)
+    # plots.seeding(42)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     config = configparser.ConfigParser()

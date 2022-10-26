@@ -408,7 +408,8 @@ class Trainer:
 
         # compute l4 - penalization term
         if self.penalization:
-            l4 = self.mu * (torch.norm(mhs[0:-1])**2 + torch.norm(mhhs[0:-1])**2) / kl
+            # l4 = self.mu * (torch.norm(mhs[0:-1])**2 + torch.norm(mhhs[0:-1])**2) / kl
+            l4 += self.mu * (mhs.pow(2).sum() + mhhs.pow(2).sum()) / kl
         else:
             l4 = torch.tensor([0.0], dtype=l1.dtype, device=l1.device)
 

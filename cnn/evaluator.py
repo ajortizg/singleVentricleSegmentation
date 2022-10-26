@@ -117,15 +117,11 @@ class Evalautor:
 
     def evaluate_patient(self, idx):
         if self.is_testset:
-            self.cnn_res = self.trainer.test_patient(
-                self.img4d, self.masks, self.timesfwd, self.timesbwd, self.ff, self.bf, cnn=True)
-            self.flow_res = self.trainer.test_patient(
-                self.img4d, self.masks, self.timesfwd, self.timesbwd, self.ff, self.bf, cnn=False)
+            self.cnn_res = self.trainer.test_patient(self.img4d, self.masks, self.timesfwd, self.timesbwd, self.ff, self.bf, cnn=True)
+            self.flow_res = self.trainer.test_patient(self.img4d, self.masks, self.timesfwd, self.timesbwd, self.ff, self.bf, cnn=False)
         else:
-            self.cnn_res = self.trainer.val_patient(
-                self.img4d, self.m0, self.mk, self.timesfwd, self.timesbwd, self.ff, self.bf, cnn=True)
-            self.flow_res = self.trainer.val_patient(
-                self.img4d, self.m0, self.mk, self.timesfwd, self.timesbwd, self.ff, self.bf, cnn=False)
+            self.cnn_res = self.trainer.val_patient(self.img4d, self.m0, self.mk, self.timesfwd, self.timesbwd, self.ff, self.bf, cnn=True)
+            self.flow_res = self.trainer.val_patient(self.img4d, self.m0, self.mk, self.timesfwd, self.timesbwd, self.ff, self.bf, cnn=False)
 
         self.update_report(idx)
         self.save_imgs()
