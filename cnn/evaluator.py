@@ -12,9 +12,10 @@ sys.path.append(ROOT_DIR)
 from cnn.dataset import *
 import utils.transforms.senary_transforms as T6
 import utils.transforms.unary_transforms as T1
-from utils.collate import collate_fn
+from utils.collate import collate_fn_batch
 from cnn.models.model_factory import create_model
-from cnn.trainer_single_batch import Trainer
+# from cnn.trainer_single_batch import Trainer
+from cnn.trainer_multi_batch import Trainer
 from utils import plots
 
 __all__ = ['Evalautor']
@@ -80,7 +81,7 @@ class Evalautor:
             sys.exit()
 
         self.loader = DataLoader(self.dset, batch_size=1, shuffle=False,
-                                 num_workers=self.P['workers'], collate_fn=collate_fn)
+                                 num_workers=self.P['workers'], collate_fn=collate_fn_batch)
         if self.verbose:
             self.logger.info('Dataset: %s' % dsettype)
 
@@ -251,7 +252,7 @@ class Evalautor:
     def complete_cardiac_cycle(self, config):
         transforms = T6.Compose([T6.ToTensor()])
         self.dset = SingleVentricleDataset(config, DatasetMode.FULL, LoadFlowMode.WHOLE_CYCLE, full_transforms=transforms)
-        self.loader = DataLoader(self.dset, batch_size=1, shuffle=False, num_workers=self.P['workers'], collate_fn=collate_fn)
+        self.loader = DataLoader(self.dset, batch_size=1, shuffle=False, num_workers=self.P['workers'], collate_fn=collate_fn_batch)
 
         idx, found = self.dset.index_for_patient(self.P['patient_name'])
         if not found:

@@ -49,7 +49,7 @@ def collate_fn_batch(data):
     else:
         masks = None
 
-    return (pnames, imgs4d, m0s, mks, masks, times_fwd, times_bwd, ff, bf, offsets)
+    return pnames, imgs4d, m0s, mks, masks, times_fwd, times_bwd, ff, bf, offsets
 
 
 def collate_times(init_ts, final_ts):

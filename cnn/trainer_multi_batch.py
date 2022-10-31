@@ -433,9 +433,9 @@ class Trainer:
         total_loss = l1 + l2 + l3 + l4
         return (total_loss, l1, l2, l3, l4)
 
-    def train_patient(self, img4d, m0, mk, timesfwd, timesbwd, ff, bf, offsets):
-        offsets = offsets.to(torch.long)
-        BS = offsets.shape[0]
+    def train_patient(self, img4d, m0, mk, timesfwd, timesbwd, ff, bf):
+        BS = 1
+        offsets = torch.zeros(BS, dtype=torch.long)
         batch_indices = torch.arange(BS)
 
         self.net.train()
@@ -458,9 +458,9 @@ class Trainer:
         return (*avg_loss, avg_acc[0])
 
     @torch.no_grad()
-    def val_patient(self, imgs4d, m0s, mks, times_fwd, times_bwd, ff, bf, offsets, cnn):
-        offsets = offsets.to(torch.long)
-        BS = offsets.shape[0]
+    def val_patient(self, imgs4d, m0s, mks, times_fwd, times_bwd, ff, bf, cnn):
+        BS = 1
+        offsets = torch.zeros(BS, dtype=torch.long)
         batch_indices = torch.arange(BS)
 
         self.net.eval()

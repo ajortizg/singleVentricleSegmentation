@@ -14,11 +14,12 @@ import os.path as osp
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 from utils import plots
-from utils.collate import collate_fn
+from utils.collate import collate_fn_batch
 from utils import param_reader
 import utils.transforms.senary_transforms as T6
 from cnn.dataset import *
-from cnn.trainer import Trainer
+# from cnn.trainer import Trainer
+from cnn.trainer_multi_batch import Trainer
 from cnn.models.model_factory import create_model, save_model
 
 def search_patient(query, loader):
@@ -49,11 +50,11 @@ if __name__ == "__main__":
     elif P['dataset'] == 'test':
         train_ds = SingleVentricleDataset(config, DatasetMode.TEST, LoadFlowMode.ED_ES, full_transforms=transforms)
         test_ds = SingleVentricleDataset(config, DatasetMode.TEST, LoadFlowMode.WHOLE_CYCLE, full_transforms=transforms)
-        test_loader = DataLoader(test_ds, batch_size=P['batch_size'], shuffle=False, num_workers=P['num_workers'], collate_fn=collate_fn)
+        test_loader = DataLoader(test_ds, batch_size=P['batch_size'], shuffle=False, num_workers=P['num_workers'], collate_fn=collate_fn_batch)
     elif P['dataset'] == 'full':
         train_ds = SingleVentricleDataset(config, DatasetMode.FULL, LoadFlowMode.ED_ES, full_transforms=transforms)
         
-    train_loader = DataLoader(train_ds, batch_size=P['batch_size'], shuffle=False, num_workers=P['num_workers'], collate_fn=collate_fn)
+    train_loader = DataLoader(train_ds, batch_size=P['batch_size'], shuffle=False, num_workers=P['num_workers'], collate_fn=collate_fn_batch)
 
     save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'FT')
     logger = plots.create_logger(save_dir)
@@ -80,7 +81,7 @@ if __name__ == "__main__":
     if not found:
         logger.error('Patient not found: %s ' % P['PATIENT_NAME'])
         sys.exit()
-    pnames, img4d, m0, mk, _, times_fwd, times_bwd, ff, bf = data
+    pnames, img4d, m0, mk, _, times_fwd, times_bwd, ff, bf, _ = data
     img4d = img4d.to(device)
     m0 = m0.to(device)
     mk = mk.to(device)
