@@ -84,8 +84,6 @@ if __name__ == "__main__":
             ff = ff.to(device)
             bf = bf.to(device)
 
-            print(imgs4d.shape)
-
             BS, CH, NZ, NY, NX, NT = imgs4d.shape
             warp = WarpCNN(config, NZ, NY, NX)
             # batch_indices = torch.arange(BS)
@@ -131,24 +129,27 @@ if __name__ == "__main__":
                     mt = rre_transf(out['mt'][t].squeeze())
                     mtt = rre_transf(out['mtt'][t].squeeze())
 
+                    blue = [1, 0.7, 0]
+                    red = [0, 0, 1]
+
                     if t == 0:
-                        plots.save_img_masks(img3d, [rr_transf(m0.squeeze()), mtt], 'im_m0_m0tt', patient_dir,
-                                             th=0.5, alphas=[0.2, 1.0], colors=[[1, 0.7, 0], [0, 0, 1]])
+                        plots.save_img_masks(img3d, [rr_transf(m0.squeeze()), mtt, rre_transf(m0.squeeze())], 'im_m0_m0tt', patient_dir,
+                                             th=0.5, alphas=[0.2, 1.0, 1.0], colors=[blue, red, blue])
                         if save_slices:
-                            plots.save_img_masks_slices(img3d, [rr_transf(m0.squeeze()), mtt], patient_dir, f'{times_fwd[t].item()}_0tt',
-                                                        0.5, [0.2, 1.0], [[1, 0.7, 0], [0, 0, 1]])
+                            plots.save_img_masks_slices(img3d, [rr_transf(m0.squeeze()), mtt, rre_transf(m0.squeeze())], patient_dir, f'{times_fwd[t].item()}_0tt',
+                                                        0.5, [0.2, 1.0, 1.0], [blue, red, blue])
                     elif t == len(out['mt']) - 1:
-                        plots.save_img_masks(img3d, [rr_transf(mk.squeeze()), mt], 'mk_mkt', patient_dir,
-                                             th=0.5, alphas=[0.2, 1.0], colors=[[0, 0.7, 1], [0, 1, 0]])
+                        plots.save_img_masks(img3d, [rr_transf(mk.squeeze()), mt, rre_transf(mk.squeeze())], 'mk_mkt', patient_dir,
+                                             th=0.5, alphas=[0.2, 1.0, 1.0], colors=[red, blue, red])
                         if save_slices:
-                            plots.save_img_masks_slices(img3d, [rr_transf(mk.squeeze()), mt], patient_dir, f'{times_fwd[t].item()}_kt',
-                                                        0.5, [0.2, 1.0], [[0, 0.7, 1], [0, 1, 0]])
+                            plots.save_img_masks_slices(img3d, [rr_transf(mk.squeeze()), mt, rre_transf(mk.squeeze())], patient_dir, f'{times_fwd[t].item()}_kt',
+                                                        0.5, [0.2, 1.0, 1.0], [red, blue, red])
 
                     plots.save_img_masks(img3d, [mt, mtt], f'im_t_{times_fwd[t]}', patient_dir,
-                                         th=0.5, alphas=[1.0, 1.0], colors=[[0, 1, 0], [0, 0, 1]])
+                                         th=0.5, alphas=[1.0, 1.0], colors=[blue, red])
                     if save_slices:
                         plots.save_img_masks_slices(img3d, [mt, mtt], patient_dir, str(times_fwd[t].item()), 0.5,
-                                                    [1.0, 1.0], [[0, 1, 0], [0, 0, 1]])
+                                                    [1.0, 1.0], [blue, red])
 
                     if save_nifti:
                         hdr = loader.dataset.header(i)

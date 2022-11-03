@@ -4,6 +4,7 @@
 * conda create -n singleVentricleSegmentationEnv
 * conda install python=3.9
 * conda install pytorch torchvision torchaudio cudatoolkit=11.3 -c pytorch
+* conda install pytorch torchvision torchaudio pytorch-cuda=11.6 -c pytorch -c nvidia (for CUDA 11.6)
 * pip install opencv-python
 * pip install nibabel
 * pip install matplotlib
