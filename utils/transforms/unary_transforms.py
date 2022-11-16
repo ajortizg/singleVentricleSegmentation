@@ -106,7 +106,7 @@ class Erode:
         borders = np.zeros(x.shape)
         for z in range(NZ):
             mask = x[z, :, :]
-            borders[z, :, :] = (mask - cv2.erode(mask, kernel=None, borderValue=0))
+            borders[z, :, :] = (mask - cv2.erode(mask, kernel=None, borderValue=0,iterations=2))
 
         return torch.from_numpy(borders).float() if is_tensor else borders
 

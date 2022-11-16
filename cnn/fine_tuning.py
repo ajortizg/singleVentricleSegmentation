@@ -113,9 +113,14 @@ if __name__ == "__main__":
         trainer.log(e)
         scheduler.step()
         pbar.update(1)
-
-        if e % 20 == 0:
-            trainer.create_checkpoint(e, save_dir, when_better=False)
+        
+        trainer.create_checkpoint(e, save_dir, when_better=True, which='test', verbose=True)
+        
+        # early stop
+        patience = 50
+        if trainer.epochs_since_last_improvement > patience:
+            logger.info(f'Early stop at epoch: {e}')
+            break
 
     toc = time.time()
     logger.info('\nTotal time taken to train the model: {:.4f}s'.format(toc - tic))
