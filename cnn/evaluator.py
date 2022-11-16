@@ -136,13 +136,13 @@ class Evalautor:
             labels[0] = 'ES'
             labels[-1] = 'ED'
             # # labels[len(labels)//2] = 'Time'
-            plt.figure(figsize=(3.1,1.5), dpi=100)
+            plt.figure(figsize=(3.1, 1.5), dpi=100)
 
             ft_fwd_color = 'mo-'
             ft_bwd_color = 'kx-'
             # cnn_fwd_color = 'gd-'
             # cnn_bwd_color = 'hc-'
-            
+
             plt.plot(x, accs_fwd_flow[times], 'r+-', label='Forward Flow', linewidth=1.5, markersize=2.5)
             plt.plot(x, accs_bwd_flow[times], 'b*-', label='Backward Flow', linewidth=1.5, markersize=2.5)
             plt.plot(x, accs_fwd_cnn[times], ft_fwd_color, label='Forward CNN', linewidth=1.5, markersize=2.5)
@@ -237,6 +237,11 @@ class Evalautor:
             cnn_bm = self.est_masks_transf(cnn_bms[mt].squeeze())
             flow_bm = self.est_masks_transf(flow_bms[mt].squeeze())
 
+            # mask_cnn_fwd = self.img_transf(cnn_fms[mt].squeeze())
+            # mask_cnn_bwd = self.img_transf(cnn_bms[mt].squeeze())
+            # mask_flow_fwd = self.img_transf(flow_fms[mt].squeeze())
+            # mask_flow_bwd = self.img_transf(flow_bms[mt].squeeze())
+
             gtm = self.label_mask(t, mt, timesteps)
             if gtm is not None:
                 plots.save_img_masks(img3d, [gtm, cnn_fm, flow_fm], f'im_fwd_{self.timesfwd[t].item()}', fwd_dir, th=0.5,
@@ -249,6 +254,28 @@ class Evalautor:
                                      alphas=[1.0, 1.0], colors=[[0, 1, 0], [0, 0, 1]])
                 plots.save_img_masks(img3d, [cnn_bm, flow_bm], f'im_bwd_{self.timesfwd[t].item()}', bwd_dir, th=0.5,
                                      alphas=[1.0, 1.0], colors=[[0, 1, 0], [0, 0, 1]])
+
+            # # Save img
+            # dir0 = plots.createSubDirectory(patient_dir, 'imgs')
+            # plots.save_slices(img3d, f'im_{self.timesfwd[t].item()}', dir0)
+            # plots.save_single_zslices(img3d, dir0, f'slices_{self.timesfwd[t].item()}')
+
+            # # Save masks
+            # dir1 = plots.createSubDirectory(patient_dir, 'masks_cnn_fwd')
+            # plots.save_slices(mask_cnn_fwd, f'mask_cnn_fwd_{self.timesfwd[t].item()}', dir1)
+            # plots.save_single_zslices(mask_cnn_fwd, dir1, f'slices_{self.timesfwd[t].item()}')
+
+            # dir2 = plots.createSubDirectory(patient_dir, 'masks_cnn_bwd')
+            # plots.save_slices(mask_cnn_bwd, f'mask_cnn_bwd_{self.timesfwd[t].item()}', dir2)
+            # plots.save_single_zslices(mask_cnn_bwd, dir2, f'slices_{self.timesfwd[t].item()}')
+
+            # dir3 = plots.createSubDirectory(patient_dir, 'masks_flow_fwd')
+            # plots.save_slices(mask_flow_fwd, f'mask_flow_fwd_{self.timesfwd[t].item()}', dir3)
+            # plots.save_single_zslices(mask_flow_fwd, dir3, f'slices_{self.timesfwd[t].item()}')
+
+            # dir4 = plots.createSubDirectory(patient_dir, 'masks_flow_bwd')
+            # plots.save_slices(mask_flow_bwd, f'mask_flow_bwd_{self.timesfwd[t].item()}', dir4)
+            # plots.save_single_zslices(mask_flow_bwd, dir4, f'slices_{self.timesfwd[t].item()}')
 
     def label_mask(self, t, mt, timesteps):
         gtm = None
