@@ -8,6 +8,7 @@ import pandas as pd
 import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
+import csv
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
@@ -16,7 +17,6 @@ import utils.transforms.senary_transforms as T6
 import utils.transforms.unary_transforms as T1
 from utils.collate import collate_fn_batch
 from cnn.models.model_factory import create_model
-# from cnn.trainer_single_batch import Trainer
 from cnn.trainer_multi_batch import Trainer
 from utils import plots
 
@@ -118,6 +118,11 @@ class Evalautor:
         self.logger.info(self.report.mean(axis=0, numeric_only=True))
         self.report.to_excel(osp.join(self.save_dir, filename), index=False)
 
+    def save_list_to_csv(self, accs, filename):
+        with open(osp.join(self.save_dir, filename), 'w') as fp:
+            writer = csv.writer(fp)
+            writer.writerows(accs)
+
     def evaluate_patient(self, idx):
         if self.is_testset:
             self.cnn_res = self.trainer.test_patient(self.img4d, self.masks, self.timesfwd, self.timesbwd, self.ff, self.bf, cnn=True)
@@ -125,34 +130,42 @@ class Evalautor:
 
             accs_fwd_cnn = self.cnn_res[1]
             accs_bwd_cnn = self.cnn_res[2]
+            hd_fwd_cnn = self.cnn_res[5]
+            hd_bwd_cnn = self.cnn_res[6]
+
             accs_fwd_flow = self.flow_res[1]
             accs_bwd_flow = self.flow_res[2]
+            hd_fwd_flow = self.flow_res[5]
+            hd_bwd_flow = self.flow_res[6]
 
-            x = np.arange(abs(self.timesfwd[0] + 1 - self.timesbwd[0])).tolist()
-            times = slice(self.timesfwd[0] + 1, self.timesbwd[0])
-            # # times_plot[0] = 'ES'
-            # # times_plot[-1] = 'ED'
-            labels = [None] * len(x)
-            labels[0] = 'ES'
-            labels[-1] = 'ED'
-            # # labels[len(labels)//2] = 'Time'
-            plt.figure(figsize=(3.1, 1.5), dpi=100)
+            self.save_list_to_csv([accs_fwd_cnn, accs_bwd_cnn, accs_fwd_flow, accs_bwd_flow], f'{self.cur_patient}_acc.csv')
+            self.save_list_to_csv([hd_fwd_cnn, hd_bwd_cnn, hd_fwd_flow, hd_bwd_flow], f'{self.cur_patient}_hd.csv')
 
-            ft_fwd_color = 'mo-'
-            ft_bwd_color = 'kx-'
+            # x = np.arange(abs(self.timesfwd[0] + 1 - self.timesbwd[0])).tolist()
+            # times = slice(self.timesfwd[0] + 1, self.timesbwd[0])
+            # # # times_plot[0] = 'ES'
+            # # # times_plot[-1] = 'ED'
+            # labels = [None] * len(x)
+            # labels[0] = 'ES'
+            # labels[-1] = 'ED'
+            # # # labels[len(labels)//2] = 'Time'
+            # plt.figure(figsize=(3.1, 1.7), dpi=100)
+
+            # # ft_fwd_color = 'mo-'
+            # # ft_bwd_color = 'kx-'
             # cnn_fwd_color = 'gd-'
             # cnn_bwd_color = 'hc-'
 
-            plt.plot(x, accs_fwd_flow[times], 'r+-', label='Forward Flow', linewidth=1.5, markersize=2.5)
-            plt.plot(x, accs_bwd_flow[times], 'b*-', label='Backward Flow', linewidth=1.5, markersize=2.5)
-            plt.plot(x, accs_fwd_cnn[times], ft_fwd_color, label='Forward CNN', linewidth=1.5, markersize=2.5)
-            plt.plot(x, accs_bwd_cnn[times], ft_bwd_color, label='Backward CNN', linewidth=1.5, markersize=2.5)
-            plt.xticks(x, labels, fontsize=10)
-            plt.yticks(fontsize=10)
-            plt.xlabel('Time', fontsize=10, weight='bold')
-            plt.ylabel('Dice', fontsize=10, weight='bold')
-            plt.legend(loc='lower right', frameon=False, fontsize=10)
-            plt.savefig(osp.join(self.save_dir, self.cur_patient + '_acc.pdf'))
+            # plt.plot(x, accs_fwd_flow[times], 'r+-', label='Forward Flow', linewidth=1.5, markersize=2.5)
+            # plt.plot(x, accs_bwd_flow[times], 'b*-', label='Backward Flow', linewidth=1.5, markersize=2.5)
+            # plt.plot(x, accs_fwd_cnn[times], cnn_fwd_color, label='Forward CNN', linewidth=1.5, markersize=2.5)
+            # plt.plot(x, accs_bwd_cnn[times], cnn_bwd_color, label='Backward CNN', linewidth=1.5, markersize=2.5)
+            # plt.xticks(x, labels, fontsize=10)
+            # plt.yticks(fontsize=10)
+            # plt.xlabel('Time', fontsize=10, weight='bold')
+            # plt.ylabel('Dice', fontsize=10, weight='bold')
+            # # plt.legend(loc='lower right', frameon=False, fontsize=10)
+            # plt.savefig(osp.join(self.save_dir, self.cur_patient + '_acc.pdf'))
         else:
             self.cnn_res = self.trainer.val_patient(self.img4d, self.m0, self.mk, self.timesfwd, self.timesbwd, self.ff, self.bf, cnn=True)
             self.flow_res = self.trainer.val_patient(self.img4d, self.m0, self.mk, self.timesfwd, self.timesbwd, self.ff, self.bf, cnn=False)

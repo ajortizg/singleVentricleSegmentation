@@ -2,7 +2,7 @@ import os.path as osp
 import sys
 import torch
 from torch import nn
-from monai.metrics.meandice import compute_meandice
+from monai.metrics.meandice import compute_dice
 from monai.metrics.hausdorff_distance import compute_hausdorff_distance
 import numpy as np
 import os
@@ -31,7 +31,7 @@ class Trainer:
         self.loss_lambda = config.getfloat('PARAMETERS', 'LOSS_LAMBDA')
         loss_fn_type = config.get('PARAMETERS', 'LOSS_FN')
         self.penalization = config.getboolean('PARAMETERS', 'LOSS_PENALIZATION')
-        self.mu = config.getfloat('PARAMETERS', 'LOSS_PENALIZATION_MU')
+        self.loss_gamma = config.getfloat('PARAMETERS', 'LOSS_PENALIZATION_GAMMA')
         self.reduction = config.get('PARAMETERS', 'LOSS_REDUCTION')
         self.loss_fn = None
 
@@ -175,12 +175,12 @@ class Trainer:
             mts = mts.swapaxes(0, -1).squeeze(-1)
             masks = masks.swapaxes(0, -1).squeeze(-1)
             mts = torch.where(mts > 0.5, 1.0, 0.0)
-            acc_fwd = compute_meandice(mts, masks).mean().item()
+            acc_fwd = compute_dice(mts, masks).mean().item()
 
             # Compute backward accuracy
             mtts = mtts.swapaxes(0, -1).squeeze(-1)
             mtts = torch.where(mtts > 0.5, 1.0, 0.0)
-            acc_bwd = compute_meandice(mtts, masks).mean().item()
+            acc_bwd = compute_dice(mtts, masks).mean().item()
 
             total_acc = tuple(ta + a for ta, a in zip(total_acc, (0.5 * (acc_fwd + acc_bwd), acc_bwd, acc_fwd)))
 
@@ -331,8 +331,8 @@ class Trainer:
         mkt = mts[-offsets[batch_indices] - 1, batch_indices]
         mkt = torch.where(mkt > 0.5, 1.0, 0.0)
 
-        acc0 = compute_meandice(m0tt, m0).mean()
-        acck = compute_meandice(mkt, mk).mean()
+        acc0 = compute_dice(m0tt, m0).mean()
+        acck = compute_dice(mkt, mk).mean()
         # dc = 0.5 * (acc0 + acck)
         return acc0.item(), acck.item()
 
@@ -422,14 +422,16 @@ class Trainer:
             if self.penalization:
                 mh = mhs[0:ts_hats - offsets[b], b]
                 mhh = mhhs[0:ts_hats - offsets[b], b]
-                # l4 += (torch.norm(mh)**2 + torch.norm(mhh)**2) / kl[b]
-                l4 += (mh.pow(2).sum() + mhh.pow(2).sum()) / kl[b]
+                # l4 += (torch.norm(mh) + torch.norm(mhh)) / kl[b]    # l1
+                l4 += (mh.pow(2).sum() + mhh.pow(2).sum()) / kl[b]    # l2
 
         if self.reduction == 'sum':
             l1 = l1 / BS
             l2 = l2 / BS
-        l3 = self.loss_lambda * l3 / BS
-        l4 = self.mu * l4 / BS
+            l3 = l3 / BS
+            l4 = l4 / BS
+        l3 = self.loss_lambda * l3
+        l4 = self.loss_gamma * l4
         total_loss = l1 + l2 + l3 + l4
         return (total_loss, l1, l2, l3, l4)
 
@@ -509,33 +511,39 @@ class Trainer:
         masks = masks.swapaxes(0, -1).squeeze(-1)
         mts = torch.where(mts > 0.5, 1.0, 0.0)
         # acc_fwd = compute_meandice(mts, masks).mean().item()
-        accs_fwd = compute_meandice(mts, masks)
+        accs_fwd = compute_dice(mts, masks)
         mean_acc_fwd = accs_fwd.mean().item()
 
         # Compute backward accuracy
         mtts = mtts.swapaxes(0, -1).squeeze(-1)
         mtts = torch.where(mtts > 0.5, 1.0, 0.0)
         # acc_bwd = compute_meandice(mtts, masks).mean().item()
-        accs_bwd = compute_meandice(mtts, masks)
+        accs_bwd = compute_dice(mtts, masks)
         mean_acc_bwd = accs_bwd.mean().item()
 
         if hd:
-            hd_fwd = compute_hausdorff_distance(mts, masks).mean().item()
-            hd_bwd = compute_hausdorff_distance(mtts, masks).mean().item()
+            hd_fwd = compute_hausdorff_distance(mts, masks)
+            mean_hd_fwd = hd_fwd.mean().item()
+            hd_bwd = compute_hausdorff_distance(mtts, masks)
+            mean_hd_bwd = hd_bwd.mean().item()
         else:
-            hd_fwd = 0
-            hd_bwd = 0
+            hd_fwd = torch.tensor([0.0], device=self.device)
+            mean_hd_fwd = 0
+            hd_bwd = torch.tensor([0.0], device=self.device)
+            mean_hd_bwd = 0
 
         metrics = {'mean_acc': 0.5 * (mean_acc_fwd + mean_acc_bwd),
                    'mean_acc_fwd': mean_acc_fwd,
                    'mean_acc_bwd': mean_acc_bwd,
-                   'mean_hd': 0.5 * (hd_fwd + hd_bwd)}
-
+                   'mean_hd': 0.5 * (mean_hd_fwd + mean_hd_bwd)}
         self.mean_epoch_stat['test_acc'].append((metrics['mean_acc'], metrics['mean_acc_fwd'], metrics['mean_acc_bwd']))
-
-        # Mean acc
-        # acc = 0.5 * (acc_fwd + acc_bwd)
-        return metrics, accs_fwd.squeeze().detach().cpu().tolist(), accs_bwd.squeeze().detach().cpu().tolist(), mts, mtts
+        return (metrics,
+                accs_fwd.squeeze().detach().cpu().tolist(),
+                accs_bwd.squeeze().detach().cpu().tolist(),
+                mts,
+                mtts,
+                hd_fwd.squeeze().detach().cpu().tolist(),
+                hd_bwd.squeeze().detach().cpu().tolist())
 
     def plot_stats(self, save_dir, log_scale=False):
         # Plot accuracy

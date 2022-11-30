@@ -6,7 +6,7 @@ import os.path as osp
 import numpy as np
 from torch.utils.data import DataLoader
 import csv
-from monai.metrics.meandice import compute_meandice
+from monai.metrics.meandice import compute_dice
 from monai.metrics.hausdorff_distance import compute_hausdorff_distance
 import transforms.senary_transforms as T6
 import transforms.unary_transforms as T1
@@ -36,7 +36,7 @@ if __name__ == "__main__":
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     transforms = T6.Compose([
-        # T6.ElasticDeformation(1.0, (0.5, 2.0), 10, 'nearest', False, 'zyx', order=1),
+        # T6.ElasticDeformation(1.0, (0.5, 2.0), 10, 'nearest', False, 'yx', order=1),
         # T6.RandomRotate(1.0, (0, 360), (0, 360), (0, 360), 'border'),
         # T6.OneOf([
         #     T6.RandomDepthFlip(1.0),
@@ -107,8 +107,8 @@ if __name__ == "__main__":
             m0tt = torch.where(out['mtt'][0] > 0.5, 1.0, 0.0)
             mkt = torch.where(out['mt'][-1] > 0.5, 1.0, 0.0)
 
-            metrics['dc_0'].append(compute_meandice(m0tt, out['mt'][0]).mean().item())
-            metrics['dc_k'].append(compute_meandice(mkt, out['mtt'][-1]).mean().item())
+            metrics['dc_0'].append(compute_dice(m0tt, out['mt'][0]).mean().item())
+            metrics['dc_k'].append(compute_dice(mkt, out['mtt'][-1]).mean().item())
             metrics['hd_0'].append(compute_hausdorff_distance(m0tt, out['mt'][0], percentile=hd_per).mean().item())
             metrics['hd_k'].append(compute_hausdorff_distance(mkt, out['mtt'][-1], percentile=hd_per).mean().item())
             row.append('{:.3f}'.format(metrics['dc_0'][-1]))
@@ -124,13 +124,13 @@ if __name__ == "__main__":
                 # mtt_dir = plots.createSubDirectory(patient_dir, 'mtt')
                 # mtt_slices_dir = plots.createSubDirectory(mtt_dir, 'zslices')
 
+                blue = [1, 0.7, 0]
+                red = [0, 0, 1]
+
                 for t in range(len(out['mt'])):
                     img3d = r_transf(imgs4d[..., times_fwd[t]].squeeze())
                     mt = rre_transf(out['mt'][t].squeeze())
                     mtt = rre_transf(out['mtt'][t].squeeze())
-
-                    blue = [1, 0.7, 0]
-                    red = [0, 0, 1]
 
                     if t == 0:
                         plots.save_img_masks(img3d, [rr_transf(m0.squeeze()), mtt, rre_transf(m0.squeeze())], 'im_m0_m0tt', patient_dir,

@@ -49,7 +49,7 @@ def create_logger(save_dir) -> logging.Logger:
     logging.basicConfig(filename=os.path.join(save_dir, "console.log"),
                         format='%(asctime)s %(levelname)s %(message)s',
                         datefmt='%H:%M:%S',
-                        level=logging.INFO)
+                        level=logging.INFO, force=True)
     logger = logging.getLogger()
     logger.addHandler(logging.StreamHandler(sys.stdout))
     return logger

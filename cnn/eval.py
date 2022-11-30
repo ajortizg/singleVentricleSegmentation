@@ -22,6 +22,7 @@ if __name__ == "__main__":
     save_dir = plots.createSaveDirectory(P['out_path'], 'EVAL')
     param_reader.save_config(config, save_dir, 'config.ini')
     logger = plots.create_logger(save_dir)
+    logger.info('save_dir: '+ save_dir)
 
     eval = Evalautor(config, P, device, logger, save_dir, verbose=True)
     eval.evaluate()

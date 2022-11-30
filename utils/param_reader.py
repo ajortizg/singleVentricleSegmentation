@@ -31,6 +31,7 @@ def train_params(config):
         'beta2': config.getfloat('PARAMETERS', 'BETA2'),
         'epochs': config.getint('PARAMETERS', 'NUM_EPOCHS'),
         'loss_lambda': config.getfloat('PARAMETERS', 'LOSS_LAMBDA'),
+        'loss_gamma': config.getfloat('PARAMETERS', 'LOSS_PENALIZATION_GAMMA'),
         'gpus': config.getint('PARAMETERS', 'NUM_GPUS'),
         'workers': config.getint('PARAMETERS', 'NUM_WORKERS'),
         'pretrained': config.getboolean('PARAMETERS', 'PRETRAINED'),
