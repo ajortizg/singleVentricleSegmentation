@@ -11,7 +11,7 @@ if __name__ == "__main__":
     print('Epoch: %d' % checkpoint['epoch'])
     print('\tTrain')
     print('\t\tLoss: %.3f' % checkpoint['train_loss'])
-    print('\t\tAcccc: %.3f' % checkpoint['train_acc'])
+    print('\t\tAcc: %.3f' % checkpoint['train_acc'])
     print('\tVal')
     print('\t\tLoss: %.3f' % checkpoint['val_loss'])
     print('\t\tAcc: %.3f' % checkpoint['val_acc'])
