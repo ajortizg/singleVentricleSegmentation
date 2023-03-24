@@ -229,7 +229,7 @@ class Resize:
 
             if masks is not None:
                 masks = torch.from_numpy(masks).float().unsqueeze(0)  # C, Z, Y, X, T
-                masks = masks.permute(4, 0, 1, 2, 3) # T, C, Z, Y, X
+                masks = masks.permute(4, 0, 1, 2, 3)  # T, C, Z, Y, X
                 masks = F.interpolate(masks, size=self.size, align_corners=True, mode='trilinear').squeeze()
                 masks = masks.permute(1, 2, 3, 0).numpy()
 
