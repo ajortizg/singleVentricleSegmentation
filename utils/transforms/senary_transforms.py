@@ -200,6 +200,50 @@ class ToTensor:
         return f"{self.__class__.__name__}()"
 
 
+class Resize:
+    def __init__(self, p: float, size: tuple[int, int, int]):
+        self.p = p
+        self.size = size
+
+    def __call__(self, img4d, ms, md, ff, bf, masks):
+        if np.random.rand() < self.p:
+            NZ, NY, NX, _, _ = ff.shape
+            img4d = torch.from_numpy(img4d).float()  # NZ, NY, NX, NT
+            img4d = img4d.unsqueeze(0).permute(4, 0, 1, 2, 3)  # NT, CH, NZ, NY, NX
+            ms = torch.from_numpy(ms).float().unsqueeze(0).unsqueeze(0)
+            md = torch.from_numpy(md).float().unsqueeze(0).unsqueeze(0)
+            ff = torch.from_numpy(ff).float().permute(4, 3, 0, 1, 2)  # NT, CH, NZ, NY, NX
+            bf = torch.from_numpy(bf).float().permute(4, 3, 0, 1, 2)
+
+            img4d = F.interpolate(img4d, size=self.size, align_corners=True, mode='trilinear').squeeze()
+            ms = F.interpolate(ms, size=self.size, align_corners=True, mode='trilinear').squeeze()
+            md = F.interpolate(md, size=self.size, align_corners=True, mode='trilinear').squeeze()
+            ff = F.interpolate(ff, size=self.size, align_corners=True, mode='trilinear')
+            bf = F.interpolate(bf, size=self.size, align_corners=True, mode='trilinear')
+
+            img4d = img4d.permute(1, 2, 3, 0).numpy()
+            ms = ms.numpy()
+            md = md.numpy()
+            ff = ff.permute(2, 3, 4, 1, 0).numpy()
+            bf = bf.permute(2, 3, 4, 1, 0).numpy()
+
+            if masks is not None:
+                masks = torch.from_numpy(masks).float().unsqueeze(0)  # C, Z, Y, X, T
+                masks = masks.permute(4, 0, 1, 2, 3) # T, C, Z, Y, X
+                masks = F.interpolate(masks, size=self.size, align_corners=True, mode='trilinear').squeeze()
+                masks = masks.permute(1, 2, 3, 0).numpy()
+
+            # correct scale factor
+            NZ2, NY2, NX2, _, _ = ff.shape
+            ff[..., 0, :] /= (float(NX) / float(NX2))
+            ff[..., 1, :] /= (float(NY) / float(NY2))
+            ff[..., 2, :] /= (float(NZ) / float(NZ2))
+        return img4d, ms, md, ff, bf, masks
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}()"
+
+
 class RandomRotate:
     def __init__(self, p=0.5, range_x: tuple = (0, 0), range_y: tuple = (0, 0), range_z: tuple = (0, 0),
                  boundary='zeros', clip_interval: tuple = (0.0, 1.0)):

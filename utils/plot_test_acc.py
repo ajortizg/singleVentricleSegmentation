@@ -48,38 +48,38 @@ if __name__ == "__main__":
     save_dir = plots.createSaveDirectory(base_dir, 'PLOTS')
     logger = plots.create_logger(save_dir)
 
-    patients = [Patient('Child_73', es=14, ed=32), Patient('Adolescent_53', es=14, ed=28), Patient('Adult_11', es=15, ed=39)]
+    patients = [Patient('Child_73', es=14, ed=32 + 1), Patient('Adolescent_53', es=14, ed=28 + 1), Patient('Adult_11', es=15, ed=39 + 1)]
 
     # best_val_checkpoint
-    # eval_dirs = ['EVAL_20221212-232925',
-    #              'EVAL_20221212-233053',
-    #              'EVAL_20221212-233129',
-    #              'EVAL_20221213-194431',
-    #              'EVAL_20221213-194514']
+    eval_dirs = ['EVAL_20221212-233053',
+                 'EVAL_20221212-233129',
+                 'EVAL_20221213-194431']
 
     # checkpoint
-    eval_dirs = ['EVAL_20221213-195804',
-                 'EVAL_20221213-195853',
-                 'EVAL_20221213-201241',
-                 'EVAL_20221213-201330',
-                 'EVAL_20221213-201429']
+    # eval_dirs = ['EVAL_20221213-195853',
+    #              'EVAL_20221213-201241',
+    #              'EVAL_20221213-201330']
 
     ft_dirs = [osp.sep.join(['TEST_FT', 'EVAL', x]) for x in sorted(os.listdir(osp.sep.join([base_dir, 'TEST_FT', 'EVAL'])))]
     eval_dirs.extend(ft_dirs)
 
     gammas, fine_tunned = read_config_params(base_dir, eval_dirs)
 
-    fig, axs = plt.subplots(2, len(patients), constrained_layout=True, sharex=False, sharey=True, figsize=(8, 4), dpi=100)  # figsize=(5, 3)
+    fig, axs = plt.subplots(2, len(patients), constrained_layout=True, sharex='col', sharey='col', figsize=(8.5, 3.5), dpi=100)  # figsize=(5, 3)
 
     for i, patient in enumerate(patients):
         logger.info(patient.name)
-        x = np.arange(abs(patient.es + 1 - patient.ed)).tolist()
-        times = slice(patient.es + 1, patient.ed)
+        x = np.arange(abs(patient.es - patient.ed)).tolist()
+        times = slice(patient.es, patient.ed, 1)
+        print(x)
+        print(times)
         labels = [None] * len(x)
         labels[0] = 'ES'
         labels[-1] = 'ED'
         plot_flow = False
 
+        linewidth = 1.0
+        markersize = 4
         for j, (eval, gamma, ft) in enumerate(zip(eval_dirs, gammas, fine_tunned)):
             eval_dir = osp.join(base_dir, eval)
             try:
@@ -96,24 +96,38 @@ if __name__ == "__main__":
 
                 axs[0, i].set_title('Forward')
                 axs[1, i].set_title('Backward')
-                axs[0, i].plot(x, flow_fwd_acc[times], 'ro-', label='Forward OF', markersize=5)
-                axs[1, i].plot(x, flow_bwd_acc[times], 'bo-', label='Backward OF', markersize=5)
+                axs[0, i].plot(x, flow_fwd_acc[times], 'ro-', label='Forward OF', markersize=markersize, linewidth=linewidth)
+                axs[1, i].plot(x, flow_bwd_acc[times], 'bo-', label='Backward OF', markersize=markersize, linewidth=linewidth)
                 plot_flow = True
 
-            lbl = 'FT-' if ft else 'CNN-'
+            if ft:
+                lbl = 'FT '
+                color = 'orange'
+            else:
+                lbl = 'CNN '
+                color = 'green'
+
+            if gamma == 0.1:
+                linestyle = 'solid'
+            elif gamma == 1.0:
+                linestyle = 'dashed'
+            elif gamma == 10.0:
+                linestyle = 'dashdot'
 
             logger.info(f'\n[{j}]\t{eval}, Gamma: {gamma}')
-            axs[0, i].plot(x, cnn_fwd_acc[times], label=fr'{lbl}$\gamma=${gamma}')
-            axs[1, i].plot(x, cnn_bwd_acc[times], label=fr'{lbl}$\gamma=${gamma}')
+            axs[0, i].plot(x, cnn_fwd_acc[times], color=color, linestyle=linestyle,
+                           label=fr'{lbl}$\gamma=${gamma}', markersize=markersize, linewidth=linewidth)
+            axs[1, i].plot(x, cnn_bwd_acc[times], color=color, linestyle=linestyle,
+                           label=fr'{lbl}$\gamma=${gamma}', markersize=markersize, linewidth=linewidth)
 
             axs[0, i].set_xticks(x)
             axs[0, i].set_xticklabels(labels)
             axs[0, i].set_xlabel('Time')
-            axs[0, i].set_ylabel('Dice')
+            axs[0, i].set_ylabel('Forward')
             axs[1, i].set_xticks(x)
             axs[1, i].set_xticklabels(labels)
             axs[1, i].set_xlabel('Time')
-            axs[1, i].set_ylabel('Dice')
+            axs[1, i].set_ylabel('Backward')
 
             # box = axs[0].get_position()
             # axs[0].set_position([box.x0, box.y0, box.width * 0.8, box.height])

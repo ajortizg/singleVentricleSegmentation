@@ -36,6 +36,7 @@ if __name__ == "__main__":
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     transforms = T6.Compose([
+        T6.Resize(p=1.0, size=(96, 96, 96)),
         # T6.ElasticDeformation(1.0, (0.5, 2.0), 10, 'nearest', False, 'yx', order=1),
         # T6.RandomRotate(1.0, (0, 360), (0, 360), (0, 360), 'border'),
         # T6.OneOf([
@@ -136,14 +137,20 @@ if __name__ == "__main__":
                         plots.save_img_masks(img3d, [rr_transf(m0.squeeze()), mtt, rre_transf(m0.squeeze())], 'im_m0_m0tt', patient_dir,
                                              th=0.5, alphas=[0.2, 1.0, 1.0], colors=[blue, red, blue])
                         if save_slices:
-                            plots.save_img_masks_slices(img3d, [rr_transf(m0.squeeze()), mtt, rre_transf(m0.squeeze())], patient_dir, f'{times_fwd[t].item()}_0tt',
-                                                        0.5, [0.2, 1.0, 1.0], [blue, red, blue])
+                            plots.save_img_masks_slices(
+                                img3d, [rr_transf(m0.squeeze()),
+                                        mtt, rre_transf(m0.squeeze())],
+                                patient_dir, f'{times_fwd[t].item()}_0tt', 0.5, [0.2, 1.0, 1.0],
+                                [blue, red, blue])
                     elif t == len(out['mt']) - 1:
                         plots.save_img_masks(img3d, [rr_transf(mk.squeeze()), mt, rre_transf(mk.squeeze())], 'mk_mkt', patient_dir,
                                              th=0.5, alphas=[0.2, 1.0, 1.0], colors=[red, blue, red])
                         if save_slices:
-                            plots.save_img_masks_slices(img3d, [rr_transf(mk.squeeze()), mt, rre_transf(mk.squeeze())], patient_dir, f'{times_fwd[t].item()}_kt',
-                                                        0.5, [0.2, 1.0, 1.0], [red, blue, red])
+                            plots.save_img_masks_slices(
+                                img3d, [rr_transf(mk.squeeze()),
+                                        mt, rre_transf(mk.squeeze())],
+                                patient_dir, f'{times_fwd[t].item()}_kt', 0.5, [0.2, 1.0, 1.0],
+                                [red, blue, red])
 
                     plots.save_img_masks(img3d, [mt, mtt], f'im_t_{times_fwd[t]}', patient_dir,
                                          th=0.5, alphas=[1.0, 1.0], colors=[blue, red])
