@@ -126,7 +126,7 @@ if __name__ == "__main__":
     parser.add_argument('--mode', help='cnn or ft', default='cnn')
     args = parser.parse_args()
 
-    save_dir = 'results'
+    save_dir = 'results_2023'
     report_dir = plots.createSubDirectory(save_dir, 'reports')
 
     if args.mode == 'cnn':
@@ -144,5 +144,5 @@ if __name__ == "__main__":
     # to_dt = datetime(year=2022, month=8, day=17, hour=23, minute=59)
 
     report = Report(from_dt, to_dt, mode)
-    report.filter('results')
+    report.filter('results_2023')
     report.create(report_dir, f'report_{time.strftime(str_fmt)}.xlsx')

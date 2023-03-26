@@ -66,7 +66,7 @@ if __name__ == "__main__":
 
     # Create model
     net = create_model(config, logger).to(device)
-    summary(net, input_size=(2, 80, 80, 80), batch_size=P['batch_size'])
+    # summary(net.net, input_size=(2, 80, 80, 80), batch_size=P['batch_size'])
     net = torch.nn.DataParallel(net, device_ids=np.arange(P['gpus']).tolist())
     if P['pretrained']:
         checkpoint_file = P['checkpoint_file']
