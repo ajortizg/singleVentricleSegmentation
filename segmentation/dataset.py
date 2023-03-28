@@ -39,10 +39,10 @@ class SVDSegmentation(Dataset):
         data = {'img': imgs, 'mask': masks, 'patient': patient_name}
         if self.transforms is not None:
             data = self.transforms(data)
-
         return data
 
-    def collate_fn(self, batch):
+    @staticmethod
+    def collate_fn(batch):
         ret = UserDict(**default_collate(batch))
         return ret
 
