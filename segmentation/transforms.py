@@ -279,24 +279,23 @@ class CropForeground:
             img = data['img']
             mask = data['mask']
 
-            NZ, NY, NX, NT = img.shape
-            zmin_es, zmax_es, ymin_es, ymax_es, xmin_es, xmax_es = self.mask_range(mask[..., 0])
-            zmin_ed, zmax_ed, ymin_ed, ymax_ed, xmin_ed, xmax_ed = self.mask_range(mask[..., 1])
-            zmin_total = max(0, min(zmin_ed, zmin_es) - self.tol)
-            zmax_total = min(NZ - 1, max(zmax_ed, zmax_es) + self.tol)
-            ymin_total = max(0, min(ymin_ed, ymin_es) - self.tol)
-            ymax_total = min(NY - 1, max(ymax_ed, ymax_es) + self.tol)
-            xmin_total = max(0, min(xmin_ed, xmin_es) - self.tol)
-            xmax_total = min(NX - 1, max(xmax_ed, xmax_es) + self.tol)
+            NZ, NY, NX, NT = mask.shape
+            zmin, zmax, ymin, ymax, xmin, xmax = self.mask_range(mask)
+            zmin = max(0, zmin - self.tol)
+            zmax = min(NZ - 1, zmax + self.tol)
+            ymin = max(0, ymin - self.tol)
+            ymax = min(NY - 1, ymax + self.tol)
+            xmin = max(0, xmin - self.tol)
+            xmax = min(NX - 1, xmax + self.tol)
 
-            img = img[zmin_total:zmax_total + 1, ymin_total:ymax_total + 1, xmin_total:xmax_total + 1]
-            mask = mask[zmin_total:zmax_total + 1, ymin_total:ymax_total + 1, xmin_total:xmax_total + 1]
+            img = img[zmin:zmax + 1, ymin:ymax + 1, xmin:xmax + 1]
+            mask = mask[zmin:zmax + 1, ymin:ymax + 1, xmin:xmax + 1]
             data['img'] = img
             data['mask'] = mask
         return data
 
-    def mask_range(self, mask):
-        z, y, x = np.nonzero(mask)
+    def mask_range(self, masks):
+        z, y, x, _ = np.nonzero(masks)
         xmin = np.min(x)
         xmax = np.max(x)
         ymin = np.min(y)

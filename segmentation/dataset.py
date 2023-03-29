@@ -11,6 +11,7 @@ from collections import UserDict
 class SVDSegmentation(Dataset):
     def __init__(self, root_dir, mode='train', transforms=None):
         self.transforms = transforms
+        self.is_test = mode == 'test'
         self.imgs_dir = osp.join(root_dir, 'NIFTI_4D_Datasets')
         self.masks_dir = osp.join(root_dir, 'NIFTI_Single_Ventricle_Segmentations')
         df = pd.read_excel(osp.join(root_dir, 'Segmentation_volumes.xlsx'))
@@ -28,12 +29,17 @@ class SVDSegmentation(Dataset):
 
         # Load 4D nifty
         img_zyxt = np.swapaxes(nib.load(osp.join(self.imgs_dir, patient_name + '.nii.gz')).get_fdata(), 0, 2)
-        imgs = np.stack((img_zyxt[..., es], img_zyxt[..., ed]), axis=3)
-
-        # Load segmentations masks
-        mask_zyx_es = np.swapaxes(nib.load(osp.join(self.masks_dir, patient_name, patient_name + '_Systole_Labelmap.nii')).get_fdata(), 0, 2)
-        mask_zyx_ed = np.swapaxes(nib.load(osp.join(self.masks_dir, patient_name, patient_name + '_Diastole_Labelmap.nii')).get_fdata(), 0, 2)
-        masks = np.stack((mask_zyx_es, mask_zyx_ed), axis=3)
+        
+        if self.is_test:
+            imgs = img_zyxt
+            masks = np.empty(shape=img_zyxt.shape, dtype=img_zyxt.dtype)
+            for t in range(masks.shape[3]):
+                masks[..., t] = np.swapaxes(nib.load(osp.join(self.masks_dir, patient_name, f'{patient_name}_{t}_Labelmap.nii')).get_fdata(), 0, 2)
+        else:
+            imgs = np.stack((img_zyxt[..., es], img_zyxt[..., ed]), axis=3)
+            mask_zyx_es = np.swapaxes(nib.load(osp.join(self.masks_dir, patient_name, patient_name + '_Systole_Labelmap.nii')).get_fdata(), 0, 2)
+            mask_zyx_ed = np.swapaxes(nib.load(osp.join(self.masks_dir, patient_name, patient_name + '_Diastole_Labelmap.nii')).get_fdata(), 0, 2)
+            masks = np.stack((mask_zyx_es, mask_zyx_ed), axis=3)
 
         # Group data in a dictionary
         data = {'img': imgs, 'mask': masks, 'patient': patient_name}
@@ -45,4 +51,3 @@ class SVDSegmentation(Dataset):
     def collate_fn(batch):
         ret = UserDict(**default_collate(batch))
         return ret
-

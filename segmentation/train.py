@@ -12,19 +12,19 @@ import time
 import sys
 from monai.networks.nets import UNETR
 from monai.losses.dice import DiceLoss, DiceCELoss
+from monai.metrics.meandice import compute_dice
 import matplotlib.pyplot as plt
+from terminaltables import AsciiTable
+from torch.utils.tensorboard import SummaryWriter
+
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 from utils import plots
 from cnn.models import model_factory
 
-if __name__ == '__main__':
-    num_epochs = 5
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    # cudnn.benchmark = True
-    # cudnn.deterministic = True
 
+def create_dataloaders():
     train_transforms = T.Compose([
         T.CropForeground(p=1.0, tol=10),
         T.Resize(p=1.0, size=(96, 96, 96)),
@@ -42,10 +42,104 @@ if __name__ == '__main__':
         # T6.AdditiveGaussianNoise(P['noise_prob'], P['noise_mu'], P['noise_std'], P['clip_interval']),
     ])
 
-    train_ds = SVDSegmentation('data/svd_segmentation', mode='train', transforms=train_transforms)
-    train_loader = DataLoader(train_ds, batch_size=4, shuffle=True, num_workers=8, collate_fn=SVDSegmentation.collate_fn)
+    val_transforms = T.Compose([
+        T.CropForeground(p=1.0, tol=10),
+        T.Resize(p=1.0, size=(96, 96, 96)),
+        T.MinMaxNormalization(p=1.0),
+        T.ToTensor(add_ch_dim=True)
+    ])
 
-    save_dir = plots.createSaveDirectory('results_2023', 'SEG')
+    train_ds = SVDSegmentation('data/svd_segmentation', mode='train', transforms=train_transforms)
+    val_ds = SVDSegmentation('data/svd_segmentation', mode='val', transforms=val_transforms)
+    test_ds = SVDSegmentation('data/svd_segmentation', mode='test', transforms=val_transforms)
+    train_loader = DataLoader(train_ds, batch_size=4, shuffle=True, num_workers=8, collate_fn=SVDSegmentation.collate_fn)
+    val_loader = DataLoader(val_ds, batch_size=4, shuffle=False, num_workers=4, collate_fn=SVDSegmentation.collate_fn)
+    test_loader = DataLoader(test_ds, batch_size=1, shuffle=False, num_workers=1, collate_fn=SVDSegmentation.collate_fn)
+    return train_loader, val_loader, test_loader
+
+
+def train(net, loss_fn, opt, loader, device):
+    net.train()
+    accum_loss = 0
+    accum_dice = 0
+
+    for data in loader:
+        img = data['img'].to(device)
+        mask = data['mask'].to(device)
+
+        for k in range(2):
+            output = net(img[..., k])
+            output = F.sigmoid(output)
+            loss = loss_fn(output, mask[..., k])
+            opt.zero_grad()
+            loss.backward()
+            opt.step()
+            accum_loss += loss.item()
+
+            with torch.no_grad():
+                output = torch.where(output > 0.5, 1.0, 0.0)
+                dice = compute_dice(output, mask[..., k]).mean()
+                accum_dice += dice.item()
+
+    mean_loss = accum_loss / (len(loader) * 2)
+    mean_dice = accum_dice / (len(loader) * 2)
+    return mean_loss, mean_dice
+
+
+@torch.no_grad()
+def validate(net, loss_fn, loader, device):
+    net.eval()
+    accum_loss = 0
+    accum_dice = 0
+
+    for data in loader:
+        img = data['img'].to(device)
+        mask = data['mask'].to(device)
+
+        for k in range(2):
+            output = net(img[..., k])
+            output = F.sigmoid(output)
+            loss = loss_fn(output, mask[..., k])
+            accum_loss += loss.item()
+
+            output = torch.where(output > 0.5, 1.0, 0.0)
+            dice = compute_dice(output, mask[..., k]).mean()
+            accum_dice += dice.item()
+
+    mean_loss = accum_loss / (len(loader) * 2)
+    mean_dice = accum_dice / (len(loader) * 2)
+    return mean_loss, mean_dice
+
+
+@torch.no_grad()
+def test(net, loader, device):
+    net.eval()
+    accum_dice = 0
+
+    for data in loader:
+        img = data['img'].to(device).squeeze(0)
+        mask = data['mask'].to(device).squeeze(0)
+        img = torch.permute(img, (4, 0, 1, 2, 3))
+        mask = torch.permute(mask, (4, 0, 1, 2, 3))
+
+        output = net(img)
+        output = F.sigmoid(output)
+        output = torch.where(output > 0.5, 1.0, 0.0)
+        dice = compute_dice(output, mask).mean()
+        accum_dice += dice.item()
+
+    mean_dice = accum_dice / len(loader)
+    return mean_dice
+
+
+if __name__ == '__main__':
+    num_epochs = 500
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    train_loader, val_loader, test_loader = create_dataloaders()
+
+    save_dir = plots.createSaveDirectory('results', 'SEG')
+    writer = SummaryWriter(log_dir=save_dir,)
     logger = plots.create_logger(save_dir)
     logger.info('Save dir: {}'.format(save_dir))
     logger.info('Device: {}'.format(device))
@@ -60,32 +154,57 @@ if __name__ == '__main__':
                 spatial_dims=3).to(device)
 
     # loss_fn = DiceCELoss(lambda_ce=0.0, lambda_dice=1.0, sigmoid=True)
-    loss_fn = DiceLoss(sigmoid=True)
+    loss_fn = DiceLoss(sigmoid=False)
     optimizer = optim.Adam(net.parameters(), lr=5e-4)
 
     train_losses = []
+    train_dices = []
+    val_losses = []
+    val_dices = []
+    test_dices = []
+
     tic = time.time()
-    for e in range(1, num_epochs + 1):
-        epoch_loss = 0
+    for e in tqdm(range(1, num_epochs + 1)):
+        loss, dice = train(net, loss_fn, optimizer, train_loader, device)
+        train_losses.append(loss)
+        train_dices.append(dice)
 
-        for i, data in enumerate(train_loader):
-            img = data['img'].to(device)
-            mask = data['mask'].to(device)
+        loss, dice = validate(net, loss_fn, val_loader, device)
+        val_losses.append(loss)
+        val_dices.append(dice)
 
-            for k in range(2):
-                output = net(img[..., k])
-                loss = loss_fn(output, mask[..., k])
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-                epoch_loss += loss.item()
+        dice = test(net, test_loader, device)
+        test_dices.append(dice)
 
-        train_losses.append(epoch_loss / (len(train_loader) * 2))
-        logger.info('Epoch: {}, loss: {:.3f}'.format(e, train_losses[-1]))
+        logger.info(AsciiTable([
+            ['Split', 'Loss', 'Dice'],
+            ['Train', '{:.3f}'.format(train_losses[-1]), '{:.3f}'.format(train_dices[-1])],
+            ['Val', '{:.3f}'.format(val_losses[-1]), '{:.3f}'.format(val_dices[-1])],
+            ['Test', 'NA', '{:.3f}'.format(test_dices[-1])]
+        ]).table)
 
-    logger.info('\nTotal time taken to train the model: {:.3f} H'.format((time.time() - tic) / 3600.0))
+        writer.add_scalars('loss', {'train': train_losses[-1], 'val': val_losses[-1]}, e)
+        writer.add_scalars('dice', {'train': train_dices[-1], 'val': val_dices[-1], 'test': test_dices[-1]}, e)
 
-    plt.plot(train_losses)
+    logger.info('\nTotal time taken to train the model: {:.3f} hrs.'.format((time.time() - tic) / 3600.0))
+
+    # Plot loss history
+    plt.figure()
+    plt.plot(train_losses, label='train')
+    plt.plot(val_losses, label='val')
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
+    plt.legend(loc='lower left')
     plt.savefig(osp.join(save_dir, 'loss.png'))
+
+    # Plot dice history
+    plt.figure()
+    plt.plot(train_dices, label='train')
+    plt.plot(val_dices, label='val')
+    plt.plot(test_dices, label='test')
+    plt.xlabel('Epoch')
+    plt.ylabel('Dice')
+    plt.legend(loc='lower right')
+    plt.savefig(osp.join(save_dir, 'dice.png'))
+
+    writer.close()
