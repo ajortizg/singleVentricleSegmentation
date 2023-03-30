@@ -28,10 +28,14 @@ class UNet3d(nn.Module):
         kernel_size = tuple(map(int, kstr.split(',')))
         act = config.get('PARAMETERS', 'ACTIVATION')
         slope = config.getfloat('PARAMETERS', 'ACTIVATION_SLOPE')
-        lipschitz_reg = config.getboolean('PARAMETERS', 'LIPSCHITZ_REGULARIZATION')
-        max_lc = config.getfloat('PARAMETERS', 'MAX_LIPSCHITZ_CONSTANT')
-        power_its = config.getint('PARAMETERS', 'POWER_ITS')
-        power_eps = config.getfloat('PARAMETERS', 'POWER_EPS')
+        lipschitz_reg = False
+        max_lc = 0
+        power_its = 0
+        power_eps = 0
+        # lipschitz_reg = config.getboolean('PARAMETERS', 'LIPSCHITZ_REGULARIZATION')
+        # max_lc = config.getfloat('PARAMETERS', 'MAX_LIPSCHITZ_CONSTANT')
+        # power_its = config.getint('PARAMETERS', 'POWER_ITS')
+        # power_eps = config.getfloat('PARAMETERS', 'POWER_EPS')
         self.residual = config.getboolean('PARAMETERS', 'RESIDUAL')
         self.out_layer = config.get('PARAMETERS', 'OUT_LAYER')
 

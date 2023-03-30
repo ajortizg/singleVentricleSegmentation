@@ -29,6 +29,13 @@ import csv
 #########################
 
 
+def save_config(config, save_dir, filename='config.ini'):
+    # save config file to save directory
+    conifg_output = osp.join(save_dir, filename)
+    with open(conifg_output, 'w') as config_file:
+        config.write(config_file)
+
+
 def createSaveDirectory(OUTPUT_PATH, name):
     timestr = time.strftime("%Y%m%d-%H%M%S")
     saveDir = os.path.sep.join([OUTPUT_PATH, name + "_" + timestr])

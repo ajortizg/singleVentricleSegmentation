@@ -64,6 +64,47 @@ class MinMaxNormalization:
         return f"{self.__class__.__name__}()"
 
 
+class ZScoreNormalization:
+    def __init__(self, p):
+        self.p = p
+
+    def __call__(self, data):
+        if np.random.rand() < self.p:
+            img = data['img']
+            sigma = np.std(img)
+            mu = np.mean(img)
+            img_n = (img - mu) / sigma
+            data['img'] = img_n
+        return data
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}()"
+
+
+class QuadraticNormalization:
+    def __init__(self, p):
+        self.p = p
+
+    def __call__(self, data):
+        if np.random.rand() < self.p:
+            img = data['img']
+            mask = data['mask']
+
+            per95 = np.percentile(img, 95)
+            img = np.clip(img, 0, per95)
+            avg = np.mean(img, where=mask.astype('bool'))
+
+            # normalization n(I) = a I/sqrt(1+beta I**2)
+            norm_a = np.sqrt(per95 * per95 - avg * avg) / (np.sqrt(3) * per95 * avg)
+            norm_b = (per95 * per95 - 4. * avg * avg) / (3. * per95 * per95 * avg * avg)
+            img_norm = norm_a * img / np.sqrt(1 + norm_b * img**2)
+            data['img'] = img_norm
+        return data
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}()"
+
+
 class RandomVerticalFlip:
     def __init__(self, p):
         self.p = p
@@ -119,16 +160,15 @@ class RandomDepthFlip:
 
 
 class MutiplicativeScaling:
-    def __init__(self, p, scale_range, clip_interval):
+    def __init__(self, p, scale_range):
         self.p = p
         self.scale_range = scale_range
-        self.clip_interval = clip_interval
 
     def __call__(self, data):
         if np.random.rand() < self.p:
             img = data['img']
             sigma = np.random.uniform(self.scale_range[0], self.scale_range[1])
-            img = np.clip(sigma * img, a_min=self.clip_interval[0], a_max=self.clip_interval[1])
+            img = sigma * img
             data['img'] = img
         return data
 
@@ -137,17 +177,16 @@ class MutiplicativeScaling:
 
 
 class AdditiveScaling:
-    def __init__(self, p, mean, std, clip_interval):
+    def __init__(self, p, mean, std):
         self.p = p
         self.mean = mean
         self.std = std
-        self.clip_interval = clip_interval
 
     def __call__(self, data):
         if np.random.rand() < self.p:
             img = data['img']
             sigma = np.random.normal(self.mean, self.std)
-            img = np.clip(sigma + img, a_min=self.clip_interval[0], a_max=self.clip_interval[1])
+            img = sigma + img
             data['img'] = img
         return data
 
@@ -173,17 +212,16 @@ class GammaScaling:
 
 
 class AdditiveGaussianNoise:
-    def __init__(self, p, mu, sigma, clip_interval):
+    def __init__(self, p, mu, sigma):
         self.p = p
         self.mu = mu
         self.sigma = sigma
-        self.clip_interval = clip_interval
 
     def __call__(self, data):
         if np.random.rand() < self.p:
             img = data['img']
             noise = np.random.normal(self.mu, self.sigma, size=img.shape)
-            img = np.clip(noise + img, a_min=self.clip_interval[0], a_max=self.clip_interval[1])
+            img = noise + img
             data['img'] = img
         return data
 
@@ -310,13 +348,12 @@ class CropForeground:
 
 class RandomRotate:
     def __init__(self, p=0.5, range_x: tuple = (0, 0), range_y: tuple = (0, 0), range_z: tuple = (0, 0),
-                 boundary='zeros', clip_interval: tuple = (0.0, 1.0)):
+                 boundary='zeros'):
         self.p = p
         self.range_x = range_x
         self.range_y = range_y
         self.range_z = range_z
         self.boundary = boundary
-        self.clip_interval = clip_interval
 
     def __call__(self, data):
         if np.random.rand() < self.p:
@@ -332,7 +369,6 @@ class RandomRotate:
 
             # Rotate images
             img4d_rot = self.rotate(img, grid_t)
-            img4d_rot = torch.clip(img4d_rot, min=self.clip_interval[0], max=self.clip_interval[1])
 
             data['img'] = img4d_rot.numpy()
             data['mask'] = mask_rot.numpy()
@@ -387,14 +423,13 @@ class RandomRotate:
 
 
 class ElasticDeformation:
-    def __init__(self, p, sigma_range, points, boundary, prefilter, axis, order=3, clip_interval=(0.0, 1.0)):
+    def __init__(self, p, sigma_range, points, boundary, prefilter, axis, order=3):
         self.p = p
         self.sigma_range = sigma_range
         self.points = points
         self.boundary = boundary
         self.prefilter = prefilter
         self.axis_str = axis
-        self.clip_interval = clip_interval
         self.order = order
 
     def __call__(self, data):
@@ -411,7 +446,6 @@ class ElasticDeformation:
                                                     points=self.points, mode=self.boundary,
                                                     prefilter=self.prefilter,
                                                     axis=axis, order=self.order)
-            img_d = np.clip(img_d, self.clip_interval[0], self.clip_interval[1])
             data['img'] = img_d
             data['mask'] = mask_d
         return data

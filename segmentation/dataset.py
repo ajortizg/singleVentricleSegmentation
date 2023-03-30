@@ -31,11 +31,13 @@ class SVDSegmentation(Dataset):
         img_zyxt = np.swapaxes(nib.load(osp.join(self.imgs_dir, patient_name + '.nii.gz')).get_fdata(), 0, 2)
         
         if self.is_test:
+            # Load data for the full cardiac cycle
             imgs = img_zyxt
             masks = np.empty(shape=img_zyxt.shape, dtype=img_zyxt.dtype)
             for t in range(masks.shape[3]):
                 masks[..., t] = np.swapaxes(nib.load(osp.join(self.masks_dir, patient_name, f'{patient_name}_{t}_Labelmap.nii')).get_fdata(), 0, 2)
         else:
+            # Load data only for ed and es time points
             imgs = np.stack((img_zyxt[..., es], img_zyxt[..., ed]), axis=3)
             mask_zyx_es = np.swapaxes(nib.load(osp.join(self.masks_dir, patient_name, patient_name + '_Systole_Labelmap.nii')).get_fdata(), 0, 2)
             mask_zyx_ed = np.swapaxes(nib.load(osp.join(self.masks_dir, patient_name, patient_name + '_Diastole_Labelmap.nii')).get_fdata(), 0, 2)
