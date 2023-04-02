@@ -55,7 +55,7 @@ def create_dataloaders(config):
         T.AdditiveGaussianNoise(config.getfloat('DATA_AUGMENTATION', 'NOISE_PROB'),
                                 config.getfloat('DATA_AUGMENTATION', 'NOISE_MU'),
                                 config.getfloat('DATA_AUGMENTATION', 'NOISE_STD')),
-        # T.QuadraticNormalization(p=1.0),
+        T.QuadraticNormalization(p=1.0),
         T.BinarizeMasks(th=0.5),
         T.ToTensor(add_ch_dim=True)
     ])
@@ -63,7 +63,7 @@ def create_dataloaders(config):
     val_transforms = T.Compose([
         T.CropForeground(p=1.0, tol=10),
         T.Resize(p=1.0, size=(img_sz, img_sz, img_sz)),
-        # T.QuadraticNormalization(p=1.0),
+        T.QuadraticNormalization(p=1.0),
         T.BinarizeMasks(th=0.5),
         T.ToTensor(add_ch_dim=True)
     ])
@@ -207,10 +207,10 @@ if __name__ == '__main__':
                         'model_state_dict': net.state_dict(),
                         'optimizer_state_dict': optimizer.state_dict(),
                         'train_loss': H['train_loss'][-1],
-                        'train_dice': H['train_dice'][-1],
+                        'train_acc': H['train_dice'][-1],
                         'val_loss': H['val_loss'][-1],
-                        'val_dice': H['val_dice'][-1],
-                        'test_dice': H['test_dice'][-1]
+                        'val_acc': H['val_dice'][-1],
+                        'test_acc': H['test_dice'][-1]
                         }, osp.join(save_dir, 'checkpoint.pth'))
             logger.info(f'Checkpoint updated with dice: {best_dice:,.3f}')
         else:

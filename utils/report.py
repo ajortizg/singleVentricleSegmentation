@@ -12,6 +12,7 @@ from enum import Enum
 
 class ReportMode(str, Enum):
     CNN = 'CNN_*'
+    SEG = 'SEG_*'
     FT = 'FT_*'
 
 
@@ -131,6 +132,8 @@ if __name__ == "__main__":
 
     if args.mode == 'cnn':
         mode = ReportMode.CNN
+    elif args.mode =='seg':
+        mode =ReportMode.SEG
     else:
         mode = ReportMode.FT
 
@@ -144,5 +147,5 @@ if __name__ == "__main__":
     # to_dt = datetime(year=2022, month=8, day=17, hour=23, minute=59)
 
     report = Report(from_dt, to_dt, mode)
-    report.filter('results_2023')
+    report.filter('results')
     report.create(report_dir, f'report_{time.strftime(str_fmt)}.xlsx')

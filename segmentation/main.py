@@ -23,7 +23,7 @@ if __name__ == '__main__':
         # T.RandomVerticalFlip(p=1.0),
         # T.RandomHorizontalFlip(p=1.0),
         # T.RandomDepthFlip(p=0.5),
-        T.ElasticDeformation(1.0, (0.5, 2.0), 10, 'nearest', False, 'yx', 1, (0, 1)),
+        T.ElasticDeformation(1.0, (1.4, 1.5), 8, 'nearest', False, 'yx', 1),
         T.BinarizeMasks(th=0.5),
         T.ToTensor(add_ch_dim=False)
         # T.ElasticDeformati),
@@ -32,16 +32,6 @@ if __name__ == '__main__':
         # T6.AdditiveScaling(P['add_scaling_prob'], P['add_scaling_mean'], P['add_scaling_std'], P['clip_interval']),
         # T6.AdditiveGaussianNoise(P['noise_prob'], P['noise_mu'], P['noise_std'], P['clip_interval']),
     ])
-
-    #     ED_PROB = 0.05
-    # ED_GRID = 10
-    # ED_SIGMA_RANGE = 0.5,2.0
-    # ; mirror, reflect, constat, nearest
-    # ED_BOUNDARY = nearest
-    # ED_USE_PREFILTER = 0
-    # ; zyx, yx
-    # ED_AXIS = yx
-    # ED_ORDER = 1
 
     ds = SVDSegmentation('data/svd_segmentation', mode='test', transforms=transforms)
     red = [0, 0, 1]
