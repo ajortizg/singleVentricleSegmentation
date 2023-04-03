@@ -362,13 +362,15 @@ class RandomRotate:
             NZ, NY, NX, NT = img.shape
             R, offset = self.create_rot_mat(NZ, NY, NX)
             grid_t = self.scale_grid(self.generate_rotation_grid(R, offset, NZ, NY, NX).unsqueeze(0))
-            grid_t = grid_t.repeat(NT, 1, 1, 1, 1)
-
-            # Rotate masks
-            mask_rot = self.rotate(mask, grid_t)
+            grid_img_t = grid_t.repeat(NT, 1, 1, 1, 1)
 
             # Rotate images
-            img4d_rot = self.rotate(img, grid_t)
+            img4d_rot = self.rotate(img, grid_img_t)
+
+            # Rotate masks
+            NZ, NY, NX, NT = mask.shape
+            grid_mask_t = grid_t.repeat(NT, 1, 1, 1, 1)
+            mask_rot = self.rotate(mask, grid_mask_t)
 
             data['img'] = img4d_rot.numpy()
             data['mask'] = mask_rot.numpy()

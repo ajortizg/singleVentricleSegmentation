@@ -158,7 +158,7 @@ if __name__ == '__main__':
 
     save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'SEG')
     plots.save_config(config, save_dir)
-    writer = SummaryWriter(log_dir=save_dir,)
+    writer = SummaryWriter(log_dir=save_dir)
     logger = plots.create_logger(save_dir)
     logger.info('Save dir: {}'.format(save_dir))
     logger.info('Device: {}'.format(device))
