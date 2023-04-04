@@ -25,7 +25,7 @@ import segmentation.transforms as T
 
 
 def train(train_loader, model, optimizer, losses, weights):
-    # epoch_loss = []
+    model.train()
     epoch_total_loss = []
 
     for data in train_loader:
@@ -40,13 +40,10 @@ def train(train_loader, model, optimizer, losses, weights):
             # calculate total loss
             y_true = [fixed, None]
             loss = 0
-            # loss_list = []
             for n, loss_function in enumerate(losses):
                 curr_loss = loss_function(y_true[n], y_pred[n]) * weights[n]
-                # loss_list.append(curr_loss.item())
                 loss += curr_loss
 
-            # epoch_loss.append(loss_list)
             epoch_total_loss.append(loss.item())
 
             # backpropagate and optimize
@@ -113,7 +110,6 @@ if __name__ == '__main__':
                                   int_steps=int_steps,
                                   int_downsize=int_downsize)
     model.to(device)
-    model.train()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
     if img_loss == 'ncc':
