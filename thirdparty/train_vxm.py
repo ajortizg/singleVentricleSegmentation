@@ -5,6 +5,7 @@ import configparser
 import random
 import argparse
 import time
+from terminaltables import AsciiTable
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
@@ -43,14 +44,36 @@ def train(train_loader, model, optimizer, losses, weights):
             for n, loss_function in enumerate(losses):
                 curr_loss = loss_function(y_true[n], y_pred[n]) * weights[n]
                 loss += curr_loss
-
             epoch_total_loss.append(loss.item())
 
             # backpropagate and optimize
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+    return np.array(epoch_total_loss).mean()
 
+
+@torch.no_grad()
+def validate(val_loader, model, losses, weights):
+    model.eval()
+    epoch_total_loss = []
+
+    for data in val_loader:
+        img = data['img'].permute(4, 0, 1, 2, 3).to(device)  # NT, CH, NZ, NY, NX
+        # img = data['img'].permute(4, 0, 3, 2, 1).to(device)  # NT, CH, NX, NY, NZ
+
+        for t in range(img.shape[0] - 1):
+            moving = img[t, ...].unsqueeze(0)
+            fixed = img[t + 1, ...].unsqueeze(0)
+            y_pred = model(moving, fixed)
+
+            # calculate total loss
+            y_true = [fixed, None]
+            loss = 0
+            for n, loss_function in enumerate(losses):
+                curr_loss = loss_function(y_true[n], y_pred[n]) * weights[n]
+                loss += curr_loss
+            epoch_total_loss.append(loss.item())
     return np.array(epoch_total_loss).mean()
 
 
@@ -87,22 +110,32 @@ if __name__ == '__main__':
     plots.save_config(config, save_dir)
     writer = SummaryWriter(log_dir=save_dir)
 
-    transforms = T.Compose([T.CropForeground(p=1.0, tol=10),
-                            T.Resize(p=1.0, size=(img_sz, img_sz, img_sz)),
-                            # T.RandomRotate(p=1.0, range_z=(0, 360), boundary='border'),
-                            T.RandomVerticalFlip(p=0.5),
-                            T.RandomHorizontalFlip(p=0.5),
-                            T.RandomDepthFlip(p=0.5),
-                            # T.ElasticDeformation(p=0.1, sigma_range=(0.5, 2.0), points=8, boundary='nearest', prefilter=False, axis='yx', order=1),
-                            # T.GammaScaling(p=0.3, gamma_range=(0.8, 1.2)),
-                            T.MinMaxNormalization(p=1.0),
-                            # T.ZScoreNormalization(p=1.0),
-                            # T.QuadraticNormalization(p=0.1, mean_inside_mask=False),
-                            T.BinarizeMasks(th=0.5),
-                            T.ToTensor(add_ch_dim=False)])
+    # Create dataloaders
+    train_transforms = T.Compose([
+        T.CropForeground(p=1.0, tol=10),
+        T.Resize(p=1.0, size=(img_sz, img_sz, img_sz)),
+        T.RandomRotate(p=1.0, range_z=(0, 360), boundary='border'),
+        T.RandomVerticalFlip(p=0.5),
+        T.RandomHorizontalFlip(p=0.5),
+        T.RandomDepthFlip(p=0.5),
+        T.ElasticDeformation(p=0.1, sigma_range=(0.5, 2.0), points=8, boundary='nearest', prefilter=False, axis='yx', order=1),
+        T.GammaScaling(p=0.3, gamma_range=(0.8, 1.2)),
+        T.MinMaxNormalization(p=1.0),
+        T.BinarizeMasks(th=0.5),
+        T.ToTensor(add_ch_dim=False)
+    ])
+    val_transforms = T.Compose([
+        T.CropForeground(p=1.0, tol=10),
+        T.Resize(p=1.0, size=(img_sz, img_sz, img_sz)),
+        T.MinMaxNormalization(p=1.0),
+        T.BinarizeMasks(th=0.5),
+        T.ToTensor(add_ch_dim=False)
+    ])
 
-    train_ds = SVDataset(root_dir, 'train', transforms, vxm=True)
+    train_ds = SVDataset(root_dir, 'train', train_transforms, vxm=True)
+    val_ds = SVDataset(root_dir, 'val', val_transforms, vxm=True)
     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=workers, collate_fn=SVDataset.collate_fn)
+    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=workers, collate_fn=SVDataset.collate_fn)
 
     model = vxm.networks.VxmDense(inshape=(img_sz, img_sz, img_sz),
                                   nb_unet_features=[enc_nf, dec_nf],
@@ -115,8 +148,8 @@ if __name__ == '__main__':
     if img_loss == 'ncc':
         image_loss_func = vxm.losses.NCC().loss
     elif img_loss == 'mse':
-        image_loss_func = vxm.losses.MSE().loss
-        # image_loss_func = nn.MSELoss(reduction='sum')
+        # image_loss_func = vxm.losses.MSE().loss
+        image_loss_func = nn.MSELoss(reduction='sum')
     else:
         raise ValueError('Image loss should be "mse" or "ncc", but found "%s"' % img_loss)
 
@@ -125,12 +158,18 @@ if __name__ == '__main__':
 
     for e in tqdm(range(1, epochs + 1)):
         train_loss = train(train_loader, model, optimizer, losses, weights)
+        val_loss = validate(val_loader, model, losses, weights)
 
         # Save model every 20 epochs
         if e % 20 == 0:
             model.save(os.path.join(save_dir, 'model.pth'))
 
-        writer.add_scalar('loss', train_loss.item(), e)
-        print('Epoch: {}, Loss: {:.6f}'.format(e, train_loss))
+        writer.add_scalars('loss', {'train': train_loss, 'val': val_loss}, e)
+    
+        print(AsciiTable([
+            ['Split', 'Loss'],
+            ['Train', '{:.6f}'.format(train_loss)],
+            ['Val', '{:.6f}'.format(val_loss)]           
+        ]).table)
 
     model.save(os.path.join(save_dir, 'model.pth'))
