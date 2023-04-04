@@ -82,8 +82,9 @@ class ZScoreNormalization:
 
 
 class QuadraticNormalization:
-    def __init__(self, p):
+    def __init__(self, p, mean_inside_mask):
         self.p = p
+        self.mean_inside_mask = mean_inside_mask
 
     def __call__(self, data):
         if np.random.rand() < self.p:
@@ -92,7 +93,8 @@ class QuadraticNormalization:
 
             per95 = np.percentile(img, 95)
             img = np.clip(img, 0, per95)
-            avg = np.mean(img, where=mask.astype('bool'))
+            avg = np.mean(img, where=mask.astype('bool')) if self.mean_inside_mask else np.mean(img)
+            # avg = np.mean(img, where=mask.astype('bool'))
 
             # normalization n(I) = a I/sqrt(1+beta I**2)
             norm_a = np.sqrt(per95 * per95 - avg * avg) / (np.sqrt(3) * per95 * avg)
