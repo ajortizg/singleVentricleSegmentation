@@ -11,6 +11,7 @@ import torch
 from torch.utils.data import DataLoader
 import torch.nn.functional as F
 from monai.metrics.meandice import compute_dice
+from monai.metrics.hausdorff_distance import compute_hausdorff_distance
 from terminaltables import AsciiTable
 from tqdm import tqdm
 
@@ -67,6 +68,7 @@ def bounds(data, device, test, fwd):
 def validation(loader, model, device, verbose, fwd):
     model.eval()
     dices = []
+    hds = []
 
     for data in tqdm(loader):
         img = data['img'].permute(4, 0, 1, 2, 3).to(device)  # NT, CH, NZ, NY, NX
@@ -91,21 +93,24 @@ def validation(loader, model, device, verbose, fwd):
         toc = time.time()
         # propagated_mask = torch.where(propagated_mask > 0.5, 1.0, 0.0)
         dice = compute_dice(propagated_mask, mf).item()
+        hd = compute_hausdorff_distance(propagated_mask, mf).item()
         dices.append(dice)
+        hds.append(hd)
 
         if verbose:
             print(AsciiTable([
-                ['Patient', 'Mode', 'Accuracy', 'Time'],
-                [patient, fwd, '{:.3f}'.format(dice), '{:.3f}'.format(toc - tic)]
+                ['Patient', 'Mode', 'Dice', 'HD', 'Time'],
+                [patient, fwd, '{:.3f}'.format(dice), '{:.3f}'.format(hd), '{:.3f}'.format(toc - tic)]
             ]).table)
 
-    return np.array(dices).mean()
+    return np.array(dices).mean(), np.array(hds).mean()
 
 
 @torch.no_grad()
 def test(loader, model, device, verbose, fwd):
     model.eval()
     dices = []
+    hds = []
 
     for data in tqdm(loader):
         img = data['img'].permute(4, 0, 1, 2, 3).to(device)  # NT, CH, NZ, NY, NX
@@ -134,15 +139,17 @@ def test(loader, model, device, verbose, fwd):
         est_masks = torch.cat(est_masks)
         # est_masks = torch.where(est_masks > 0.5, 1.0, 0.0)
         dice = compute_dice(est_masks, mask).mean().item()
+        hd = compute_hausdorff_distance(est_masks, mask).mean().item()
         dices.append(dice)
+        hds.append(hd)
 
         if verbose:
             print(AsciiTable([
-                ['Patient', 'Mode', 'Accuracy', 'Time'],
-                [patient, fwd, '{:.3f}'.format(dice), '{:.3f}'.format(toc - tic)]
+                ['Patient', 'Mode', 'Dice', 'HD', 'Time'],
+                [patient, fwd, '{:.3f}'.format(dice), '{:.3f}'.format(hd), '{:.3f}'.format(toc - tic)]
             ]).table)
 
-    return np.array(dices).mean()
+    return np.array(dices).mean(), np.array(hds).mean()
 
 
 if __name__ == '__main__':
@@ -179,7 +186,7 @@ if __name__ == '__main__':
 
     # for mode in ['fwd', 'bwd']:
     #     tic = time.time()
-    #     acc = validation(val_loader, model, device, verbose=False, fwd=mode == 'fwd')
+    #     acc,hd = validation(val_loader, model, device, verbose=False, fwd=mode == 'fwd')
     #     print(AsciiTable([
     #         ['Split', 'Mode', 'Accuracy', 'Time (s)'],
     #         ['val', mode, '{:.3f}'.format(acc), '{:.3f}'.format((time.time() - tic) / len(val_loader))]
@@ -187,10 +194,10 @@ if __name__ == '__main__':
 
     for mode in ['fwd', 'bwd']:
         tic = time.time()
-        acc = test(test_loader, model, device, verbose=False, fwd=mode == 'fwd')
+        acc, hd = test(test_loader, model, device, verbose=True, fwd=mode == 'fwd')
         print(AsciiTable([
-            ['Split', 'Mode', 'Accuracy', 'Time (s)'],
-            ['test', mode, '{:.3f}'.format(acc), '{:.3f}'.format((time.time() - tic) / len(val_loader))]
+            ['Split', 'Mode', 'Dice', 'HD', 'Time (s)'],
+            ['test', mode, '{:.3f}'.format(acc), '{:.3f}'.format(hd), '{:.3f}'.format((time.time() - tic) / len(val_loader))]
         ]).table)
 
     # for t in range(img.shape[0] - 1):
