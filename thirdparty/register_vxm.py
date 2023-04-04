@@ -5,13 +5,11 @@ import argparse
 import configparser
 import time
 
-# third party
 import numpy as np
 import nibabel as nib
 import torch
 from torch.utils.data import DataLoader
 import torch.nn.functional as F
-
 from monai.metrics.meandice import compute_dice
 from terminaltables import AsciiTable
 from tqdm import tqdm
@@ -28,7 +26,7 @@ from segmentation.dataset import SVDataset
 import segmentation.transforms as T
 
 
-def bounds(data, device, fwd):
+def bounds(data, device, test, fwd):
     mask = data['mask'].permute(4, 0, 1, 2, 3).to(device)
     es = data['es'].item()
     ed = data['ed'].item()
@@ -36,18 +34,30 @@ def bounds(data, device, fwd):
     if fwd:
         if es < ed:
             ti, tf = es, ed
-            mi, mf = mask[0, ...], mask[1, ...]
+            if not test:
+                mi, mf = mask[0, ...], mask[1, ...]
+            else:
+                mi, mf = mask[ti, ...], mask[tf, ...]
         else:
             ti, tf = ed, es
-            mi, mf = mask[1, ...], mask[0, ...]
+            if not test:
+                mi, mf = mask[1, ...], mask[0, ...]
+            else:
+                mi, mf = mask[ti, ...], mask[tf, ...]
         indices = torch.arange(ti, tf + 1, 1)
     else:
         if ed > es:
             ti, tf = ed, es
-            mi, mf = mask[1, ...], mask[0, ...]
+            if not test:
+                mi, mf = mask[1, ...], mask[0, ...]
+            else:
+                mi, mf = mask[ti, ...], mask[tf, ...]
         else:
             ti, tf = es, ed
-            mi, mf = mask[0, ...], mask[1, ...]
+            if not test:
+                mi, mf = mask[0, ...], mask[1, ...]
+            else:
+                mi, mf = mask[ti, ...], mask[tf, ...]
         indices = torch.arange(ti, tf - 1, -1)
 
     return indices, mi.unsqueeze(0), mf.unsqueeze(0)
@@ -61,7 +71,7 @@ def validation(loader, model, device, verbose, fwd):
     for data in tqdm(loader):
         img = data['img'].permute(4, 0, 1, 2, 3).to(device)  # NT, CH, NZ, NY, NX
         patient = data['patient'][0]
-        indices, mi, mf = bounds(data, device, fwd)
+        indices, mi, mf = bounds(data, device, False, fwd)
 
         tic = time.time()
         propagated_mask = mi.clone()
@@ -76,11 +86,54 @@ def validation(loader, model, device, verbose, fwd):
 
             # Propagate masks
             propagated_mask = model.transformer(propagated_mask, flow)
-            # propagated_mask = torch.where(propagated_mask > 0.5, 1.0, 0.0)
+            propagated_mask = torch.where(propagated_mask > 0.5, 1.0, 0.0)
 
         toc = time.time()
-        propagated_mask = torch.where(propagated_mask > 0.5, 1.0, 0.0)
+        # propagated_mask = torch.where(propagated_mask > 0.5, 1.0, 0.0)
         dice = compute_dice(propagated_mask, mf).item()
+        dices.append(dice)
+
+        if verbose:
+            print(AsciiTable([
+                ['Patient', 'Mode', 'Accuracy', 'Time'],
+                [patient, fwd, '{:.3f}'.format(dice), '{:.3f}'.format(toc - tic)]
+            ]).table)
+
+    return np.array(dices).mean()
+
+
+@torch.no_grad()
+def test(loader, model, device, verbose, fwd):
+    model.eval()
+    dices = []
+
+    for data in tqdm(loader):
+        img = data['img'].permute(4, 0, 1, 2, 3).to(device)  # NT, CH, NZ, NY, NX
+        patient = data['patient'][0]
+        indices, mi, _ = bounds(data, device, True, fwd)
+
+        est_masks = []
+        propagated_mask = mi.clone()
+        tic = time.time()
+        for i in range(len(indices) - 1):
+            tm = indices[i].item()
+            tf = indices[i + 1].item()
+            moving = img[tm, ...].unsqueeze(0)
+            fixed = img[tf, ...].unsqueeze(0)
+
+            # Compute flow between two consecutive frames
+            _, flow = model(moving, fixed, registration=True)
+
+            propagated_mask = model.transformer(propagated_mask, flow)
+            propagated_mask = torch.where(propagated_mask > 0.5, 1.0, 0.0)
+            est_masks.append(propagated_mask)
+
+        toc = time.time()
+        mask = data['mask'].permute(4, 0, 1, 2, 3)[indices[1:], ...].to(device)
+
+        est_masks = torch.cat(est_masks)
+        # est_masks = torch.where(est_masks > 0.5, 1.0, 0.0)
+        dice = compute_dice(est_masks, mask).mean().item()
         dices.append(dice)
 
         if verbose:
@@ -119,14 +172,25 @@ if __name__ == '__main__':
     val_ds = SVDataset(root_dir, 'val', transforms, vxm=True)
     val_loader = DataLoader(val_ds, batch_size=1, shuffle=False, num_workers=4, collate_fn=SVDataset.collate_fn)
 
+    test_ds = SVDataset(root_dir, 'test', transforms, vxm=True)
+    test_loader = DataLoader(test_ds, batch_size=1, shuffle=False, num_workers=1, collate_fn=SVDataset.collate_fn)
+
     save_dir = plots.createSaveDirectory(output_dir, 'REG')
+
+    # for mode in ['fwd', 'bwd']:
+    #     tic = time.time()
+    #     acc = validation(val_loader, model, device, verbose=False, fwd=mode == 'fwd')
+    #     print(AsciiTable([
+    #         ['Split', 'Mode', 'Accuracy', 'Time (s)'],
+    #         ['val', mode, '{:.3f}'.format(acc), '{:.3f}'.format((time.time() - tic) / len(val_loader))]
+    #     ]).table)
 
     for mode in ['fwd', 'bwd']:
         tic = time.time()
-        acc = validation(val_loader, model, device, verbose=False, fwd=mode == 'fwd')
+        acc = test(test_loader, model, device, verbose=False, fwd=mode == 'fwd')
         print(AsciiTable([
             ['Split', 'Mode', 'Accuracy', 'Time (s)'],
-            ['val', mode, '{:.3f}'.format(acc), '{:.3f}'.format((time.time() - tic) / len(val_loader))]
+            ['test', mode, '{:.3f}'.format(acc), '{:.3f}'.format((time.time() - tic) / len(val_loader))]
         ]).table)
 
     # for t in range(img.shape[0] - 1):
