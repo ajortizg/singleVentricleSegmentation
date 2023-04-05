@@ -1,19 +1,17 @@
 import os
 import os.path as osp
 import sys
-import argparse
 import configparser
 import time
 
 import numpy as np
-import nibabel as nib
 import torch
 from torch.utils.data import DataLoader
-import torch.nn.functional as F
 from monai.metrics.meandice import compute_dice
 from monai.metrics.hausdorff_distance import compute_hausdorff_distance
-from terminaltables import AsciiTable
+from tabulate import tabulate
 from tqdm import tqdm
+import pandas as pd
 
 # import voxelmorph with pytorch backend
 os.environ['NEURITE_BACKEND'] = 'pytorch'
@@ -28,7 +26,7 @@ import segmentation.transforms as T
 
 
 def bounds(data, device, test, fwd):
-    mask = data['mask'].permute(4, 0, 1, 2, 3).to(device)
+    mask = data['mask'].permute(4, 0, 1, 2, 3)
     es = data['es'].item()
     ed = data['ed'].item()
 
@@ -61,14 +59,13 @@ def bounds(data, device, test, fwd):
                 mi, mf = mask[ti, ...], mask[tf, ...]
         indices = torch.arange(ti, tf - 1, -1)
 
-    return indices, mi.unsqueeze(0), mf.unsqueeze(0)
+    return indices, mi.unsqueeze(0).to(device), mf.unsqueeze(0).to(device)
 
 
 @torch.no_grad()
 def validation(loader, model, device, verbose, fwd):
     model.eval()
-    dices = []
-    hds = []
+    report = pd.DataFrame(columns=['Patient', 'Dice', 'HD', 'Time'])
 
     for data in tqdm(loader):
         img = data['img'].permute(4, 0, 1, 2, 3).to(device)  # NT, CH, NZ, NY, NX
@@ -88,29 +85,24 @@ def validation(loader, model, device, verbose, fwd):
 
             # Propagate masks
             propagated_mask = model.transformer(propagated_mask, flow)
-            propagated_mask = torch.where(propagated_mask > 0.5, 1.0, 0.0)
+            # propagated_mask = torch.where(propagated_mask > 0.5, 1.0, 0.0)
 
         toc = time.time()
-        # propagated_mask = torch.where(propagated_mask > 0.5, 1.0, 0.0)
+        propagated_mask = torch.where(propagated_mask > 0.5, 1.0, 0.0)
         dice = compute_dice(propagated_mask, mf).item()
         hd = compute_hausdorff_distance(propagated_mask, mf).item()
-        dices.append(dice)
-        hds.append(hd)
+        report.loc[len(report)] = [patient, dice, hd, toc - tic]
 
-        if verbose:
-            print(AsciiTable([
-                ['Patient', 'Mode', 'Dice', 'HD', 'Time'],
-                [patient, fwd, '{:.3f}'.format(dice), '{:.3f}'.format(hd), '{:.3f}'.format(toc - tic)]
-            ]).table)
+    if verbose:
+        print(tabulate(report, headers='keys', tablefmt='psql'))
 
-    return np.array(dices).mean(), np.array(hds).mean()
+    return report
 
 
 @torch.no_grad()
 def test(loader, model, device, verbose, fwd):
     model.eval()
-    dices = []
-    hds = []
+    report = pd.DataFrame(columns=['Patient', 'Dice', 'HD', 'Time'])
 
     for data in tqdm(loader):
         img = data['img'].permute(4, 0, 1, 2, 3).to(device)  # NT, CH, NZ, NY, NX
@@ -130,26 +122,22 @@ def test(loader, model, device, verbose, fwd):
             _, flow = model(moving, fixed, registration=True)
 
             propagated_mask = model.transformer(propagated_mask, flow)
-            propagated_mask = torch.where(propagated_mask > 0.5, 1.0, 0.0)
+            # propagated_mask = torch.where(propagated_mask > 0.5, 1.0, 0.0)
             est_masks.append(propagated_mask)
 
         toc = time.time()
-        mask = data['mask'].permute(4, 0, 1, 2, 3)[indices[1:], ...].to(device)
+        true_masks = data['mask'].permute(4, 0, 1, 2, 3)[indices[1:], ...].to(device)
 
         est_masks = torch.cat(est_masks)
-        # est_masks = torch.where(est_masks > 0.5, 1.0, 0.0)
-        dice = compute_dice(est_masks, mask).mean().item()
-        hd = compute_hausdorff_distance(est_masks, mask).mean().item()
-        dices.append(dice)
-        hds.append(hd)
+        est_masks = torch.where(est_masks > 0.5, 1.0, 0.0)
+        dice = compute_dice(est_masks, true_masks).mean().item()
+        hd = compute_hausdorff_distance(est_masks, true_masks).mean().item()
+        report.loc[len(report)] = [patient, dice, hd, toc - tic]
 
-        if verbose:
-            print(AsciiTable([
-                ['Patient', 'Mode', 'Dice', 'HD', 'Time'],
-                [patient, fwd, '{:.3f}'.format(dice), '{:.3f}'.format(hd), '{:.3f}'.format(toc - tic)]
-            ]).table)
+    if verbose:
+        print(tabulate(report, headers='keys', tablefmt='psql'))
 
-    return np.array(dices).mean(), np.array(hds).mean()
+    return report
 
 
 if __name__ == '__main__':
@@ -159,8 +147,8 @@ if __name__ == '__main__':
     root_dir = config.get('DATA', 'ROOT_DIR')
     output_dir = config.get('DATA', 'OUTPUT_DIR')
     model_weights = config.get('DATA', 'MODEL')
-    warp = config.getboolean('PARAMETERS', 'WARP')
     img_sz = config.getint('PARAMETERS', 'IMG_SIZE')
+    verbose = config.getboolean('DEBUG', 'VERBOSE')
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print('Device: ', device)
@@ -182,23 +170,16 @@ if __name__ == '__main__':
     test_ds = SVDataset(root_dir, 'test', transforms, vxm=True)
     test_loader = DataLoader(test_ds, batch_size=1, shuffle=False, num_workers=1, collate_fn=SVDataset.collate_fn)
 
-    save_dir = plots.createSaveDirectory(output_dir, 'REG')
+    # save_dir = plots.createSaveDirectory(output_dir, 'REG')
 
     # for mode in ['fwd', 'bwd']:
-    #     tic = time.time()
-    #     acc,hd = validation(val_loader, model, device, verbose=False, fwd=mode == 'fwd')
-    #     print(AsciiTable([
-    #         ['Split', 'Mode', 'Accuracy', 'Time (s)'],
-    #         ['val', mode, '{:.3f}'.format(acc), '{:.3f}'.format((time.time() - tic) / len(val_loader))]
-    #     ]).table)
+    #     report = validation(val_loader, model, device, verbose=verbose, fwd=mode == 'fwd')
+    #     print('Mode: {}, mean dice: {:.3f}, mean hd: {:.3f}, mean time: {:.3f}'.format(mode, report['Dice'].mean(), report['HD'].mean(), report['Time'].mean()))
 
     for mode in ['fwd', 'bwd']:
-        tic = time.time()
-        acc, hd = test(test_loader, model, device, verbose=True, fwd=mode == 'fwd')
-        print(AsciiTable([
-            ['Split', 'Mode', 'Dice', 'HD', 'Time (s)'],
-            ['test', mode, '{:.3f}'.format(acc), '{:.3f}'.format(hd), '{:.3f}'.format((time.time() - tic) / len(val_loader))]
-        ]).table)
+        report = test(test_loader, model, device, verbose=verbose, fwd=mode == 'fwd')
+        print('Mode: {}, mean dice: {:.3f}, mean hd: {:.3f}, mean time: {:.3f}'.format(
+            mode, report['Dice'].mean(), report['HD'].mean(), report['Time'].mean()))
 
     # for t in range(img.shape[0] - 1):
     #     moving = img[t, ...].unsqueeze(0)
