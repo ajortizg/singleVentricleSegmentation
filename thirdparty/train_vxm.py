@@ -2,9 +2,6 @@ import os
 import os.path as osp
 import sys
 import configparser
-import random
-import argparse
-import time
 from terminaltables import AsciiTable
 import numpy as np
 import torch
@@ -114,12 +111,23 @@ if __name__ == '__main__':
     train_transforms = T.Compose([
         T.CropForeground(p=1.0, tol=10),
         T.Resize(p=1.0, size=(img_sz, img_sz, img_sz)),
-        T.RandomRotate(p=1.0, range_z=(0, 360), boundary='border'),
-        T.RandomVerticalFlip(p=0.5),
-        T.RandomHorizontalFlip(p=0.5),
-        T.RandomDepthFlip(p=0.5),
-        T.ElasticDeformation(p=0.1, sigma_range=(0.5, 2.0), points=8, boundary='nearest', prefilter=False, axis='yx', order=1),
-        T.GammaScaling(p=0.3, gamma_range=(0.8, 1.2)),
+        T.RandomRotate(p=config.getfloat('DATA_AUGMENTATION', 'ROT_PROB'),
+                       range_z=tuple(map(float, config.get('DATA_AUGMENTATION', 'ROT_Z_RANGE').split(','))),
+                       range_y=tuple(map(float, config.get('DATA_AUGMENTATION', 'ROT_Y_RANGE').split(','))),
+                       range_x=tuple(map(float, config.get('DATA_AUGMENTATION', 'ROT_X_RANGE').split(','))),
+                       boundary=config.get('DATA_AUGMENTATION', 'ROT_BOUNDARY')),
+        T.RandomVerticalFlip(config.getfloat('DATA_AUGMENTATION', 'VERTICAL_FLIP_PROB')),
+        T.RandomHorizontalFlip(config.getfloat('DATA_AUGMENTATION', 'HORIZONTAL_FLIP_PROB')),
+        T.RandomDepthFlip(config.getfloat('DATA_AUGMENTATION', 'DEPTH_FLIP_PROB')),
+        T.ElasticDeformation(p=config.getfloat('DATA_AUGMENTATION', 'ED_PROB'),
+                             sigma_range=tuple(map(float, config.get('DATA_AUGMENTATION', 'ED_SIGMA_RANGE').split(','))),
+                             points=config.getint('DATA_AUGMENTATION', 'ED_GRID'),
+                             boundary=config.get('DATA_AUGMENTATION', 'ED_BOUNDARY'),
+                             prefilter=config.getboolean('DATA_AUGMENTATION', 'ED_USE_PREFILTER'),
+                             axis=config.get('DATA_AUGMENTATION', 'ED_AXIS'),
+                             order=config.getint('DATA_AUGMENTATION', 'ED_ORDER')),
+        T.GammaScaling(config.getfloat('DATA_AUGMENTATION', 'GAMMA_SCALING_PROB'),
+                       tuple(map(float, config.get('DATA_AUGMENTATION', 'GAMMA_SCALING_RANGE').split(',')))),
         T.MinMaxNormalization(p=1.0),
         T.BinarizeMasks(th=0.5),
         T.ToTensor(add_ch_dim=False)
@@ -148,8 +156,8 @@ if __name__ == '__main__':
     if img_loss == 'ncc':
         image_loss_func = vxm.losses.NCC().loss
     elif img_loss == 'mse':
-        # image_loss_func = vxm.losses.MSE().loss
-        image_loss_func = nn.MSELoss(reduction='sum')
+        image_loss_func = vxm.losses.MSE().loss
+        # image_loss_func = nn.MSELoss(reduction='sum')
     else:
         raise ValueError('Image loss should be "mse" or "ncc", but found "%s"' % img_loss)
 
@@ -165,11 +173,11 @@ if __name__ == '__main__':
             model.save(os.path.join(save_dir, 'model.pth'))
 
         writer.add_scalars('loss', {'train': train_loss, 'val': val_loss}, e)
-    
+
         print(AsciiTable([
             ['Split', 'Loss'],
             ['Train', '{:.6f}'.format(train_loss)],
-            ['Val', '{:.6f}'.format(val_loss)]           
+            ['Val', '{:.6f}'.format(val_loss)]
         ]).table)
 
     model.save(os.path.join(save_dir, 'model.pth'))
