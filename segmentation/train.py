@@ -1,4 +1,4 @@
-from dataset import SVDSegmentation
+from dataset import SVDataset
 import transforms as T
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
@@ -10,6 +10,7 @@ import torch
 import os.path as osp
 import configparser
 import time
+import pandas as pd
 import sys
 from monai.metrics.meandice import compute_dice
 import matplotlib.pyplot as plt
@@ -26,35 +27,36 @@ from cnn.models.model_factory import create_model, save_model
 
 def create_dataloaders(config):
     img_sz = config.getint('PARAMETERS', 'IMG_SIZE')
+    data_aug = config['DATA_AUGMENTATION']
 
     train_transforms = T.Compose([
         T.CropForeground(p=1.0, tol=10),
         T.Resize(p=1.0, size=(img_sz, img_sz, img_sz)),
-        T.RandomRotate(p=config.getfloat('DATA_AUGMENTATION', 'ROT_PROB'),
-                       range_z=tuple(map(float, config.get('DATA_AUGMENTATION', 'ROT_Z_RANGE').split(','))),
-                       range_y=tuple(map(float, config.get('DATA_AUGMENTATION', 'ROT_Y_RANGE').split(','))),
-                       range_x=tuple(map(float, config.get('DATA_AUGMENTATION', 'ROT_X_RANGE').split(','))),
-                       boundary=config.get('DATA_AUGMENTATION', 'ROT_BOUNDARY')),
-        T.RandomVerticalFlip(config.getfloat('DATA_AUGMENTATION', 'VERTICAL_FLIP_PROB')),
-        T.RandomHorizontalFlip(config.getfloat('DATA_AUGMENTATION', 'HORIZONTAL_FLIP_PROB')),
-        T.RandomDepthFlip(config.getfloat('DATA_AUGMENTATION', 'DEPTH_FLIP_PROB')),
-        T.ElasticDeformation(p=config.getfloat('DATA_AUGMENTATION', 'ED_PROB'),
-                             sigma_range=tuple(map(float, config.get('DATA_AUGMENTATION', 'ED_SIGMA_RANGE').split(','))),
-                             points=config.getint('DATA_AUGMENTATION', 'ED_GRID'),
-                             boundary=config.get('DATA_AUGMENTATION', 'ED_BOUNDARY'),
-                             prefilter=config.getboolean('DATA_AUGMENTATION', 'ED_USE_PREFILTER'),
-                             axis=config.get('DATA_AUGMENTATION', 'ED_AXIS'),
-                             order=config.getint('DATA_AUGMENTATION', 'ED_ORDER')),
-        T.GammaScaling(config.getfloat('DATA_AUGMENTATION', 'GAMMA_SCALING_PROB'),
-                       tuple(map(float, config.get('DATA_AUGMENTATION', 'GAMMA_SCALING_RANGE').split(',')))),
-        T.MutiplicativeScaling(config.getfloat('DATA_AUGMENTATION', 'MULT_SCALING_PROB'),
-                               tuple(map(float, config.get('DATA_AUGMENTATION', 'MULT_SCALING_RANGE').split(',')))),
-        T.AdditiveScaling(config.getfloat('DATA_AUGMENTATION', 'ADD_SCALING_PROB'),
-                          config.getfloat('DATA_AUGMENTATION', 'ADD_SCALING_MEAN'),
-                          config.getfloat('DATA_AUGMENTATION', 'ADD_SCALING_STD')),
-        T.AdditiveGaussianNoise(config.getfloat('DATA_AUGMENTATION', 'NOISE_PROB'),
-                                config.getfloat('DATA_AUGMENTATION', 'NOISE_MU'),
-                                config.getfloat('DATA_AUGMENTATION', 'NOISE_STD')),
+        T.RandomRotate(p=data_aug.getfloat('ROT_PROB'),
+                       range_z=tuple(map(float, data_aug['ROT_Z_RANGE'].split(','))),
+                       range_y=tuple(map(float, data_aug['ROT_Y_RANGE'].split(','))),
+                       range_x=tuple(map(float, data_aug['ROT_X_RANGE'].split(','))),
+                       boundary=data_aug['ROT_BOUNDARY']),
+        T.RandomVerticalFlip(data_aug.getfloat('VERTICAL_FLIP_PROB')),
+        T.RandomHorizontalFlip(data_aug.getfloat('HORIZONTAL_FLIP_PROB')),
+        T.RandomDepthFlip(data_aug.getfloat('DEPTH_FLIP_PROB')),
+        T.ElasticDeformation(p=data_aug.getfloat('ED_PROB'),
+                             sigma_range=tuple(map(float, data_aug['ED_SIGMA_RANGE'].split(','))),
+                             points=data_aug.getint('ED_GRID'),
+                             boundary=data_aug['ED_BOUNDARY'],
+                             prefilter=data_aug.getboolean('ED_USE_PREFILTER'),
+                             axis=data_aug['ED_AXIS'],
+                             order=data_aug.getint('ED_ORDER')),
+        T.GammaScaling(data_aug.getfloat('GAMMA_SCALING_PROB'),
+                       tuple(map(float, data_aug['GAMMA_SCALING_RANGE'].split(',')))),
+        T.MutiplicativeScaling(data_aug.getfloat('MULT_SCALING_PROB'),
+                               tuple(map(float, data_aug['MULT_SCALING_RANGE'].split(',')))),
+        T.AdditiveScaling(data_aug.getfloat('ADD_SCALING_PROB'),
+                          data_aug.getfloat('ADD_SCALING_MEAN'),
+                          data_aug.getfloat('ADD_SCALING_STD')),
+        T.AdditiveGaussianNoise(data_aug.getfloat('NOISE_PROB'),
+                                data_aug.getfloat('NOISE_MU'),
+                                data_aug.getfloat('NOISE_STD')),
         T.QuadraticNormalization(p=1.0),
         T.BinarizeMasks(th=0.5),
         T.ToTensor(add_ch_dim=True)
@@ -72,19 +74,18 @@ def create_dataloaders(config):
     batch_size = config.getint('PARAMETERS', 'BATCH_SIZE')
     workers = config.getint('PARAMETERS', 'NUM_WORKERS')
 
-    train_ds = SVDSegmentation(root_dir, mode='train', transforms=train_transforms)
-    val_ds = SVDSegmentation(root_dir, mode='val', transforms=val_transforms)
-    test_ds = SVDSegmentation(root_dir, mode='test', transforms=val_transforms)
-    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=workers, collate_fn=SVDSegmentation.collate_fn)
-    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=workers, collate_fn=SVDSegmentation.collate_fn)
-    test_loader = DataLoader(test_ds, batch_size=1, shuffle=False, num_workers=1, collate_fn=SVDSegmentation.collate_fn)
+    train_ds = SVDataset(root_dir, mode='train', transforms=train_transforms)
+    val_ds = SVDataset(root_dir, mode='val', transforms=val_transforms)
+    test_ds = SVDataset(root_dir, mode='test', transforms=val_transforms)
+    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=workers, collate_fn=SVDataset.collate_fn)
+    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=workers, collate_fn=SVDataset.collate_fn)
+    test_loader = DataLoader(test_ds, batch_size=1, shuffle=False, num_workers=1, collate_fn=SVDataset.collate_fn)
     return train_loader, val_loader, test_loader
 
 
 def train(net, loss_fn, opt, loader, device):
     net.train()
-    loss_list = []
-    dice_list = []
+    report = pd.DataFrame(columns=['Loss', 'Dice'])
 
     for data in loader:
         img = data['img'].to(device)
@@ -96,21 +97,18 @@ def train(net, loss_fn, opt, loader, device):
             opt.zero_grad()
             loss.backward()
             opt.step()
-            loss_list.append(loss.item())
 
             with torch.no_grad():
                 pred = torch.where(torch.sigmoid(logits) > 0.5, 1.0, 0.0)
                 dice = compute_dice(pred, mask[..., k]).mean()
-                dice_list.append(dice.item())
-
-    return np.array(loss_list).mean(), np.array(dice_list).mean()
+                report.loc[len(report)] = [loss.item(), dice.item()]
+    return report
 
 
 @torch.no_grad()
 def validate(net, loss_fn, loader, device):
     net.eval()
-    loss_list = []
-    dice_list = []
+    report = pd.DataFrame(columns=['Loss', 'Dice'])
 
     for data in loader:
         img = data['img'].to(device)
@@ -119,19 +117,17 @@ def validate(net, loss_fn, loader, device):
         for k in range(2):
             logits, _ = net(img[..., k])
             loss = loss_fn(logits, mask[..., k])
-            loss_list.append(loss.item())
 
             pred = torch.where(torch.sigmoid(logits) > 0.5, 1.0, 0.0)
             dice = compute_dice(pred, mask[..., k]).mean()
-            dice_list.append(dice.item())
-
-    return np.array(loss_list).mean(), np.array(dice_list).mean()
+            report.loc[len(report)] = [loss.item(), dice.item()]
+    return report
 
 
 @torch.no_grad()
 def test(net, loader, device):
     net.eval()
-    dice_list = []
+    report = pd.DataFrame(columns=['Dice'])
 
     for data in loader:
         img = data['img'].to(device).squeeze(0)
@@ -142,9 +138,8 @@ def test(net, loader, device):
         logits, _ = net(img)
         pred = torch.where(F.sigmoid(logits) > 0.5, 1.0, 0.0)
         dice = compute_dice(pred, mask).mean()
-        dice_list.append(dice.item())
-
-    return np.array(dice_list).mean()
+        report.loc[len(report)] = [dice.item()]
+    return report
 
 
 if __name__ == '__main__':
@@ -152,7 +147,7 @@ if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     config = configparser.ConfigParser()
-    config.read('parser/train_segmentation.ini')
+    config.read('parser/seg_train.ini')
 
     train_loader, val_loader, test_loader = create_dataloaders(config)
 
@@ -177,16 +172,16 @@ if __name__ == '__main__':
     patience = config.getint('PARAMETERS', 'PATIENCE')
     tic = time.time()
     for e in tqdm(range(1, num_epochs + 1)):
-        loss, dice = train(net, loss_fn, optimizer, train_loader, device)
-        H['train_loss'].append(loss)
-        H['train_dice'].append(dice)
+        report = train(net, loss_fn, optimizer, train_loader, device)
+        H['train_loss'].append(report['Loss'].mean())
+        H['train_dice'].append(report['Dice'].mean())
 
-        loss, dice = validate(net, loss_fn, val_loader, device)
-        H['val_loss'].append(loss)
-        H['val_dice'].append(dice)
+        report = validate(net, loss_fn, val_loader, device)
+        H['val_loss'].append(report['Loss'].mean())
+        H['val_dice'].append(report['Dice'].mean())
 
-        dice = test(net, test_loader, device)
-        H['test_dice'].append(dice)
+        report = test(net, test_loader, device)
+        H['test_dice'].append(report['Dice'].mean())
 
         scheduler.step()
 
@@ -195,8 +190,6 @@ if __name__ == '__main__':
             ['Train', '{:.3f}'.format(H['train_loss'][-1]), '{:.3f}'.format(H['train_dice'][-1])],
             ['Val', '{:.3f}'.format(H['val_loss'][-1]), '{:.3f}'.format(H['val_dice'][-1])],
             ['Test', '-', '{:.3f}'.format(H['test_dice'][-1])],
-            ['RPD', '{:.3f}'.format(abs(H['train_loss'][-1] - H['val_loss'][-1]) / ((H['train_loss'][-1] + H['val_loss'][-1]) / 2)),
-             '{:.3f}'.format(abs(H['train_dice'][-1] - H['val_dice'][-1]) / ((H['train_dice'][-1] + H['val_dice'][-1]) / 2))],
             ['Epoch', e, epochs_since_last_improvement]
         ]).table)
 

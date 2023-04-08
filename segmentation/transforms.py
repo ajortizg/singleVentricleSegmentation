@@ -6,6 +6,10 @@ import os
 import os.path as osp
 import sys
 
+import monai
+import monai.transforms
+import monai.data
+
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 from utils.transforms.basic_transforms import rotx, roty, rotz
@@ -262,6 +266,23 @@ class ToArray:
         return f"{self.__class__.__name__}()"
 
 
+class AddChannelDim:
+    def __init__(self, axis=0):
+        self.axis = axis
+
+    def __call__(self, data):
+        img = data['img']
+        mask = data['mask']
+        img = np.expand_dims(img, axis=self.axis)
+        mask = np.expand_dims(mask, axis=self.axis)
+        data['img'] = img
+        data['mask'] = mask
+        return data
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}()"
+
+
 class ToTensor:
     def __init__(self, add_ch_dim=False):
         self.add_ch_dim = add_ch_dim
@@ -276,6 +297,45 @@ class ToTensor:
             mask.unsqueeze_(0)
         data['img'] = img
         data['mask'] = mask
+        return data
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}()"
+
+
+class ToRAS:
+    def __init__(self):
+        self.ortr = monai.transforms.Orientation(axcodes='RAS')
+
+    def __call__(self, data):
+        img_zyxt = data['img']
+        mask_zyxt = data['mask']
+        img_affine = data['img_meta']['affine']
+        mask_affine = data['mask_meta']['affine']
+
+        ts = img_zyxt.shape[-1]
+        for t in range(ts):
+            img = img_zyxt[..., t]
+            img = np.expand_dims(img, axis=0)
+            img = self.ortr(monai.data.MetaTensor(img, affine=img_affine))
+            try:
+                img_zyxt[..., t] = img.squeeze(0).cpu().detach().numpy()
+            except ValueError:
+                # TODO! I don't know why this happens :(
+                img_zyxt[..., t] = img.squeeze(0).permute(1, 2, 0).cpu().detach().numpy()
+
+        ts = mask_zyxt.shape[-1]
+        for t in range(ts):
+            mask = mask_zyxt[..., t]
+            mask = np.expand_dims(mask, axis=0)
+            mask = self.ortr(monai.data.MetaTensor(mask, affine=mask_affine))
+            try:
+                mask_zyxt[..., t] = mask.squeeze(0).cpu().detach().numpy()
+            except ValueError:
+                mask_zyxt[..., t] = mask.squeeze(0).permute(1, 2, 0).cpu().detach().numpy()
+
+        data['img'] = img_zyxt
+        data['mask'] = mask_zyxt
         return data
 
     def __repr__(self) -> str:

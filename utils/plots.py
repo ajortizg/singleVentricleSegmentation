@@ -349,6 +349,31 @@ def merge_img_mask(img, mask, th=0.5, alpha=0.35, color=[1, 1, 0]):
     return img
 
 
+def save_overlaped_img_mask(img3d: torch.Tensor, mask3d: torch.Tensor, filename: str, save_dir: str, th: float, alpha: float):
+    NZ = img3d.shape[0]
+    aspect_ratio = 16. / 9.
+    cols = int(NZ / aspect_ratio)
+    if(NZ % cols > 0):
+        cols += 1
+    rows = math.ceil(NZ / cols)
+
+    fig, axs = plt.subplots(rows, cols, constrained_layout=True, figsize=(18, 10), dpi=4)
+    fig.suptitle('file: {}'.format(os.path.basename(filename)), fontsize=16)
+    for z, ax in enumerate(axs.flat):
+        if z < NZ:
+            img = img3d[z, ...].cpu().detach().numpy()
+            mask = mask3d[z, ...].cpu().detach().numpy()
+            ax.imshow(img, cmap="gray")
+            ax.imshow(mask, cmap='jet', alpha=alpha, interpolation='none')
+            ax.set_title("layer {}".format(z))
+            ax.axis('off')
+        else:
+            ax.axis('off')
+    path_name = os.path.join(save_dir, filename)
+    plt.savefig(path_name, dpi=100)
+    plt.close('all')
+
+
 def plot_accuracy(H, save_dir, filename='acc.png'):
     plt.style.use('ggplot')
     plt.figure()
