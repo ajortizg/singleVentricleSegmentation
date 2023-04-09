@@ -52,16 +52,19 @@ class OneOf:
 
 
 class MinMaxNormalization:
-    def __init__(self, p):
-        self.p = p
+    def __init__(self, q1=0, q2=100):
+        self.q1 = q1
+        self.q2 = q2
 
     def __call__(self, data):
-        if np.random.rand() < self.p:
-            img = data['img']
-            amin = np.amin(img)
-            amax = np.amax(img)
-            img = (img - amin) / (amax - amin)
-            data['img'] = img
+        img = data['img']
+        per1 = np.percentile(img, self.q1)
+        per2 = np.percentile(img, self.q2)
+        img = np.clip(img, per1, per2)
+        amin = np.amin(img)
+        amax = np.amax(img)
+        img = (img - amin) / (amax - amin)
+        data['img'] = img
         return data
 
     def __repr__(self) -> str:
@@ -73,12 +76,11 @@ class ZScoreNormalization:
         self.p = p
 
     def __call__(self, data):
-        if np.random.rand() < self.p:
-            img = data['img']
-            sigma = np.std(img)
-            mu = np.mean(img)
-            img_n = (img - mu) / sigma
-            data['img'] = img_n
+        img = data['img']
+        sigma = np.std(img)
+        mu = np.mean(img)
+        img_n = (img - mu) / sigma
+        data['img'] = img_n
         return data
 
     def __repr__(self) -> str:
@@ -86,25 +88,23 @@ class ZScoreNormalization:
 
 
 class QuadraticNormalization:
-    def __init__(self, p, mean_inside_mask):
-        self.p = p
+    def __init__(self, mean_inside_mask):
         self.mean_inside_mask = mean_inside_mask
 
     def __call__(self, data):
-        if np.random.rand() < self.p:
-            img = data['img']
-            mask = data['mask']
+        img = data['img']
+        mask = data['mask']
 
-            per95 = np.percentile(img, 95)
-            img = np.clip(img, 0, per95)
-            avg = np.mean(img, where=mask.astype('bool')) if self.mean_inside_mask else np.mean(img)
-            # avg = np.mean(img, where=mask.astype('bool'))
+        per95 = np.percentile(img, 95)
+        img = np.clip(img, 0, per95)            
+        avg = np.mean(img, where=mask.astype('bool')) if self.mean_inside_mask else np.mean(img)
+        # avg = np.mean(img, where=mask.astype('bool'))
 
-            # normalization n(I) = a I/sqrt(1+beta I**2)
-            norm_a = np.sqrt(per95 * per95 - avg * avg) / (np.sqrt(3) * per95 * avg)
-            norm_b = (per95 * per95 - 4. * avg * avg) / (3. * per95 * per95 * avg * avg)
-            img_norm = norm_a * img / np.sqrt(1 + norm_b * img**2)
-            data['img'] = img_norm
+        # normalization n(I) = a I/sqrt(1+beta I**2)
+        norm_a = np.sqrt(per95 * per95 - avg * avg) / (np.sqrt(3) * per95 * avg)
+        norm_b = (per95 * per95 - 4. * avg * avg) / (3. * per95 * per95 * avg * avg)
+        img_norm = norm_a * img / np.sqrt(1 + norm_b * img**2)
+        data['img'] = img_norm
         return data
 
     def __repr__(self) -> str:
@@ -284,17 +284,14 @@ class AddChannelDim:
 
 
 class ToTensor:
-    def __init__(self, add_ch_dim=False):
-        self.add_ch_dim = add_ch_dim
+    def __init__(self):
+        pass
 
     def __call__(self, data):
         img = data['img']
         mask = data['mask']
         img = torch.from_numpy(img).float()
         mask = torch.from_numpy(mask).float()
-        if self.add_ch_dim:
-            img.unsqueeze_(0)
-            mask.unsqueeze_(0)
         data['img'] = img
         data['mask'] = mask
         return data

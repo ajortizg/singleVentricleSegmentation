@@ -62,7 +62,7 @@ def compute_optical_flow(ds: SingleVentricleDataset, idx: int, mode: OpticalFlow
         I0 = data[:, :, :, t0]
         I1 = data[:, :, :, t1]
         # print(f'{t1}->{t0}')
-        pbar.set_postfix_str(f'P: {pname}, ({t1}->{t0})')
+        pbar.set_postfix_str(f'P: {pname}, ({t1}->{t0}) - {i}/{len(indices)-1}')
         save_dir_timestep = plots.createSubDirectory(patient_dir, f'time{t1}')
 
         # Compute the optical flow

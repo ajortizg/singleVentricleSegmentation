@@ -12,8 +12,34 @@ from collections import UserDict
 from natsort import natsorted
 
 
+def get_bounds(es, ed, masks, fwd, test=False):
+    if es < ed:
+        ti, tf = es, ed
+        if not test:
+            mi, mf = masks[..., 0], masks[..., 1]
+        else:
+            mi, mf = masks[..., ti], masks[..., tf]
+    else:
+        ti, tf = ed, es
+        if not test:
+            mi, mf = masks[..., 1], masks[..., 0]
+        else:
+            mi, mf = masks[..., ti], masks[..., tf]
+    indices = torch.arange(ti, tf + 1, 1)
+    
+    if fwd:
+        return ti, tf, mi, mf, indices
+    else:
+        return tf, ti, mf, mi, torch.flip(indices, (0,))
+
+
 class SVDataset(Dataset):
     def __init__(self, root_dir, mode='train', transforms=None, vxm=False):
+        """
+        Args:
+            mode: train, val, test, full
+            vxm: Set to True whe computing optical flow
+        """
         self.transforms = transforms
         self.is_test = mode == 'test'
         self.vxm = vxm
@@ -23,8 +49,12 @@ class SVDataset(Dataset):
         self.imgs_dir = osp.join(root_dir, 'NIFTI_4D_Datasets')
         self.masks_dir = osp.join(root_dir, 'NIFTI_Single_Ventricle_Segmentations')
         df = pd.read_excel(osp.join(root_dir, 'Segmentation_volumes.xlsx'))
-        self.df_split = df.loc[df['Split'] == mode]
-        self.df_split.reset_index(inplace=True)
+
+        if mode != 'full':
+            self.df_split = df.loc[df['Split'] == mode]
+            self.df_split.reset_index(inplace=True)
+        else:
+            self.df_split = df
 
     def __len__(self):
         return len(self.df_split)
@@ -53,9 +83,11 @@ class SVDataset(Dataset):
             mask_zyx_ed = np.swapaxes(nii_mask.get_fdata(), 0, 2)
             masks = np.stack((mask_zyx_es, mask_zyx_ed), axis=3)
 
-        img_meta = dict(nii_img.header)
+        # img_meta = dict(nii_img.header)
+        img_meta = {}
         img_meta['affine'] = nii_img.affine
-        mask_meta = dict(nii_mask.header)
+        # mask_meta = dict(nii_mask.header)
+        mask_meta = {}
         mask_meta['affine'] = nii_mask.affine
 
         # Group data in a dictionary

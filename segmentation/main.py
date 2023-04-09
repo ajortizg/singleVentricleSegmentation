@@ -18,7 +18,7 @@ if __name__ == '__main__':
         T.ToRAS(),
         T.ToTensor()
     ])
-    ds = ACDCDataset('data/acdc', 'train', transforms)
+    ds = SVDataset('data/singleVentricleData', 'train', transforms)
     for data in tqdm(ds):
         patient = data['patient']
         ts = data['mask'].shape[-1]
@@ -30,7 +30,7 @@ if __name__ == '__main__':
                                           0.5,
                                           0.3)
 
-                                          
+
     # save_dir = plots.createSaveDirectory('results', 'TESTS')
 
     # transforms = T.Compose([

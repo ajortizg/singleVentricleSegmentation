@@ -107,8 +107,9 @@ class TVL1OpticalFlow3D:
         else:
             raise Exception("wrong BoundaryType in configParser")
         # cuda
-        cuda_availabe = config.get('DEVICE', 'cuda_availabe')
-        self.DEVICE = "cuda" if cuda_availabe else "cpu"
+        # cuda_availabe = config.get('DEVICE', 'cuda_availabe')
+        # self.DEVICE = "cuda" if cuda_availabe else "cpu"
+        self.DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
         # debug
         self.saveDirDebug = os.path.sep.join([self.saveDir, "debug"])
         self.useDebugOutput = config.getboolean("DEBUG", "useDebugOutput")
