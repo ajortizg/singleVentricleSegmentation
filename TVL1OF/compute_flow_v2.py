@@ -19,6 +19,7 @@ import segmentation.transforms as T
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
+
 def save_cfg(cfg, save_dir, filename='config.ini'):
     f = osp.join(save_dir, filename)
     with open(f, 'w') as configfile:
@@ -37,7 +38,7 @@ def optical_flow(data, mode, cfg, save_dir, pbar):
     # Create saving directory for current patient
     patient_dir = plots.createSubDirectory(save_dir, patient)
 
-    # initialization of optical flow and mask
+    # Initialization of optical flow and mask
     NZ, NY, NX, NT = img.shape
     u = torch.zeros([NZ, NY, NX, 3], dtype=torch.float32, device=device)
     p = torch.zeros([NZ, NY, NX, 3, 3], dtype=torch.float32, device=device)
@@ -54,15 +55,14 @@ def optical_flow(data, mode, cfg, save_dir, pbar):
 
         alg = TVL1OpticalFlow3D(save_dir_timestep, cfg)
         u, p = alg.computeOnPyramid(I0, I1, u, p)
-
-    report.loc[len(report)] = [patient, (time.time() - tic)/60.0, len(indices)]
+    report.loc[len(report)] = [patient, (time.time() - tic) / 60.0, len(indices)]
     return report
 
 
 if __name__ == '__main__':
     # Read configuration parameters
     cfg = configparser.ConfigParser()
-    cfg.read('parser/configTVL1OF3D.ini')
+    cfg.read('parser/flow_tvl1_3d.ini')
     data_cfg = cfg['DATA']
     param_cfg = cfg['PARAMETERS']
 
@@ -77,9 +77,9 @@ if __name__ == '__main__':
     img_sz = param_cfg.getint('img_sz')
     transforms = T.Compose([
         T.ToRAS(),
-        T.CropForeground(p=1.0, tol=10),
-        T.Resize(p=1.0, size=(img_sz, img_sz, img_sz)),
-        T.BinarizeMasks(th=0.5),
+        # T.CropForeground(p=1.0, tol=10),
+        # T.Resize(p=1.0, size=(img_sz, img_sz, img_sz)),
+        # T.BinarizeMasks(th=0.5),
         T.MinMaxNormalization(q1=5, q2=95),
         T.ToTensor()
     ])
@@ -87,8 +87,10 @@ if __name__ == '__main__':
     loader = DataLoader(dset, batch_size=1, shuffle=False, num_workers=4)
 
     pbar = tqdm(total=len(loader))
+    tic = time.time()
     for data in loader:
         report = optical_flow(data, mode, cfg, save_dir, pbar)
         logger.info(tabulate(report, headers='keys', tablefmt='psql'))
         pbar.update(1)
-      
+
+    logger.info('Total time {} hrs.'.format((time.time() - tic) / 3600.0))

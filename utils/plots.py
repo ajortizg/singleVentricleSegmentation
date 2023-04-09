@@ -31,8 +31,8 @@ import csv
 
 def save_config(config, save_dir, filename='config.ini'):
     # save config file to save directory
-    conifg_output = osp.join(save_dir, filename)
-    with open(conifg_output, 'w') as config_file:
+    fout = osp.join(save_dir, filename)
+    with open(fout, 'w') as config_file:
         config.write(config_file)
 
 

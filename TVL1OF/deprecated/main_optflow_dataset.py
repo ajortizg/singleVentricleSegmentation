@@ -2,7 +2,7 @@ import os
 import argparse
 from enum import Enum
 
-from TVL1OF3Dnew import *
+from TVL1OF.deprecated.TVL1OF3Dnew import *
 
 # cnn_lib_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../cnn'))
 # sys.path.append(cnn_lib_path)

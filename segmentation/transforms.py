@@ -14,6 +14,8 @@ ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 from utils.transforms.basic_transforms import rotx, roty, rotz
 
+flow_keys = ['forward_flow', 'backward_flow']
+
 
 class Compose:
     def __init__(self, transforms):
@@ -96,7 +98,7 @@ class QuadraticNormalization:
         mask = data['mask']
 
         per95 = np.percentile(img, 95)
-        img = np.clip(img, 0, per95)            
+        img = np.clip(img, 0, per95)
         avg = np.mean(img, where=mask.astype('bool')) if self.mean_inside_mask else np.mean(img)
         # avg = np.mean(img, where=mask.astype('bool'))
 
@@ -294,6 +296,12 @@ class ToTensor:
         mask = torch.from_numpy(mask).float()
         data['img'] = img
         data['mask'] = mask
+
+        for k in flow_keys:
+            if k in data:
+                flow = data[k]
+                flow = torch.from_numpy(flow).float()
+                data[k] = flow
         return data
 
     def __repr__(self) -> str:
@@ -334,6 +342,18 @@ class ToRAS:
         data['img'] = img_zyxt
         data['mask'] = mask_zyxt
         return data
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}()"
+
+
+class Spacing:
+    def __init__(self):
+        # self.imgtr = monai.transforms.Spacing()
+        pass
+
+    def __call__(self, data):
+        pass
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}()"

@@ -5,7 +5,7 @@ import os
 import configparser
 from PIL import Image
 
-from TVL1OF.TVL1OF2D import *
+from TVL1OF.deprecated.TVL1OF2D import *
 
 from opticalFlow_cuda_ext import opticalFlow
 

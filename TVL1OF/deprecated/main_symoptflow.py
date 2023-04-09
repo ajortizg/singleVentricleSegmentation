@@ -1,7 +1,7 @@
 import os.path as osp
 import os
 from enum import Enum
-from TVL1OF.TVL1SymOF3D import *
+from TVL1OF.deprecated.TVL1SymOF3D import *
 from cnn.dataset import SingleVentricleDataset
 from utils import plots
 from utils import torch_utils

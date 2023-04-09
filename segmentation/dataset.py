@@ -13,20 +13,24 @@ from natsort import natsorted
 
 
 def get_bounds(es, ed, masks, fwd, test=False):
+    mi, mf = None, None
+
     if es < ed:
         ti, tf = es, ed
-        if not test:
-            mi, mf = masks[..., 0], masks[..., 1]
-        else:
-            mi, mf = masks[..., ti], masks[..., tf]
+        if masks is not None:
+            if not test:
+                mi, mf = masks[..., 0], masks[..., 1]
+            else:
+                mi, mf = masks[..., ti], masks[..., tf]
     else:
         ti, tf = ed, es
-        if not test:
-            mi, mf = masks[..., 1], masks[..., 0]
-        else:
-            mi, mf = masks[..., ti], masks[..., tf]
+        if masks is not None:
+            if not test:
+                mi, mf = masks[..., 1], masks[..., 0]
+            else:
+                mi, mf = masks[..., ti], masks[..., tf]
     indices = torch.arange(ti, tf + 1, 1)
-    
+
     if fwd:
         return ti, tf, mi, mf, indices
     else:
@@ -34,15 +38,18 @@ def get_bounds(es, ed, masks, fwd, test=False):
 
 
 class SVDataset(Dataset):
-    def __init__(self, root_dir, mode='train', transforms=None, vxm=False):
+    def __init__(self, root_dir, mode='train', transforms=None, vxm=False, load_flow=False):
         """
         Args:
             mode: train, val, test, full
-            vxm: Set to True whe computing optical flow
+            vxm: Set to True when computing optical flow
+            load_flow: Set to True to load optical flows
         """
+        self.root_dir = root_dir
         self.transforms = transforms
         self.is_test = mode == 'test'
         self.vxm = vxm
+        self.load_flow = load_flow
         self.class_names = ['background', 'sv']
         self.num_classes = len(self.class_names)
 
@@ -65,7 +72,7 @@ class SVDataset(Dataset):
         es = df_row.loc[idx, 'Systole']
         ed = df_row.loc[idx, 'Diastole']
 
-        # Load 4D nifty
+        # Load nifty images and masks
         nii_img = nib.load(osp.join(self.imgs_dir, patient_name + '.nii.gz'))
         img_zyxt = np.swapaxes(nii_img.get_fdata(), 0, 2)
 
@@ -83,6 +90,7 @@ class SVDataset(Dataset):
             mask_zyx_ed = np.swapaxes(nii_mask.get_fdata(), 0, 2)
             masks = np.stack((mask_zyx_es, mask_zyx_ed), axis=3)
 
+        # Load metadata
         # img_meta = dict(nii_img.header)
         img_meta = {}
         img_meta['affine'] = nii_img.affine
@@ -96,8 +104,22 @@ class SVDataset(Dataset):
                 'img_meta': img_meta,
                 'mask_meta': mask_meta,
                 'patient': patient_name, 'es': es, 'ed': ed}
+
+        # Load optical flow
+        if self.load_flow:
+            directions = ['forward', 'backward']
+            for d in directions:
+                patient_dir = osp.join(self.root_dir, 'optical_flow', d, patient_name)
+                *_, indices = get_bounds(es, ed, None, fwd=d == 'forward')
+                indices = indices[:-1]
+                flows_list = [np.load(osp.join(patient_dir, f'time{t}', 'it0', 'flow_m_it0.npy')) for t in indices]
+                flows_np = np.stack([flow for flow in flows_list], axis=4)
+                data[d + '_flow'] = flows_np
+
+        # Apply transformations to data
         if self.transforms is not None:
             data = self.transforms(data)
+
         return data
 
     @staticmethod

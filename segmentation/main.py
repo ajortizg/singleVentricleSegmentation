@@ -18,17 +18,17 @@ if __name__ == '__main__':
         T.ToRAS(),
         T.ToTensor()
     ])
-    ds = SVDataset('data/singleVentricleData', 'train', transforms)
+    ds = SVDataset('data/singleVentricleData', 'full', transforms,load_flow=True)
     for data in tqdm(ds):
         patient = data['patient']
         ts = data['mask'].shape[-1]
-        for i in range(ts):
-            plots.save_overlaped_img_mask(data['img'][..., i],
-                                          data['mask'][..., i],
-                                          '{}_t{}'.format(patient, i),
-                                          save_dir,
-                                          0.5,
-                                          0.3)
+        # for i in range(ts):
+        #     plots.save_overlaped_img_mask(data['img'][..., i],
+        #                                   data['mask'][..., i],
+        #                                   '{}_t{}'.format(patient, i),
+        #                                   save_dir,
+        #                                   0.5,
+        #                                   0.3)
 
 
     # save_dir = plots.createSaveDirectory('results', 'TESTS')
