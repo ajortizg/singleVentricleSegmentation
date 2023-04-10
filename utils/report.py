@@ -49,7 +49,11 @@ class Report:
             data_items = self.clean_data_dict(dict(config.items('DATA')))
             param_items = dict(config.items('PARAMETERS'))
             da_items = dict(config.items('DATA_AUGMENTATION'))
-            warping_items = dict(config.items('WARPING'))
+
+            try:
+                warping_items = dict(config.items('WARPING'))
+            except:
+                warping_items = {}
 
             df_data = pd.DataFrame(data_items, index=[i])
             df_data.insert(0, 'experiment', dir.split(osp.sep)[-1])
@@ -61,7 +65,10 @@ class Report:
                                         'train_loss': train_loss, 'train_acc': train_acc,
                                         'val_loss': val_loss, 'val_acc': val_acc, 'test_acc': test_acc}, index=[i]).round(3)
 
-            df_row = df_data.join([df_param, df_warping, df_da, metrics_row])
+            df_row = df_data.join([df_param,
+                                   df_warping,
+                                   df_da,
+                                   metrics_row])
             df = pd.concat([df_row, df])
         df.to_excel(osp.join(save_dir, filename), index=False)
 
@@ -93,33 +100,6 @@ class Report:
         return self.to_dt.strftime(str_fmt)
 
 
-# class ReportTrain(Report):
-#     def __init__(self, from_dt, to_dt, mode):
-#         super().__init__(from_dt, to_dt, mode)
-
-#     def create(self, save_dir, filename):
-#         if len(self.filtered_dirs) == 0:
-#             print('filter files first')
-#             return
-
-#         df = pd.DataFrame()
-#         for i, dir in enumerate(self.filtered_dirs):
-#             config = configparser.ConfigParser()
-#             config.read(osp.join(dir, 'config.ini'))
-
-#             acc = pd.read_csv(osp.join(dir, 'train_acc.csv'))
-#             row = acc.iloc[-1]
-
-#             print(config.get('DATA', 'patient_name'))
-#             print(row.T)
-
-#             df = pd.concat([df, row.to_frame().T], ignore_index=True)
-
-#         # df.to_excel(osp.join(save_dir, filename), index=False)
-#         mean = df.mean(axis=0)
-#         print(mean)
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--from_date', help='create report from date')
@@ -127,13 +107,13 @@ if __name__ == "__main__":
     parser.add_argument('--mode', help='cnn or ft', default='cnn')
     args = parser.parse_args()
 
-    save_dir = 'results_2023'
+    save_dir = 'results'
     report_dir = plots.createSubDirectory(save_dir, 'reports')
 
     if args.mode == 'cnn':
         mode = ReportMode.CNN
-    elif args.mode =='seg':
-        mode =ReportMode.SEG
+    elif args.mode == 'seg':
+        mode = ReportMode.SEG
     else:
         mode = ReportMode.FT
 

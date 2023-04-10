@@ -74,8 +74,8 @@ class MinMaxNormalization:
 
 
 class ZScoreNormalization:
-    def __init__(self, p):
-        self.p = p
+    def __init__(self):
+        pass
 
     def __call__(self, data):
         img = data['img']

@@ -103,7 +103,8 @@ class SVDataset(Dataset):
                 'mask': masks,
                 'img_meta': img_meta,
                 'mask_meta': mask_meta,
-                'patient': patient_name, 'es': es, 'ed': ed}
+                'patient': patient_name,
+                'es': es, 'ed': ed}
 
         # Load optical flow
         if self.load_flow:

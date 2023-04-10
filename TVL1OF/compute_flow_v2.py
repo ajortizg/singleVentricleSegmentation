@@ -20,12 +20,6 @@ import segmentation.transforms as T
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
-def save_cfg(cfg, save_dir, filename='config.ini'):
-    f = osp.join(save_dir, filename)
-    with open(f, 'w') as configfile:
-        cfg.write(configfile)
-
-
 def optical_flow(data, mode, cfg, save_dir, pbar):
     # Report for time statistics
     report = pd.DataFrame(columns=['Patient', 'Time', 'NT'])
@@ -71,7 +65,7 @@ if __name__ == '__main__':
     save_dir = plots.createSaveDirectory(data_cfg.get('output_path'), f'TVL1OF3D{mode}')
     logger = plots.create_logger(save_dir)
     logger.info(f'Compute TV-L1 optical flow ({mode})')
-    save_cfg(cfg, save_dir)
+    plots.save_config(cfg, save_dir)
 
     # Create dataset
     img_sz = param_cfg.getint('img_sz')

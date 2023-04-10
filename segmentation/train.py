@@ -13,6 +13,7 @@ import time
 import pandas as pd
 import sys
 from monai.metrics.meandice import compute_dice
+from monai.metrics.hausdorff_distance import compute_hausdorff_distance
 import matplotlib.pyplot as plt
 from terminaltables import AsciiTable
 import numpy as np
@@ -30,6 +31,7 @@ def create_dataloaders(config):
     data_aug = config['DATA_AUGMENTATION']
 
     train_transforms = T.Compose([
+        T.ToRAS(),
         T.CropForeground(p=1.0, tol=10),
         T.Resize(p=1.0, size=(img_sz, img_sz, img_sz)),
         T.RandomRotate(p=data_aug.getfloat('ROT_PROB'),
@@ -57,17 +59,24 @@ def create_dataloaders(config):
         T.AdditiveGaussianNoise(data_aug.getfloat('NOISE_PROB'),
                                 data_aug.getfloat('NOISE_MU'),
                                 data_aug.getfloat('NOISE_STD')),
-        T.QuadraticNormalization(p=1.0),
+        # T.QuadraticNormalization(mean_inside_mask=True),
+        # T.MinMaxNormalization(),
+        # T.ZScoreNormalization(),
         T.BinarizeMasks(th=0.5),
-        T.ToTensor(add_ch_dim=True)
+        T.AddChannelDim(),
+        T.ToTensor()
     ])
 
     val_transforms = T.Compose([
+        T.ToRAS(),
         T.CropForeground(p=1.0, tol=10),
         T.Resize(p=1.0, size=(img_sz, img_sz, img_sz)),
-        T.QuadraticNormalization(p=1.0),
+        # T.QuadraticNormalization(mean_inside_mask=True),
+        # T.MinMaxNormalization(),
+        # T.ZScoreNormalization(),
         T.BinarizeMasks(th=0.5),
-        T.ToTensor(add_ch_dim=True)
+        T.AddChannelDim(),
+        T.ToTensor()
     ])
 
     root_dir = config.get('DATA', 'BASE_PATH_3D')
