@@ -58,9 +58,9 @@ def applyGaussianBlur3D(vol, sigma):
 
 
 class TVL1OpticalFlow3D:
-    def __init__(self, saveDir, config):
+    def __init__(self, config):
         self.config = config
-        self.saveDir = saveDir
+        # self.saveDir = saveDir
         self.NUM_SCALES = config.getint('PARAMETERS', 'NUM_SCALES')
         self.MAX_WARPS = config.getint('PARAMETERS', 'MAX_WARPS')
         self.MAX_OUTER_ITERATIONS = config.getint('PARAMETERS', 'MAX_OUTER_ITERATIONS')
@@ -106,14 +106,19 @@ class TVL1OpticalFlow3D:
             self.BoundaryTypeCuda = opticalFlow.BoundaryType.BOUNDARY_REFLECT
         else:
             raise Exception("wrong BoundaryType in configParser")
-        # cuda
-        # cuda_availabe = config.get('DEVICE', 'cuda_availabe')
-        # self.DEVICE = "cuda" if cuda_availabe else "cpu"
+     
         self.DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
+
         # debug
-        self.saveDirDebug = os.path.sep.join([self.saveDir, "debug"])
+        # self.saveDirDebug = os.path.sep.join([self.saveDir, "debug"])
         self.useDebugOutput = config.getboolean("DEBUG", "useDebugOutput")
+        # if self.useDebugOutput:
+        # os.makedirs(self.saveDirDebug)
+
+    def set_save_dir(self, save_dir):
+        self.saveDir = save_dir
         if self.useDebugOutput:
+            self.saveDirDebug = os.path.join(self.saveDir, "debug")
             os.makedirs(self.saveDirDebug)
 
     def getMeshLength(self, config, NZ, NY, NX):
@@ -243,9 +248,9 @@ class TVL1OpticalFlow3D:
             # rho_c = I1_warped - u[:, :, :, 0] * I1_warped_grad[:, :, :, 0] - u[:, :, :, 1] * I1_warped_grad[:, :, :, 1] - u[:, :, :, 2] * I1_warped_grad[:, :, :, 2] - I0
             rho_c = I1_warped - torch.sum(u * I1_warped_grad, dim=3) - I0
 
-            breakConditionVecPrimal = torch.zeros([self.MAX_OUTER_ITERATIONS]).float().to(self.DEVICE)
-            breakConditionVecDual = torch.zeros([self.MAX_OUTER_ITERATIONS]).float().to(self.DEVICE)
-            breakConditionVecUpdate = torch.zeros([self.MAX_OUTER_ITERATIONS]).float().to(self.DEVICE)
+            breakConditionVecPrimal = torch.zeros([self.MAX_OUTER_ITERATIONS], dtype=torch.float32, device=self.DEVICE)
+            breakConditionVecDual = torch.zeros([self.MAX_OUTER_ITERATIONS], dtype=torch.float32, device=self.DEVICE)
+            breakConditionVecUpdate = torch.zeros([self.MAX_OUTER_ITERATIONS], dtype=torch.float32, device=self.DEVICE)
 
             # TODO possible use results for new warp
             sigma = self.sigma
@@ -264,12 +269,7 @@ class TVL1OpticalFlow3D:
                 p = opticalFlow.TVL1OF3D_proxDual(dualVariable, sigma, self.weight_TV, meshInfo)
                 breakConditionVecDual[n] = torch.norm(p - pold).item()
                 if self.weight_TV == 0.:
-                    p = torch.zeros(
-                        [meshInfo.getNZ(),
-                         meshInfo.getNY(),
-                         meshInfo.getNX(),
-                         3, 3]).float().to(
-                        self.DEVICE)
+                    p = torch.zeros([meshInfo.getNZ(), meshInfo.getNY(), meshInfo.getNX(), 3, 3], dtype=torch.float32, device=self.DEVICE)
 
                 # update of primal variable
                 uold = u
@@ -282,8 +282,7 @@ class TVL1OpticalFlow3D:
                     Dp = anistropicNablaOp.backwardVectorField(p, scalars, normals, tangents1, tangents2)
                 Dp_div = nablaOp.backwardVectorField(Dp)
                 primalVariable = u - tau * Dp_div
-                u = opticalFlow.TVL1OF3D_proxPrimal(
-                    primalVariable, tau, self.weight_Matching, rho, I1_warped_grad, meshInfo)
+                u = opticalFlow.TVL1OF3D_proxPrimal(primalVariable, tau, self.weight_Matching, rho, I1_warped_grad, meshInfo)
 
                 breakConditionVecPrimal[n] = torch.norm(u - uold).item()
                 # if self.weight_Matching == 0.:
@@ -396,150 +395,4 @@ class TVL1OpticalFlow3D:
         fileNameMask = os.path.join(saveDir, maskName)
         torch.save(mask_warped, fileNameMask)
 
-        # TODO
-        # add mask to mri images
-        # saveDirMRISlices = os.path.join(saveDir, "it0/I0Slices")
-        # saveDirMaskSlices = os.path.join(saveDir, "mask_slices")
-        # saveDirSumSlices = os.path.join(saveDir, "sum_slices")
-        # if not os.path.exists(saveDirSumSlices):
-        #     os.makedirs(saveDirSumSlices)
-        # for z in range(0, NZ):
-        #     fileNameMRISlice = os.path.join(saveDirMRISlices, f"colorimg_z{z}.png")
-        #     img_mri = cv2.imread(fileNameMRISlice)
-        #     fileNameMaskSlice = os.path.join(saveDirMaskSlices, f"colorimg_z{z}.png")
-        #     img_mask = cv2.imread(fileNameMaskSlice)
-        #     fileNameSumSlice = os.path.join(saveDirSumSlices, f"sumimg_z{z}.png")
-        #     img_sum = img_mri + img_mask
-        #     cv2.imwrite(fileNameSumSlice, img_sum)
-        #     fileNameSumSliceInvert = os.path.join(saveDirSumSlices, f"invertsumimg_z{z}.png")
-        #     img_sum_invert = 255. - img_sum
-        #     cv2.imwrite(fileNameSumSliceInvert, img_sum_invert)
-
         return mask_warped
-
-    # def updateDualVariable(self,u,v,p,meshInfo):
-    #     nablaOp = opticalFlow.Nabla3D_CD(meshInfo)
-    #     for m in range(MAX_INNER_ITERATIOS):
-    #         # Divergence of dual variables
-    #         p_div_x = nablaOp.backward(p[:,:,:,:,0].contiguous())
-    #         p_div_y = nablaOp.backward(p[:,:,:,:,1].contiguous())
-    #         p_div_z = nablaOp.backward(p[:,:,:,:,2].contiguous())
-
-    #         # Compute the 3D optical flow Eq. 14 # TODO! check sign
-    #         u[:,:,:,0] = v[:,:,:,0] - THETA * p_div_x
-    #         u[:,:,:,1] = v[:,:,:,1] - THETA * p_div_y
-    #         u[:,:,:,2] = v[:,:,:,2] - THETA * p_div_z
-
-    #         # Proposition 1
-    #         # Compute the gradient of the optical flow using forward differences
-    #         # nabla_fwd = NablaForward()
-    #         u_gradx = nablaOp.forward(u[:, :, :, 0].contiguous())
-    #         u_grady = nablaOp.forward(u[:, :, :, 1].contiguous())
-    #         u_gradz = nablaOp.forward(u[:, :, :, 2].contiguous())
-
-    #         p_tilde_x = p[:,:,:,:,0] + (TAU / THETA) * u_gradx
-    #         p_tilde_y = p[:,:,:,:,1] + (TAU / THETA) * u_grady
-    #         p_tilde_z = p[:,:,:,:,2] + (TAU / THETA) * u_gradz
-
-    #         # p_tilde_x_norm = np.sqrt(p_tilde_x[:, :, :, 0]**2 + p_tilde_x[:, :, :, 1]**2 + p_tilde_x[:, :, :, 2]**2)
-    #         # p_tilde_y_norm = np.sqrt(p_tilde_y[:, :, :, 0]**2 + p_tilde_y[:, :, :, 1]**2 + p_tilde_y[:, :, :, 2]**2)
-    #         # p_tilde_z_norm = np.sqrt(p_tilde_z[:, :, :, 0]**2 + p_tilde_z[:, :, :, 1]**2 + p_tilde_z[:, :, :, 2]**2)
-
-    #         p_tilde_x_norm = torch.norm(p_tilde_x, dim=3)
-    #         p_tilde_y_norm = torch.norm(p_tilde_y, dim=3)
-    #         p_tilde_z_norm = torch.norm(p_tilde_z, dim=3)
-
-    #         den_x = torch.clamp(p_tilde_x_norm, min=1.)
-    #         den_y = torch.clamp(p_tilde_y_norm, min=1.)
-    #         den_z = torch.clamp(p_tilde_z_norm, min=1.)
-
-    #         p[:, :, :, 0,0] = p_tilde_x[:, :, :, 0] / den_x
-    #         p[:, :, :, 1,0] = p_tilde_x[:, :, :, 1] / den_x
-    #         p[:, :, :, 2,0] = p_tilde_x[:, :, :, 2] / den_x
-
-    #         p[:, :, :, 0,1] = p_tilde_y[:, :, :, 0] / den_y
-    #         p[:, :, :, 1,1] = p_tilde_y[:, :, :, 1] / den_y
-    #         p[:, :, :, 2,1] = p_tilde_y[:, :, :, 2] / den_y
-
-    #         p[:, :, :, 0,2] = p_tilde_z[:, :, :, 0] / den_z
-    #         p[:, :, :, 1,2] = p_tilde_z[:, :, :, 1] / den_z
-    #         p[:, :, :, 2,2] = p_tilde_z[:, :, :, 2] / den_z
-
-    # def dirichlet(self, x):
-    #     x1 = x[:, :, :, 0]
-    #     x2 = x[:, :, :, 1]
-    #     x3 = x[:, :, :, 2]
-
-    #     x1 = self.zero_border(x1)
-    #     x2 = self.zero_border(x2)
-    #     x3 = self.zero_border(x3)
-
-    #     return np.stack((x1, x2, x3), axis=3)
-
-    # def zero_border(self, x):
-    #     x[:, :, 0] = 0
-    #     x[:, :, -1] = 0
-    #     x[:, 0, :] = 0
-    #     x[:, -1, :] = 0
-    #     x[0, :, :] = 0
-    #     x[-1, :, :] = 0
-    #     return x
-
-    # def thresholding(self, u, rho, I1_warped_gradx, I1_warped_grady, I1_warped_gradz, meshInfo):
-    #     """
-    #     Solution of the minimization task in Eq. 15
-    #     """
-    #     print("start threshold")
-    #     ts = time.time()
-
-    #     v = torch.zeros(u.shape).float().to(DEVICE)
-
-    #     for x in range(meshInfo.getNX()):
-    #         for y in range(meshInfo.getNY()):
-    #             for z in range(meshInfo.getNZ()):
-    #                 r = rho[z, y, x]
-    #                 g2 = I1_warped_gradx[z,y,x].item()**2 + I1_warped_grady[z,y,x].item()**2 + I1_warped_gradz[z,y,x].item()**2
-
-    #                 delta_x, delta_y, delta_z = 0.,0.,0.
-    #                 if (r < - LT * g2):
-    #                     delta_x = LT * I1_warped_gradx[z, y, x]
-    #                     delta_y = LT * I1_warped_grady[z, y, x]
-    #                     delta_z = LT * I1_warped_gradz[z, y, x]
-    #                 elif (r > LT * g2):
-    #                     delta_x = -LT * I1_warped_gradx[z, y, x]
-    #                     delta_y = -LT * I1_warped_grady[z, y, x]
-    #                     delta_z = -LT * I1_warped_gradz[z, y, x]
-    #                 elif (g2 > 1e-10):
-    #                     delta_x = - r * I1_warped_gradx[z, y, x] / g2
-    #                     delta_y = - r * I1_warped_grady[z, y, x] / g2
-    #                     delta_z = - r * I1_warped_gradz[z, y, x] / g2
-
-    #                 v[z, y, x, 0] = u[z, y, x, 0] + delta_x
-    #                 v[z, y, x, 1] = u[z, y, x, 1] + delta_y
-    #                 v[z, y, x, 2] = u[z, y, x, 2] + delta_z
-
-    #     print('finished threshold - elapsed time: ', (time.time()-ts))
-    #     return v
-
-    # def create_grid(self, a):
-    #     """
-    #     Generate grid of x,y,z coordinates for each voxel
-    #     """
-    #     z, y, x = a.shape
-    #     zz, yy, xx = np.meshgrid(range(z), range(y), range(x), indexing="ij")
-    #     return (xx, yy, zz)
-
-    # def restriction(self, x):
-    #     return ndimage.zoom(x, DOWN_FACTOR, order=3, prefilter=True, mode="reflect")
-
-    # def prolongation(self, x):
-    #     x1 = x[:, :, :, 0]
-    #     x2 = x[:, :, :, 1]
-    #     x3 = x[:, :, :, 2]
-
-    #     x1i = ndimage.zoom(x1, UP_FACTOR, order=3, mode="constant")
-    #     x2i = ndimage.zoom(x2, UP_FACTOR, order=3, mode="constant")
-    #     x3i = ndimage.zoom(x3, UP_FACTOR, order=3, mode="constant")
-
-    #     xi = np.stack((x1i, x2i, x3i), axis=3)
-    #     return xi

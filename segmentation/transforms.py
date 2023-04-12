@@ -348,12 +348,33 @@ class ToRAS:
 
 
 class Spacing:
-    def __init__(self):
-        # self.imgtr = monai.transforms.Spacing()
-        pass
+    def __init__(self, pixdim):
+        self.tr = monai.transforms.Spacing(pixdim=pixdim)
 
     def __call__(self, data):
-        pass
+        img_zyxt = data['img']
+        img_affine = data['img_meta']['affine']
+        mask_zyxt = data['mask']
+        mask_affine = data['mask_meta']['affine']
+
+        # 1.025, 5.75
+        ts = img_zyxt.shape[-1]
+        for t in range(ts):
+            img = img_zyxt[..., t]
+            img = np.expand_dims(img, axis=0)
+            img = self.tr(monai.data.MetaTensor(img, affine=img_affine), mode='bilinear')
+            img_zyxt[..., t] = img.squeeze(0).cpu().detach().numpy()
+
+        ts = mask_zyxt.shape[-1]
+        for t in range(ts):
+            mask = mask_zyxt[..., t]
+            mask = np.expand_dims(mask, axis=0)
+            mask = self.tr(monai.data.MetaTensor(mask, affine=mask_affine), mode='nearest')
+            mask_zyxt[..., t] = mask.squeeze(0).cpu().detach().numpy()
+
+        data['img'] = img_zyxt
+        data['mask'] = mask_zyxt
+        return data
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}()"

@@ -59,9 +59,7 @@ def create_dataloaders(config):
         T.AdditiveGaussianNoise(data_aug.getfloat('NOISE_PROB'),
                                 data_aug.getfloat('NOISE_MU'),
                                 data_aug.getfloat('NOISE_STD')),
-        # T.QuadraticNormalization(mean_inside_mask=True),
-        # T.MinMaxNormalization(),
-        # T.ZScoreNormalization(),
+        T.QuadraticNormalization(mean_inside_mask=True),
         T.BinarizeMasks(th=0.5),
         T.AddChannelDim(),
         T.ToTensor()
@@ -71,9 +69,7 @@ def create_dataloaders(config):
         T.ToRAS(),
         T.CropForeground(p=1.0, tol=10),
         T.Resize(p=1.0, size=(img_sz, img_sz, img_sz)),
-        # T.QuadraticNormalization(mean_inside_mask=True),
-        # T.MinMaxNormalization(),
-        # T.ZScoreNormalization(),
+        T.QuadraticNormalization(mean_inside_mask=True),
         T.BinarizeMasks(th=0.5),
         T.AddChannelDim(),
         T.ToTensor()

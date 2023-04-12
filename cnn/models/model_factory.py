@@ -2,6 +2,7 @@ from .basic_unet import *
 from .unet_3d import *
 from .unet import *
 from .unetr import *
+from .swin_unetr import *
 from torch import nn
 import sys
 import os.path as osp
@@ -23,6 +24,8 @@ def create_model(config, logger=None):
         net = Unet(config, logger)
     elif net_type == 'unetr':
         net = TransformerUNet(config, logger)
+    elif net_type == 'swin_unetr':
+        net = SwinUNetr(config, logger)
     else:
         print('Unknown network: ' + net_type)
         sys.exit()
