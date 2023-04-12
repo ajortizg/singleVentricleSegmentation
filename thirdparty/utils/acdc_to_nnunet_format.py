@@ -53,7 +53,7 @@ if __name__ == '__main__':
     generate_dataset_json(output_folder=save_dir,
                           channel_names={1: 'T1'},
                           labels={'background': 0, 'RV': 1, 'MY': 2, 'LV': 3},
-                          num_training_cases=200,
+                          num_training_cases=k - 1,
                           file_ending='.nii.gz',
                           dataset_name='ACDC',
                           overwrite_image_reader_writer='NibabelIOWithReorient')
