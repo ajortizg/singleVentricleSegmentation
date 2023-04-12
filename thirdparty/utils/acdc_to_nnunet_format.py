@@ -7,11 +7,11 @@ import configparser
 from tqdm import tqdm
 from natsort import natsorted
 
-from nnUNet.nnunetv2.dataset_conversion.generate_dataset_json import generate_dataset_json
 
-ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
+ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../../'))
 sys.path.append(ROOT_DIR)
 from utils import plots
+from thirdparty.nnUNet.nnunetv2.dataset_conversion.generate_dataset_json import generate_dataset_json
 
 # os.environ['nnUNet_n_proc_DA'] = 12
 
