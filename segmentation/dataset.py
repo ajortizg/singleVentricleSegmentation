@@ -174,7 +174,10 @@ class ACDCDataset(Dataset):
                 'mask': masks,
                 'img_meta': img_meta,
                 'mask_meta': mask_meta,
-                'patient': patient_name, 'ed': ed, 'es': es}
+                'patient': patient_name, 'ed': ed, 'es': es,
+                'raw_imgs': [nii_img_es, nii_img_ed],
+                'raw_labels': [nii_mask_es, nii_mask_ed]
+                }
         if self.transforms is not None:
             data = self.transforms(data)
         return data
