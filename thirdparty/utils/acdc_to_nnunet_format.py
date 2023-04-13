@@ -7,13 +7,10 @@ import configparser
 from tqdm import tqdm
 from natsort import natsorted
 
-
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../../'))
 sys.path.append(ROOT_DIR)
 from utils import plots
 from thirdparty.nnUNet.nnunetv2.dataset_conversion.generate_dataset_json import generate_dataset_json
-
-# os.environ['nnUNet_n_proc_DA'] = 12
 
 
 def read_configfile(file_dir):

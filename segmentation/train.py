@@ -1,32 +1,40 @@
-from dataset import SVDataset
-import transforms as T
+import os.path as osp
+import configparser
+import time
+import sys
+
+
+import numpy as np
+import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 import torch.nn as nn
 import torch.optim as optim
 import torch.backends.cudnn as cudnn
-from tqdm import tqdm
-import torch
-import os.path as osp
-import configparser
-import time
-import pandas as pd
-import sys
+from torch.utils.tensorboard import SummaryWriter
 from monai.metrics.meandice import compute_dice
 from monai.metrics.hausdorff_distance import compute_hausdorff_distance
 import matplotlib.pyplot as plt
 from terminaltables import AsciiTable
-import numpy as np
-from torch.utils.tensorboard import SummaryWriter
-
+import pandas as pd
+from tqdm import tqdm
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 from utils import plots
 from cnn.models.model_factory import create_model, save_model
+from segmentation.dataset import SVDataset, create_5fold
+import segmentation.transforms as T
 
 
-def create_dataloaders(config):
+def get_fold(config):
+    root_dir = config.get('DATA', 'BASE_PATH_3D')
+    fold = config.getint('DATA', 'fold')
+    dataset = SVDataset(root_dir, mode='train')
+    return create_5fold(dataset)[fold], fold
+
+
+def create_dataloaders(config, fold):
     img_sz = config.getint('PARAMETERS', 'IMG_SIZE')
     data_aug = config['DATA_AUGMENTATION']
 
@@ -49,8 +57,9 @@ def create_dataloaders(config):
                              prefilter=data_aug.getboolean('ED_USE_PREFILTER'),
                              axis=data_aug['ED_AXIS'],
                              order=data_aug.getint('ED_ORDER')),
-        T.GammaScaling(data_aug.getfloat('GAMMA_SCALING_PROB'),
-                       tuple(map(float, data_aug['GAMMA_SCALING_RANGE'].split(',')))),
+        # T.GammaScaling(data_aug.getfloat('GAMMA_SCALING_PROB'), tuple(map(float, data_aug['GAMMA_SCALING_RANGE'].split(',')))),
+        T.GammaTransform(0.1, (0.7, 1.5), True, False),
+        T.GammaTransform(0.3, (0.7, 1.5), False, False),
         T.MutiplicativeScaling(data_aug.getfloat('MULT_SCALING_PROB'),
                                tuple(map(float, data_aug['MULT_SCALING_RANGE'].split(',')))),
         T.AdditiveScaling(data_aug.getfloat('ADD_SCALING_PROB'),
@@ -79,8 +88,8 @@ def create_dataloaders(config):
     batch_size = config.getint('PARAMETERS', 'BATCH_SIZE')
     workers = config.getint('PARAMETERS', 'NUM_WORKERS')
 
-    train_ds = SVDataset(root_dir, mode='train', transforms=train_transforms)
-    val_ds = SVDataset(root_dir, mode='val', transforms=val_transforms)
+    train_ds = SVDataset(root_dir, mode='train', transforms=train_transforms, fold_indices=fold['train'])
+    val_ds = SVDataset(root_dir, mode='train', transforms=val_transforms, fold_indices=fold['val'])
     test_ds = SVDataset(root_dir, mode='test', transforms=val_transforms)
     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=workers, collate_fn=SVDataset.collate_fn)
     val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=workers, collate_fn=SVDataset.collate_fn)
@@ -154,9 +163,13 @@ if __name__ == '__main__':
     config = configparser.ConfigParser()
     config.read('parser/seg_train.ini')
 
-    train_loader, val_loader, test_loader = create_dataloaders(config)
+    fold, n = get_fold(config)
 
-    save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'SEG')
+    train_loader, val_loader, test_loader = create_dataloaders(config, fold)
+
+    sys.exit()
+
+    save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), f'SEG-{n}')
     plots.save_config(config, save_dir)
     writer = SummaryWriter(log_dir=save_dir)
     logger = plots.create_logger(save_dir)

@@ -21,19 +21,20 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 # found = False
 
+
 def optical_flow(data, mode, cfg, save_dir, pbar):
     # Report for time statistics
     report = pd.DataFrame(columns=['Patient', 'Time', 'NT'])
 
     img = data['img'].squeeze(0).to(device)
+
     patient = data['patient'][0]
-    # # global found
-    # if patient != 'Adult_11':
+    # global found
+    # if patient == 'Adult_81':
+    #     found = True
+
+    # if not found:
     #     return report
-    #     # found = True
-    
-    # # if not found:
-    # #     return report
 
     *_, indices = get_bounds(data['es'].item(), data['ed'].item(), None, fwd=mode == 'forward')
 
@@ -59,7 +60,7 @@ def optical_flow(data, mode, cfg, save_dir, pbar):
         alg.set_save_dir(save_dir_timestep)
         u, p = alg.computeOnPyramid(I0, I1, u, p)
     report.loc[len(report)] = [patient, (time.time() - tic) / 60.0, len(indices)]
-    torch.cuda.empty_cache()
+    # torch.cuda.empty_cache()
     return report
 
 

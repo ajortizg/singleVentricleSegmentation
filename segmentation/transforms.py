@@ -219,6 +219,60 @@ class GammaScaling:
         return f"{self.__class__.__name__}()"
 
 
+class GammaTransform:
+    def __init__(self, p=0.5, gamma_range=(0.5, 2), invert_image=False, retain_stats: bool = False):
+        """
+        Augments by changing 'gamma' of the image (same as gamma correction in photos or computer monitors
+
+        :param gamma_range: range to sample gamma from. If one value is smaller than 1 and the other one is
+        larger then half the samples will have gamma <1 and the other >1 (in the inverval that was specified).
+        Tuple of float. If one value is < 1 and the other > 1 then half the images will be augmented with gamma values
+        smaller than 1 and the other half with > 1
+        :param invert_image: whether to invert the image before applying gamma augmentation
+        :param per_channel:
+        :param data_key:
+        :param retain_stats: Gamma transformation will alter the mean and std of the data in the patch. If retain_stats=True,
+        the data will be transformed to match the mean and standard deviation before gamma augmentation.
+        """
+        self.p = p
+        self.retain_stats = retain_stats
+        self.gamma_range = gamma_range
+        self.invert_image = invert_image
+
+    def __call__(self, data):
+        if np.random.uniform() < self.p:
+            img = data['img']
+            img = augment_gamma(img, self.gamma_range, self.invert_image, retain_stats=self.retain_stats)
+            data['img'] = img
+        return data
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}()"
+
+
+def augment_gamma(data_sample, gamma_range=(0.5, 2), invert_image=False, epsilon=1e-7, retain_stats: bool = False):
+    if invert_image:
+        data_sample = - data_sample
+
+    if retain_stats:
+        mn = data_sample.mean()
+        sd = data_sample.std()
+    if np.random.random() < 0.5 and gamma_range[0] < 1:
+        gamma = np.random.uniform(gamma_range[0], 1)
+    else:
+        gamma = np.random.uniform(max(gamma_range[0], 1), gamma_range[1])
+    minm = data_sample.min()
+    rnge = data_sample.max() - minm
+    data_sample = np.power(((data_sample - minm) / float(rnge + epsilon)), gamma) * float(rnge + epsilon) + minm
+    if retain_stats:
+        data_sample = data_sample - data_sample.mean()
+        data_sample = data_sample / (data_sample.std() + 1e-8) * sd
+        data_sample = data_sample + mn
+    if invert_image:
+        data_sample = - data_sample
+    return data_sample
+
+
 class AdditiveGaussianNoise:
     def __init__(self, p, mu, sigma):
         self.p = p

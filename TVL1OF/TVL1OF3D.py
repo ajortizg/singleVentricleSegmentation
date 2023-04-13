@@ -106,7 +106,7 @@ class TVL1OpticalFlow3D:
             self.BoundaryTypeCuda = opticalFlow.BoundaryType.BOUNDARY_REFLECT
         else:
             raise Exception("wrong BoundaryType in configParser")
-     
+
         self.DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
         # debug
@@ -150,8 +150,7 @@ class TVL1OpticalFlow3D:
         meshInfos = [meshInfo3D_cuda]
         NZ_restr, NY_restr, NX_restr = NZ, NY, NX
         for s in range(1, self.NUM_SCALES):
-            NZ_restr, NY_restr, NX_restr = math.ceil(
-                0.5 * NZ_restr), math.ceil(0.5 * NY_restr), math.ceil(0.5 * NX_restr)
+            NZ_restr, NY_restr, NX_restr = math.ceil(0.5 * NZ_restr), math.ceil(0.5 * NY_restr), math.ceil(0.5 * NX_restr)
             LZ_restr, LY_restr, LX_restr = self.getMeshLength(self.config, NZ_restr, NY_restr, NX_restr)
             meshInfos.append(opticalFlow.MeshInfo3D(NZ_restr, NY_restr, NX_restr, LZ_restr, LY_restr, LX_restr))
 
@@ -169,10 +168,8 @@ class TVL1OpticalFlow3D:
                 self.InterpolationTypeCuda, self.BoundaryTypeCuda)
             I0s.append(prolongationOp_cuda.forward(I0s[s - 1]))
             I1s.append(prolongationOp_cuda.forward(I1s[s - 1]))
-            us.append(torch.zeros([meshInfos[s].getNZ(), meshInfos[s].getNY(),
-                      meshInfos[s].getNX(), 3]).float().to(self.DEVICE))
-            ps.append(torch.zeros([meshInfos[s].getNZ(), meshInfos[s].getNY(),
-                      meshInfos[s].getNX(), 3, 3]).float().to(self.DEVICE))
+            us.append(torch.zeros([meshInfos[s].getNZ(), meshInfos[s].getNY(), meshInfos[s].getNX(), 3], dtype=torch.float32, device=self.DEVICE))
+            ps.append(torch.zeros([meshInfos[s].getNZ(), meshInfos[s].getNY(), meshInfos[s].getNX(), 3, 3], dtype=torch.float32, device=self.DEVICE))
 
         return I0s, I1s, us, ps, meshInfos
 
@@ -229,13 +226,12 @@ class TVL1OpticalFlow3D:
         I1_grad = nablaOp.forward(I1)
 
         # optionally apply anisotropic differential op
-        scalars = torch.zeros([meshInfo.getNZ(), meshInfo.getNY(), meshInfo.getNX()]).float().to(self.DEVICE)
-        normals = torch.zeros([meshInfo.getNZ(), meshInfo.getNY(), meshInfo.getNX(), 3]).float().to(self.DEVICE)
-        tangents1 = torch.zeros([meshInfo.getNZ(), meshInfo.getNY(), meshInfo.getNX(), 3]).float().to(self.DEVICE)
-        tangents2 = torch.zeros([meshInfo.getNZ(), meshInfo.getNY(), meshInfo.getNX(), 3]).float().to(self.DEVICE)
+        scalars = torch.zeros([meshInfo.getNZ(), meshInfo.getNY(), meshInfo.getNX()], dtype=torch.float32, device=self.DEVICE)
+        normals = torch.zeros([meshInfo.getNZ(), meshInfo.getNY(), meshInfo.getNX(), 3], dtype=torch.float32, device=self.DEVICE)
+        tangents1 = torch.zeros([meshInfo.getNZ(), meshInfo.getNY(), meshInfo.getNX(), 3], dtype=torch.float32, device=self.DEVICE)
+        tangents2 = torch.zeros([meshInfo.getNZ(), meshInfo.getNY(), meshInfo.getNX(), 3], dtype=torch.float32, device=self.DEVICE)
         if self.useAnisotropicDifferentialOp:
-            anistropicNablaOp = opticalFlow.AnisotropicNabla3D(
-                meshInfo, self.anisotropicDifferentialOp_alpha, self.anisotropicDifferentialOp_beta)
+            anistropicNablaOp = opticalFlow.AnisotropicNabla3D(meshInfo, self.anisotropicDifferentialOp_alpha, self.anisotropicDifferentialOp_beta)
             scalars, normals, tangents1, tangents2 = anistropicNablaOp.computeTangentVecs(I1_grad)
 
         z = u

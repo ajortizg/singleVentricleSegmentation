@@ -7,9 +7,24 @@ import pandas as pd
 import numpy as np
 import random
 import nibabel as nib
+import nibabel.processing as nip
 from torch.utils.data.dataloader import default_collate
 from collections import UserDict
 from natsort import natsorted
+from sklearn.model_selection import KFold
+
+
+def create_5fold(dataset, seed=12345):
+    splits = []
+    indices = np.arange(len(dataset))
+    kfold = KFold(n_splits=5, shuffle=True, random_state=seed)
+    for i, (train_idx, test_idx) in enumerate(kfold.split(indices)):
+        train_keys = np.array(indices)[train_idx]
+        test_keys = np.array(indices)[test_idx]
+        splits.append({})
+        splits[-1]['train'] = list(train_keys)
+        splits[-1]['val'] = list(test_keys)
+    return splits
 
 
 def get_bounds(es, ed, masks, fwd, test=False):
@@ -38,10 +53,10 @@ def get_bounds(es, ed, masks, fwd, test=False):
 
 
 class SVDataset(Dataset):
-    def __init__(self, root_dir, mode='train', transforms=None, vxm=False, load_flow=False):
+    def __init__(self, root_dir, mode='train', transforms=None, vxm=False, load_flow=False, fold_indices=None):
         """
         Args:
-            mode: train, val, test, full
+            mode: train, test, full
             vxm: Set to True when computing optical flow
             load_flow: Set to True to load optical flows
         """
@@ -57,11 +72,16 @@ class SVDataset(Dataset):
         self.masks_dir = osp.join(root_dir, 'NIFTI_Single_Ventricle_Segmentations')
         df = pd.read_excel(osp.join(root_dir, 'Segmentation_volumes.xlsx'))
 
-        if mode != 'full':
-            self.df_split = df.loc[df['Split'] == mode]
-            self.df_split.reset_index(inplace=True)
-        else:
+        if mode == 'full':
             self.df_split = df
+        else:
+            self.df_split = df[df['Split'] == mode]
+            self.df_split.reset_index(inplace=True, drop=True)
+
+            if fold_indices is not None:
+                self.df_split = self.df_split.iloc[fold_indices]
+                self.df_split.reset_index(inplace=True, drop=True)
+                print(self.df_split)
 
     def __len__(self):
         return len(self.df_split)
@@ -92,11 +112,10 @@ class SVDataset(Dataset):
 
         # Load metadata
         # img_meta = dict(nii_img.header)
-        img_meta = {}
-        img_meta['affine'] = nii_img.affine
+        img_meta = {'affine': nii_img.affine}
+
         # mask_meta = dict(nii_mask.header)
-        mask_meta = {}
-        mask_meta['affine'] = nii_mask.affine
+        mask_meta = {'affine': nii_mask.affine}
 
         # Group data in a dictionary
         data = {'img': imgs,
