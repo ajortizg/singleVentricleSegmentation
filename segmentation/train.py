@@ -31,7 +31,7 @@ def get_fold(config):
     root_dir = config.get('DATA', 'BASE_PATH_3D')
     fold = config.getint('DATA', 'fold')
     dataset = SVDataset(root_dir, mode='train')
-    return create_5fold(dataset)[fold], fold
+    return create_5fold(len(dataset))[fold], fold
 
 
 def create_dataloaders(config, fold):
@@ -164,15 +164,13 @@ if __name__ == '__main__':
     config.read('parser/seg_train.ini')
 
     fold, n = get_fold(config)
-
     train_loader, val_loader, test_loader = create_dataloaders(config, fold)
-
-    sys.exit()
 
     save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), f'SEG-{n}')
     plots.save_config(config, save_dir)
     writer = SummaryWriter(log_dir=save_dir)
     logger = plots.create_logger(save_dir)
+    plots.save_json([fold], osp.join(save_dir, f'fold.json'), default=int)
     logger.info('Save dir: {}'.format(save_dir))
     logger.info('Device: {}'.format(device))
 
@@ -201,6 +199,7 @@ if __name__ == '__main__':
         report = test(net, test_loader, device)
         H['test_dice'].append(report['Dice'].mean())
 
+        writer.add_scalar('lr', optimizer.param_groups[0]['lr'], e)
         scheduler.step()
 
         logger.info(AsciiTable([

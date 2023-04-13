@@ -14,9 +14,9 @@ from natsort import natsorted
 from sklearn.model_selection import KFold
 
 
-def create_5fold(dataset, seed=12345):
+def create_5fold(n, seed=12345):
     splits = []
-    indices = np.arange(len(dataset))
+    indices = np.arange(n)
     kfold = KFold(n_splits=5, shuffle=True, random_state=seed)
     for i, (train_idx, test_idx) in enumerate(kfold.split(indices)):
         train_keys = np.array(indices)[train_idx]
@@ -81,7 +81,6 @@ class SVDataset(Dataset):
             if fold_indices is not None:
                 self.df_split = self.df_split.iloc[fold_indices]
                 self.df_split.reset_index(inplace=True, drop=True)
-                print(self.df_split)
 
     def __len__(self):
         return len(self.df_split)

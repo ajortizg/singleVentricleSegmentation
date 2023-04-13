@@ -18,6 +18,7 @@ from termcolor import colored
 from PIL import Image
 import logging
 import csv
+import json
 
 # scipy
 # from mpl_toolkits.mplot3d.art3d import Poly3DCollection
@@ -27,6 +28,11 @@ import csv
 ##########################
 # general helper functions
 #########################
+
+
+def save_json(obj, file: str, indent: int = 4, sort_keys: bool = True, default=None) -> None:
+    with open(file, 'w') as f:
+        json.dump(obj, f, sort_keys=sort_keys, indent=indent, default=default)
 
 
 def save_config(config, save_dir, filename='config.ini'):
