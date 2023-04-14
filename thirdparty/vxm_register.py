@@ -161,7 +161,7 @@ if __name__ == '__main__':
     transforms = T.Compose([T.CropForeground(p=1.0, tol=10),
                             T.Resize(p=1.0, size=(img_sz, img_sz, img_sz)),
                             T.MinMaxNormalization(p=1.0),
-                            T.BinarizeMasks(th=0.5),
+                            T.Discretize(th=0.5),
                             T.ToTensor(add_ch_dim=False)])
 
     val_ds = SVDataset(root_dir, 'val', transforms, vxm=True)

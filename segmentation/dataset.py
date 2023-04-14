@@ -12,6 +12,9 @@ from torch.utils.data.dataloader import default_collate
 from collections import UserDict
 from natsort import natsorted
 from sklearn.model_selection import KFold
+import json
+from glob import glob
+import re
 
 
 def create_5fold(n, seed=12345):
@@ -59,6 +62,7 @@ class SVDataset(Dataset):
             mode: train, test, full
             vxm: Set to True when computing optical flow
             load_flow: Set to True to load optical flows
+            fold_indices: Indices for cross valiation
         """
         self.root_dir = root_dir
         self.transforms = transforms
@@ -78,7 +82,7 @@ class SVDataset(Dataset):
             self.df_split = df[df['Split'] == mode]
             self.df_split.reset_index(inplace=True, drop=True)
 
-            if fold_indices is not None:
+            if fold_indices is not None and mode != 'test':
                 self.df_split = self.df_split.iloc[fold_indices]
                 self.df_split.reset_index(inplace=True, drop=True)
 
@@ -208,3 +212,64 @@ class ACDCDataset(Dataset):
     def collate_fn(batch):
         ret = UserDict(**default_collate(batch))
         return ret
+
+
+class SegmentationDataset(Dataset):
+    def __init__(self, root_dir, mode='train', transforms=None, fold_indices=None):
+        """
+        Args:
+            mode: train, test
+            fold_indices: Indices for cross valiation
+        """
+        self.transforms = transforms
+        self.json_ds = self.read_json(osp.join(root_dir, 'dataset.json'))
+
+        if mode == 'train':
+            self.img_paths = sorted(glob(osp.join(root_dir, 'imagesTr', f'*{self.file_ending()}')))
+            self.label_paths = sorted(glob(osp.join(root_dir, 'labelsTr', f'*{self.file_ending()}')))
+            assert len(self.img_paths) == self.num_training() and len(self.label_paths) == self.num_training()
+        elif mode == 'test':
+            raise NotImplementedError(self.__class__.__name__ + ' test no implemented yet')
+        else:
+            raise ValueError('{} is not a valid mode. Use train or test'.format(mode))
+
+    def __len__(self):
+        return len(self.img_paths)
+
+    def __getitem__(self, idx):
+        # Read image
+        nib_image = nib.load(self.img_paths[idx])
+        image_xyz = nib_image.get_fdata()
+
+        # Read mask
+        nib_label = nib.load(self.label_paths[idx])
+        label_xyz = nib_label.get_fdata()
+
+        # Read metadata
+        image_meta = {'affine': nib_image.affine}
+        label_meta = {'affine': nib_label.affine}
+
+        data = {'image': image_xyz,
+                'label': label_xyz,
+                'image_meta': image_meta,
+                'label_meta': label_meta}
+
+        if self.transforms is not None:
+            data = self.transforms(data)
+
+        return data
+
+    def read_json(self, filepath):
+        f = open(filepath, mode='r')
+        data = json.load(f)
+        f.close()
+        return data
+
+    def classes(self):
+        return self.json_ds['labels']
+
+    def num_training(self):
+        return self.json_ds['numTraining']
+
+    def file_ending(self):
+        return self.json_ds['file_ending']

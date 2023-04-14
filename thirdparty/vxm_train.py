@@ -129,14 +129,14 @@ if __name__ == '__main__':
         T.GammaScaling(config.getfloat('DATA_AUGMENTATION', 'GAMMA_SCALING_PROB'),
                        tuple(map(float, config.get('DATA_AUGMENTATION', 'GAMMA_SCALING_RANGE').split(',')))),
         T.MinMaxNormalization(p=1.0),
-        T.BinarizeMasks(th=0.5),
+        T.Discretize(th=0.5),
         T.ToTensor(add_ch_dim=False)
     ])
     val_transforms = T.Compose([
         T.CropForeground(p=1.0, tol=10),
         T.Resize(p=1.0, size=(img_sz, img_sz, img_sz)),
         T.MinMaxNormalization(p=1.0),
-        T.BinarizeMasks(th=0.5),
+        T.Discretize(th=0.5),
         T.ToTensor(add_ch_dim=False)
     ])
 

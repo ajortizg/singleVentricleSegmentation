@@ -13,7 +13,10 @@ import torch.optim as optim
 import torch.backends.cudnn as cudnn
 from torch.utils.tensorboard import SummaryWriter
 from monai.metrics.meandice import compute_dice
+from monai.metrics import DiceMetric
 from monai.metrics.hausdorff_distance import compute_hausdorff_distance
+
+from monai.losses import DiceCELoss
 import matplotlib.pyplot as plt
 from terminaltables import AsciiTable
 import pandas as pd
@@ -36,6 +39,7 @@ def get_fold(config):
 
 def create_dataloaders(config, fold):
     img_sz = config.getint('PARAMETERS', 'IMG_SIZE')
+    num_classes = config.getint('PARAMETERS', 'NUM_CLASSES')
     data_aug = config['DATA_AUGMENTATION']
 
     train_transforms = T.Compose([
@@ -69,8 +73,9 @@ def create_dataloaders(config, fold):
                                 data_aug.getfloat('NOISE_MU'),
                                 data_aug.getfloat('NOISE_STD')),
         T.QuadraticNormalization(mean_inside_mask=True),
-        T.BinarizeMasks(th=0.5),
+        T.Discretize(th=0.5),
         T.AddChannelDim(),
+        T.OneHotEncoding(num_classes),
         T.ToTensor()
     ])
 
@@ -79,8 +84,9 @@ def create_dataloaders(config, fold):
         T.CropForeground(p=1.0, tol=10),
         T.Resize(p=1.0, size=(img_sz, img_sz, img_sz)),
         T.QuadraticNormalization(mean_inside_mask=True),
-        T.BinarizeMasks(th=0.5),
+        T.Discretize(th=0.5),
         T.AddChannelDim(),
+        T.OneHotEncoding(num_classes),
         T.ToTensor()
     ])
 
@@ -113,8 +119,9 @@ def train(net, loss_fn, opt, loader, device):
             opt.step()
 
             with torch.no_grad():
-                pred = torch.where(torch.sigmoid(logits) > 0.5, 1.0, 0.0)
-                dice = compute_dice(pred, mask[..., k]).mean()
+                pred = torch.softmax(logits, dim=1)
+                pred = torch.where(pred > 0.5, 1.0, 0.0)
+                dice = compute_dice(pred, mask[..., k], include_background=False).mean()
                 report.loc[len(report)] = [loss.item(), dice.item()]
     return report
 
@@ -132,8 +139,9 @@ def validate(net, loss_fn, loader, device):
             logits, _ = net(img[..., k])
             loss = loss_fn(logits, mask[..., k])
 
-            pred = torch.where(torch.sigmoid(logits) > 0.5, 1.0, 0.0)
-            dice = compute_dice(pred, mask[..., k]).mean()
+            pred = torch.softmax(logits, dim=1)
+            pred = torch.where(pred > 0.5, 1.0, 0.0)
+            dice = compute_dice(pred, mask[..., k], include_background=False).mean()
             report.loc[len(report)] = [loss.item(), dice.item()]
     return report
 
@@ -150,8 +158,9 @@ def test(net, loader, device):
         mask = torch.permute(mask, (4, 0, 1, 2, 3))
 
         logits, _ = net(img)
-        pred = torch.where(F.sigmoid(logits) > 0.5, 1.0, 0.0)
-        dice = compute_dice(pred, mask).mean()
+        pred = torch.softmax(logits, dim=1)
+        pred = torch.where(pred > 0.5, 1.0, 0.0)
+        dice = compute_dice(pred, mask, include_background=False).mean()
         report.loc[len(report)] = [dice.item()]
     return report
 
@@ -176,7 +185,9 @@ if __name__ == '__main__':
 
     net = create_model(config, logger).to(device)
     save_model(net, save_dir, 'net.txt')
-    loss_fn = nn.BCEWithLogitsLoss()
+    # loss_fn = nn.BCEWithLogitsLoss()
+    # loss_fn = nn.CrossEntropyLoss()
+    loss_fn = DiceCELoss(softmax=True, lambda_dice=0.4, lambda_ce=0.6)
     optimizer = optim.Adam(net.parameters(), lr=config.getfloat('PARAMETERS', 'LR'), weight_decay=config.getfloat('PARAMETERS', 'WEIGHT_DECAY'))
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=config.getint('PARAMETERS', 'STEP_SIZE'), gamma=config.getfloat('PARAMETERS', 'GAMMA'))
 
@@ -188,6 +199,7 @@ if __name__ == '__main__':
     patience = config.getint('PARAMETERS', 'PATIENCE')
     tic = time.time()
     for e in tqdm(range(1, num_epochs + 1)):
+        epoch_tic = time.time()
         report = train(net, loss_fn, optimizer, train_loader, device)
         H['train_loss'].append(report['Loss'].mean())
         H['train_dice'].append(report['Dice'].mean())
@@ -228,6 +240,7 @@ if __name__ == '__main__':
 
         writer.add_scalars('loss', {'train': H['train_loss'][-1], 'val': H['val_loss'][-1]}, e)
         writer.add_scalars('dice', {'train': H['train_dice'][-1], 'val': H['val_dice'][-1], 'test': H['test_dice'][-1]}, e)
+        writer.add_scalar('epoch_time', time.time() - epoch_tic, e)
 
         # early stop
         if epochs_since_last_improvement > patience:

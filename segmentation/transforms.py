@@ -5,6 +5,7 @@ import elasticdeform as ed
 import os
 import os.path as osp
 import sys
+from abc import ABCMeta, abstractmethod
 
 import monai
 import monai.transforms
@@ -14,7 +15,34 @@ ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 from utils.transforms.basic_transforms import rotx, roty, rotz
 
-flow_keys = ['forward_flow', 'backward_flow']
+metadata_subfix = '_meta'
+
+
+class BaseTransform(object, metaclass=ABCMeta):
+    @abstractmethod
+    def __init__(self, keys):
+        self.keys = keys
+        self.cur_key = None
+
+    def apply_transform(self, data):
+        for key in self.keys:
+            self.cur_key = key
+            x = data[key]
+            metadata = data[key + metadata_subfix]
+            x_new = self._transform_impl(x, metadata)
+            data[key] = x_new
+        return data
+
+    @abstractmethod
+    def __call__(self, data):
+        pass
+
+    @abstractmethod
+    def _transform_impl(self, x, metadata=None):
+        pass
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}()"
 
 
 class Compose:
@@ -53,174 +81,98 @@ class OneOf:
         return format_string
 
 
-class MinMaxNormalization:
-    def __init__(self, q1=0, q2=100):
+class MinMaxNormalization(BaseTransform):
+    def __init__(self, q1=0, q2=100, keys=['image']):
+        super(MinMaxNormalization, self).__init__(keys)
         self.q1 = q1
         self.q2 = q2
 
     def __call__(self, data):
-        img = data['img']
-        per1 = np.percentile(img, self.q1)
-        per2 = np.percentile(img, self.q2)
-        img = np.clip(img, per1, per2)
-        amin = np.amin(img)
-        amax = np.amax(img)
-        img = (img - amin) / (amax - amin)
-        data['img'] = img
-        return data
+        return super().apply_transform(data)
 
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}()"
+    def _transform_impl(self, x, metadata=None):
+        per1 = np.percentile(x, self.q1)
+        per2 = np.percentile(x, self.q2)
+        x = np.clip(x, per1, per2)
+        amin = np.amin(x)
+        amax = np.amax(x)
+        x = (x - amin) / (amax - amin)
+        return x
 
 
-class ZScoreNormalization:
-    def __init__(self):
-        pass
+class ZScoreNormalization(BaseTransform):
+    def __init__(self, keys=['image']):
+        super(ZScoreNormalization, self).__init__(keys)
 
     def __call__(self, data):
-        img = data['img']
-        sigma = np.std(img)
-        mu = np.mean(img)
-        img_n = (img - mu) / sigma
-        data['img'] = img_n
-        return data
+        return super().apply_transform(data)
 
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}()"
+    def _transform_impl(self, x, metadata=None):
+        sigma = np.std(x)
+        mu = np.mean(x)
+        x = (x - mu) / sigma
+        return x
 
 
-class QuadraticNormalization:
-    def __init__(self, mean_inside_mask):
-        self.mean_inside_mask = mean_inside_mask
+class QuadraticNormalization(BaseTransform):
+    def __init__(self, q2=95, use_label=True, label_key='label', keys=['image']):
+        super(QuadraticNormalization, self).__init__(keys)
+        self.q2 = q2
+        self.label_key = label_key
+        self.use_label = use_label
 
     def __call__(self, data):
-        img = data['img']
-        mask = data['mask']
+        self.label = data[self.label_key]
+        return super().apply_transform(data)
 
-        per95 = np.percentile(img, 95)
-        img = np.clip(img, 0, per95)
-        avg = np.mean(img, where=mask.astype('bool')) if self.mean_inside_mask else np.mean(img)
-        # avg = np.mean(img, where=mask.astype('bool'))
-
+    def _transform_impl(self, x, metadata=None):
+        per2 = np.percentile(x, self.q2)
+        x = np.clip(x, 0, per2)
+        avg = np.mean(x, where=self.label.astype('bool')) if self.use_label else np.mean(x)
         # normalization n(I) = a I/sqrt(1+beta I**2)
-        norm_a = np.sqrt(per95 * per95 - avg * avg) / (np.sqrt(3) * per95 * avg)
-        norm_b = (per95 * per95 - 4. * avg * avg) / (3. * per95 * per95 * avg * avg)
-        img_norm = norm_a * img / np.sqrt(1 + norm_b * img**2)
-        data['img'] = img_norm
-        return data
-
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}()"
+        norm_a = np.sqrt(per2 * per2 - avg * avg) / (np.sqrt(3) * per2 * avg)
+        norm_b = (per2 * per2 - 4. * avg * avg) / (3. * per2 * per2 * avg * avg)
+        x_norm = norm_a * x / np.sqrt(1 + norm_b * x**2)
+        return x_norm
 
 
-class RandomVerticalFlip:
-    def __init__(self, p):
-        self.p = p
-
-    def __call__(self, data):
-        if np.random.rand() < self.p:
-            img = data['img']
-            mask = data['mask']
-            img_flip = np.flip(img, axis=1).copy()
-            mask_flip = np.flip(mask, axis=1).copy()
-            data['img'] = img_flip
-            data['mask'] = mask_flip
-        return data
-
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}()"
-
-
-class RandomHorizontalFlip:
-    def __init__(self, p):
-        self.p = p
-
-    def __call__(self, data):
-        if np.random.rand() < self.p:
-            img = data['img']
-            mask = data['mask']
-            img_flip = np.flip(img, axis=2).copy()
-            mask_flip = np.flip(mask, axis=2).copy()
-            data['img'] = img_flip
-            data['mask'] = mask_flip
-        return data
-
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}()"
-
-
-class RandomDepthFlip:
-    def __init__(self, p):
-        self.p = p
-
-    def __call__(self, data):
-        if np.random.rand() < self.p:
-            img = data['img']
-            mask = data['mask']
-            img_flip = np.flip(img, axis=0).copy()
-            mask_flip = np.flip(mask, axis=0).copy()
-            data['img'] = img_flip
-            data['mask'] = mask_flip
-        return data
-
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}()"
-
-
-class MutiplicativeScaling:
-    def __init__(self, p, scale_range):
+class MutiplicativeScaling(BaseTransform):
+    def __init__(self, p, scale_range, keys=['image']):
+        super(MutiplicativeScaling, self).__init__(keys)
         self.p = p
         self.scale_range = scale_range
 
     def __call__(self, data):
-        if np.random.rand() < self.p:
-            img = data['img']
-            sigma = np.random.uniform(self.scale_range[0], self.scale_range[1])
-            img = sigma * img
-            data['img'] = img
+        if np.random.uniform() < self.p:
+            data = super().apply_transform(data)
         return data
 
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}()"
+    def _transform_impl(self, x, metadata=None):
+        sigma = np.random.uniform(self.scale_range[0], self.scale_range[1])
+        x = sigma * x
+        return x
 
 
-class AdditiveScaling:
-    def __init__(self, p, mean, std):
+class AdditiveScaling(BaseTransform):
+    def __init__(self, p, mean, std, keys=['image']):
+        super(AdditiveScaling, self).__init__(keys)
         self.p = p
         self.mean = mean
         self.std = std
 
     def __call__(self, data):
-        if np.random.rand() < self.p:
-            img = data['img']
-            sigma = np.random.normal(self.mean, self.std)
-            img = sigma + img
-            data['img'] = img
+        if np.random.uniform() < self.p:
+            data = super().apply_transform(data)
         return data
 
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}()"
+    def _transform_impl(self, x, metadata=None):
+        sigma = np.random.normal(self.mean, self.std)
+        x = sigma + x
+        return x
 
 
-class GammaScaling:
-    def __init__(self, p, gamma_range):
-        self.p = p
-        self.gamma_range = gamma_range
-
-    def __call__(self, data):
-        if np.random.rand() < self.p:
-            img = data['img']
-            gamma = np.random.uniform(self.gamma_range[0], self.gamma_range[1])
-            img = np.float_power(img, gamma)
-            data['img'] = img
-        return data
-
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}()"
-
-
-class GammaTransform:
-    def __init__(self, p=0.5, gamma_range=(0.5, 2), invert_image=False, retain_stats: bool = False):
+class GammaTransform(BaseTransform):
+    def __init__(self, p, gamma_range, invert_image=False, retain_stats=False, keys=['image']):
         """
         Augments by changing 'gamma' of the image (same as gamma correction in photos or computer monitors
 
@@ -234,260 +186,210 @@ class GammaTransform:
         :param retain_stats: Gamma transformation will alter the mean and std of the data in the patch. If retain_stats=True,
         the data will be transformed to match the mean and standard deviation before gamma augmentation.
         """
+        super(GammaTransform, self).__init__(keys)
         self.p = p
         self.retain_stats = retain_stats
         self.gamma_range = gamma_range
         self.invert_image = invert_image
+        self.epsilon = 1e-7
 
     def __call__(self, data):
         if np.random.uniform() < self.p:
-            img = data['img']
-            img = augment_gamma(img, self.gamma_range, self.invert_image, retain_stats=self.retain_stats)
-            data['img'] = img
+            data = super().apply_transform(data)
         return data
 
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}()"
+    def _transform_impl(self, x, metadata=None):
+        if self.invert_image:
+            x = - x
+        if self.retain_stats:
+            mn = x.mean()
+            sd = x.std()
+
+        if np.random.random() < 0.5 and self.gamma_range[0] < 1:
+            gamma = np.random.uniform(self.gamma_range[0], 1)
+        else:
+            gamma = np.random.uniform(max(self.gamma_range[0], 1), self.gamma_range[1])
+
+        minm = x.min()
+        rnge = x.max() - minm
+        x = np.power(((x - minm) / float(rnge + self.epsilon)), gamma) * float(rnge + self.epsilon) + minm
+
+        if self.retain_stats:
+            x = x - x.mean()
+            x = x / (x.std() + 1e-8) * sd
+            x = x + mn
+        if self.invert_image:
+            x = - x
+        return x
 
 
-def augment_gamma(data_sample, gamma_range=(0.5, 2), invert_image=False, epsilon=1e-7, retain_stats: bool = False):
-    if invert_image:
-        data_sample = - data_sample
-
-    if retain_stats:
-        mn = data_sample.mean()
-        sd = data_sample.std()
-    if np.random.random() < 0.5 and gamma_range[0] < 1:
-        gamma = np.random.uniform(gamma_range[0], 1)
-    else:
-        gamma = np.random.uniform(max(gamma_range[0], 1), gamma_range[1])
-    minm = data_sample.min()
-    rnge = data_sample.max() - minm
-    data_sample = np.power(((data_sample - minm) / float(rnge + epsilon)), gamma) * float(rnge + epsilon) + minm
-    if retain_stats:
-        data_sample = data_sample - data_sample.mean()
-        data_sample = data_sample / (data_sample.std() + 1e-8) * sd
-        data_sample = data_sample + mn
-    if invert_image:
-        data_sample = - data_sample
-    return data_sample
-
-
-class AdditiveGaussianNoise:
-    def __init__(self, p, mu, sigma):
+class AdditiveGaussianNoise(BaseTransform):
+    def __init__(self, p, mu, sigma, keys=['image']):
+        super(AdditiveGaussianNoise, self).__init__(keys)
         self.p = p
         self.mu = mu
         self.sigma = sigma
 
     def __call__(self, data):
-        if np.random.rand() < self.p:
-            img = data['img']
-            noise = np.random.normal(self.mu, self.sigma, size=img.shape)
-            img = noise + img
-            data['img'] = img
+        if np.random.uniform() < self.p:
+            data = super().apply_transform(data)
         return data
 
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}()"
+    def _transform_impl(self, x, metadata=None):
+        noise = np.random.normal(self.mu, self.sigma, size=x.shape)
+        x = noise + x
+        return x
 
 
-class BinarizeMasks:
-    def __init__(self, th):
+class Discretize(BaseTransform):
+    def __init__(self, th, keys=['label']):
+        super(Discretize, self).__init__(keys)
         self.th = th
 
     def __call__(self, data):
-        mask = data['mask']
-        mask = np.where(mask > self.th, 1.0, 0.0)
-        data['mask'] = mask
-        return data
+        return super().apply_transform(data)
 
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}()"
+    def _transform_impl(self, x, metadata=None):
+        return np.where(x > self.th, 1.0, 0.0)
 
 
-class ToArray:
-    def __init__(self):
-        pass
+class ToArray(BaseTransform):
+    def __init__(self, keys=['image', 'label']):
+        super(ToArray, self).__init__(keys)
 
     def __call__(self, data):
-        img = data['img']
-        mask = data['mask']
-        img = img.cpu().detach().numpy()
-        mask = mask.cpu().detach().numpy()
-        data['img'] = img
-        data['mask'] = mask
-        return data
+        return super().apply_transform(data)
 
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}()"
+    def _transform_impl(self, x, metadata=None):
+        return x.cpu().detach().numpy()
 
 
-class AddChannelDim:
-    def __init__(self, axis=0):
+class AddChannelDim(BaseTransform):
+    def __init__(self, axis=0, keys=['image', 'label']):
+        super(AddChannelDim, self).__init__(keys)
         self.axis = axis
 
     def __call__(self, data):
-        img = data['img']
-        mask = data['mask']
-        img = np.expand_dims(img, axis=self.axis)
-        mask = np.expand_dims(mask, axis=self.axis)
-        data['img'] = img
-        data['mask'] = mask
-        return data
+        return super().apply_transform(data)
 
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}()"
+    def _transform_impl(self, x, metadata=None):
+        return np.expand_dims(x, axis=self.axis)
 
 
-class ToTensor:
-    def __init__(self):
-        pass
+class OneHotEncoding(BaseTransform):
+    def __init__(self, n, keys=['label']):
+        super(OneHotEncoding, self).__init__(keys)
+        self.tr = monai.transforms.AsDiscrete(to_onehot=n)
 
     def __call__(self, data):
-        img = data['img']
-        mask = data['mask']
-        img = torch.from_numpy(img).float()
-        mask = torch.from_numpy(mask).float()
-        data['img'] = img
-        data['mask'] = mask
+        return super().apply_transform(data)
 
-        for k in flow_keys:
-            if k in data:
-                flow = data[k]
-                flow = torch.from_numpy(flow).float()
-                data[k] = flow
+    def _transform_impl(self, x, metadata=None):
+        # x = torch.eye(4)[x]
+        # return = x.permute(3, 0, 1, 2).numpy()
+        return self.tr(x).numpy()
+
+
+class ToTensor(BaseTransform):
+    def __init__(self, keys=['image', 'label']):
+        super(ToTensor, self).__init__(keys)
+
+    def __call__(self, data):
+        return super().apply_transform(data)
+
+    def _transform_impl(self, x, metadata=None):
+        return torch.from_numpy(x).float()
+
+
+class CXYZ_To_CZYX(BaseTransform):
+    def __init__(self, keys=['image', 'label']):
+        super(CXYZ_To_CZYX, self).__init__(keys)
+
+    def __call__(self, data):
+        return super().apply_transform(data)
+
+    def _transform_impl(self, x, metadata=None):
+        return np.transpose(x, (0, 3, 2, 1))
+
+
+class RandomFlip(BaseTransform):
+    def __init__(self, p, axis, keys=['image', 'label']):
+        """
+        Args:
+            axis: 0, 1, 2 for depth, vertical and horizontal
+        """
+        super(RandomFlip, self).__init__(keys)
+        self.p = p
+        self.axis = axis
+
+    def __call__(self, data):
+        if np.random.uniform() < self.p:
+            data = super().apply_transform(data, self.p)
         return data
 
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}()"
+    def _transform_impl(self, x, metadata=None):
+        x_flip = np.flip(x, axis=self.axis).copy()
+        return x_flip
 
 
-class ToRAS:
-    def __init__(self):
+class ToRAS(BaseTransform):
+    def __init__(self, keys=['image', 'label']):
+        super(ToRAS, self).__init__(keys)
         self.ortr = monai.transforms.Orientation(axcodes='RAS')
 
     def __call__(self, data):
-        img_zyxt = data['img']
-        mask_zyxt = data['mask']
-        img_affine = data['img_meta']['affine']
-        mask_affine = data['mask_meta']['affine']
+        return super().apply_transform(data)
 
-        ts = img_zyxt.shape[-1]
-        for t in range(ts):
-            img = img_zyxt[..., t]
-            img = np.expand_dims(img, axis=0)
-            img = self.ortr(monai.data.MetaTensor(img, affine=img_affine))
-            try:
-                img_zyxt[..., t] = img.squeeze(0).cpu().detach().numpy()
-            except ValueError:
-                # TODO! I don't know why this happens :(
-                img_zyxt[..., t] = img.squeeze(0).permute(1, 2, 0).cpu().detach().numpy()
+    def _transform_impl(self, x, metadata=None):
+        affine = metadata['affine']
+        shape_1 = x.shape
+        x = self.ortr(monai.data.MetaTensor(x, affine=affine))
+        shape_2 = x.shape
 
-        ts = mask_zyxt.shape[-1]
-        for t in range(ts):
-            mask = mask_zyxt[..., t]
-            mask = np.expand_dims(mask, axis=0)
-            mask = self.ortr(monai.data.MetaTensor(mask, affine=mask_affine))
-            try:
-                mask_zyxt[..., t] = mask.squeeze(0).cpu().detach().numpy()
-            except ValueError:
-                mask_zyxt[..., t] = mask.squeeze(0).permute(1, 2, 0).cpu().detach().numpy()
-
-        data['img'] = img_zyxt
-        data['mask'] = mask_zyxt
-        return data
-
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}()"
+        # TODO: I don't know why this happens :(
+        if shape_1 != shape_2:
+            x = x.permute(0, 2, 3, 1)
+        return x.numpy()
 
 
-class Spacing:
-    def __init__(self, pixdim):
-        self.tr = monai.transforms.Spacing(pixdim=pixdim)
-
-    def __call__(self, data):
-        img_zyxt = data['img']
-        img_affine = data['img_meta']['affine']
-        mask_zyxt = data['mask']
-        mask_affine = data['mask_meta']['affine']
-
-        # 1.025, 5.75
-        ts = img_zyxt.shape[-1]
-        for t in range(ts):
-            img = img_zyxt[..., t]
-            img = np.expand_dims(img, axis=0)
-            img = self.tr(monai.data.MetaTensor(img, affine=img_affine), mode='bilinear')
-            img_zyxt[..., t] = img.squeeze(0).cpu().detach().numpy()
-
-        ts = mask_zyxt.shape[-1]
-        for t in range(ts):
-            mask = mask_zyxt[..., t]
-            mask = np.expand_dims(mask, axis=0)
-            mask = self.tr(monai.data.MetaTensor(mask, affine=mask_affine), mode='nearest')
-            mask_zyxt[..., t] = mask.squeeze(0).cpu().detach().numpy()
-
-        data['img'] = img_zyxt
-        data['mask'] = mask_zyxt
-        return data
-
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}()"
-
-
-class Resize:
-    def __init__(self, p: float, size: tuple[int, int, int]):
+class Resize(BaseTransform):
+    def __init__(self, p, size, keys=['image', 'label'], label_key='label'):
+        super(Resize, self).__init__(keys)
         self.p = p
         self.size = size
+        self.label_key = label_key
 
     def __call__(self, data):
-        if np.random.rand() < self.p:
-            img = data['img']
-            img = torch.from_numpy(img).float()  # NZ, NY, NX, NT
-            img = img.unsqueeze(0).permute(4, 0, 1, 2, 3)  # NT, CH, NZ, NY, NX
-            img = F.interpolate(img, size=self.size, align_corners=True, mode='trilinear').squeeze()
-            img = img.permute(1, 2, 3, 0).numpy()
-
-            mask = data['mask']
-            mask = torch.from_numpy(mask).float()  # NZ, NY, NX, NT
-            mask = mask.unsqueeze(0).permute(4, 0, 1, 2, 3)  # NT, CH, NZ, NY, NX
-            mask = F.interpolate(mask, size=self.size, align_corners=True, mode='trilinear').squeeze()
-            mask = mask.permute(1, 2, 3, 0).numpy()
-
-            data['img'] = img
-            data['mask'] = mask
+        if np.random.uniform() < self.p:
+            data = super().apply_transform(data)
         return data
 
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}()"
+    def _transform_impl(self, x, metadata=None):
+        mode = 'nearest' if self.cur_key == self.label_key else 'trilinear'
+        x = torch.from_numpy(x).float().unsqueeze(0)  # add batch dim
+        x = F.interpolate(x, size=self.size, mode=mode)
+        return x.squeeze(0).numpy()  # remove batch dim and convert to numpy
 
 
-class CropForeground:
-    def __init__(self, p: float, tol: int = 10):
-        self.p = p
+class CropForeground(BaseTransform):
+    def __init__(self, tol: int = 10, keys=['image', 'label'], label_key='label'):
+        super(CropForeground, self).__init__(keys)
         self.tol = tol
+        self.label_key = label_key
 
     def __call__(self, data):
-        if np.random.rand() < self.p:
-            img = data['img']
-            mask = data['mask']
+        _, NZ, NY, NX = data[self.label_key].shape
+        self.zmin, self.zmax, self.ymin, self.ymax, self.xmin, self.xmax = self.mask_range(data[self.label_key])
+        self.zmin = max(0, self.zmin - self.tol)
+        self.zmax = min(NZ - 1, self.zmax + self.tol)
+        self.ymin = max(0, self.ymin - self.tol)
+        self.ymax = min(NY - 1, self.ymax + self.tol)
+        self.xmin = max(0, self.xmin - self.tol)
+        self.xmax = min(NX - 1, self.xmax + self.tol)
+        return super().apply_transform(data)
 
-            NZ, NY, NX, NT = mask.shape
-            zmin, zmax, ymin, ymax, xmin, xmax = self.mask_range(mask)
-            zmin = max(0, zmin - self.tol)
-            zmax = min(NZ - 1, zmax + self.tol)
-            ymin = max(0, ymin - self.tol)
-            ymax = min(NY - 1, ymax + self.tol)
-            xmin = max(0, xmin - self.tol)
-            xmax = min(NX - 1, xmax + self.tol)
-
-            img = img[zmin:zmax + 1, ymin:ymax + 1, xmin:xmax + 1]
-            mask = mask[zmin:zmax + 1, ymin:ymax + 1, xmin:xmax + 1]
-            data['img'] = img
-            data['mask'] = mask
-        return data
-
-    def mask_range(self, masks):
-        z, y, x, _ = np.nonzero(masks)
+    def mask_range(self, label):
+        _, z, y, x = np.nonzero(label)
         xmin = np.min(x)
         xmax = np.max(x)
         ymin = np.min(y)
@@ -496,47 +398,35 @@ class CropForeground:
         zmax = np.max(z)
         return zmin, zmax, ymin, ymax, xmin, xmax
 
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}()"
+    def _transform_impl(self, x, metadata=None):
+        x = x[:, self.zmin:self.zmax + 1, self.ymin:self.ymax + 1, self.xmin:self.xmax + 1]
+        return x
 
 
-class RandomRotate:
-    def __init__(self, p=0.5, range_x: tuple = (0, 0), range_y: tuple = (0, 0), range_z: tuple = (0, 0),
-                 boundary='zeros'):
+class RandomRotate(BaseTransform):
+    def __init__(self, p, range_x, range_y, range_z, boundary='zeros',
+                 keys=['image', 'label'], label_key='label'):
+        super(RandomRotate, self).__init__(keys)
         self.p = p
         self.range_x = range_x
         self.range_y = range_y
         self.range_z = range_z
         self.boundary = boundary
+        self.label_key = label_key
 
     def __call__(self, data):
         if np.random.rand() < self.p:
-            img = data['img']
-            mask = data['mask']
-            NZ, NY, NX, NT = img.shape
+            _, NZ, NY, NX = data[self.label_key].shape
             R, offset = self.create_rot_mat(NZ, NY, NX)
-            grid_t = self.scale_grid(self.generate_rotation_grid(R, offset, NZ, NY, NX).unsqueeze(0))
-            grid_img_t = grid_t.repeat(NT, 1, 1, 1, 1)
-
-            # Rotate images
-            img4d_rot = self.rotate(img, grid_img_t)
-
-            # Rotate masks
-            NZ, NY, NX, NT = mask.shape
-            grid_mask_t = grid_t.repeat(NT, 1, 1, 1, 1)
-            mask_rot = self.rotate(mask, grid_mask_t)
-
-            data['img'] = img4d_rot.numpy()
-            data['mask'] = mask_rot.numpy()
+            self.grid = self.scale_grid(self.generate_rotation_grid(R, offset, NZ, NY, NX).unsqueeze(0))
+            data = super().apply_transform(data)
         return data
 
-    def rotate(self, img4d, grid_t):
-        NT = img4d.shape[-1]
-        img4d = np.transpose(img4d, (3, 0, 1, 2))
-        img4d = torch.from_numpy(img4d).float().unsqueeze(1)
-        img4d_rot = F.grid_sample(img4d, grid_t, mode='bilinear', padding_mode=self.boundary, align_corners=True).squeeze()
-        img4d_rot = torch.permute(img4d_rot, (1, 2, 3, 0))
-        return img4d_rot
+    def _transform_impl(self, x, metadata=None):
+        x = torch.from_numpy(x).float().unsqueeze(0)  # add batch dim
+        mode = 'nearest' if self.cur_key == self.label_key else 'bilinear'
+        x_new = F.grid_sample(x, self.grid, mode=mode, padding_mode=self.boundary, align_corners=False)
+        return x_new.squeeze(0).numpy()  # remove batch dim
 
     def scale_grid(self, grid):
         # scale grid to [-1,1]
@@ -574,37 +464,93 @@ class RandomRotate:
         offset = torch.from_numpy(offset).float()
         return R, offset
 
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}()"
 
-
-class ElasticDeformation:
-    def __init__(self, p, sigma_range, points, boundary, prefilter, axis, order=3):
+class ElasticDeformation(BaseTransform):
+    def __init__(self, p, sigma_range, points, boundary, axis,
+                 keys=['image', 'label'], label_key='label'):
+        super(ElasticDeformation, self).__init__(keys)
         self.p = p
         self.sigma_range = sigma_range
         self.points = points
         self.boundary = boundary
-        self.prefilter = prefilter
         self.axis_str = axis
-        self.order = order
+        self.label_key = label_key
 
     def __call__(self, data):
         if np.random.rand() < self.p:
-            sigma = np.random.uniform(self.sigma_range[0], self.sigma_range[1])
-            if self.axis_str == 'zyx':
-                axis = [(0, 1, 2)] * 2
-            else:
-                axis = [(1, 2)] * 2
+            Xs = [data[self.label_key]]
+            axis = [(1, 2, 3)] if self.axis_str == 'zyx' else [(2, 3)]
+            self.axis, deform_shape = self.normalize_axis_list(axis, Xs)
 
-            img = data['img']
-            mask = data['mask']
-            [img_d, mask_d] = ed.deform_random_grid([img, mask], sigma,
-                                                    points=self.points, mode=self.boundary,
-                                                    prefilter=self.prefilter,
-                                                    axis=axis, order=self.order)
-            data['img'] = img_d
-            data['mask'] = mask_d
+            if not isinstance(self.points, (list, tuple)):
+                self.points = [self.points] * len(deform_shape)
+
+            sigma = np.random.uniform(self.sigma_range[0], self.sigma_range[1])
+            self.displacement = np.random.randn(len(deform_shape), *self.points) * sigma
+
+            data = super().apply_transform(data)
         return data
 
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}()"
+    def _transform_impl(self, x, metadata=None):
+        order = 0 if self.cur_key == self.label_key else 3
+        [x_new] = ed.deform_grid([x],
+                                 self.displacement,
+                                 order=order,
+                                 mode=self.boundary,
+                                 prefilter=False,
+                                 axis=self.axis)
+
+        return x_new
+
+    def normalize_axis_list(self, axis, Xs):
+        if axis is None:
+            axis = [tuple(range(x.ndim)) for x in Xs]
+        elif isinstance(axis, int):
+            axis = (axis,)
+        if isinstance(axis, tuple):
+            axis = [axis] * len(Xs)
+        assert len(axis) == len(Xs), 'Number of axis tuples should match number of inputs.'
+        input_shapes = []
+        for x, ax in zip(Xs, axis):
+            assert isinstance(ax, tuple), 'axis should be given as a tuple'
+            assert all(isinstance(a, int) for a in ax), 'axis must contain ints'
+            assert len(ax) == len(axis[0]), 'All axis tuples should have the same length.'
+            assert ax == tuple(set(ax)), 'axis must be sorted and unique'
+            assert all(0 <= a < x.ndim for a in ax), 'invalid axis for input'
+            input_shapes.append(tuple(x.shape[d] for d in ax))
+        assert len(set(input_shapes)) == 1, 'All inputs should have the same shape.'
+        deform_shape = input_shapes[0]
+        return axis, deform_shape
+
+
+# class Spacing:
+#     def __init__(self, pixdim):
+#         self.tr = monai.transforms.Spacing(pixdim=pixdim)
+
+#     def __call__(self, data):
+#         img_zyxt = data['img']
+#         img_affine = data['img_meta']['affine']
+#         mask_zyxt = data['mask']
+#         mask_affine = data['mask_meta']['affine']
+
+#         # 1.025, 5.75
+#         ts = img_zyxt.shape[-1]
+#         for t in range(ts):
+#             img = img_zyxt[..., t]
+#             img = np.expand_dims(img, axis=0)
+#             img = self.tr(monai.data.MetaTensor(img, affine=img_affine), mode='bilinear')
+#             img_zyxt[..., t] = img.squeeze(0).cpu().detach().numpy()
+
+#         ts = mask_zyxt.shape[-1]
+#         for t in range(ts):
+#             mask = mask_zyxt[..., t]
+#             mask = np.expand_dims(mask, axis=0)
+#             mask = self.tr(monai.data.MetaTensor(mask, affine=mask_affine), mode='nearest')
+#             mask_zyxt[..., t] = mask.squeeze(0).cpu().detach().numpy()
+
+#         data['img'] = img_zyxt
+#         data['mask'] = mask_zyxt
+#         return data
+
+#     def __repr__(self) -> str:
+#         return f"{self.__class__.__name__}()"

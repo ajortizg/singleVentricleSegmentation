@@ -34,7 +34,7 @@ if __name__ == '__main__':
         T.ToRAS(),
         T.CropForeground(p=1.0, tol=10),
         T.Resize(p=1.0, size=(img_sz, img_sz, img_sz)),
-        T.BinarizeMasks(th=0.5),
+        T.Discretize(th=0.5),
         T.MinMaxNormalization(q1=5, q2=95),
         T.AddChannelDim(),
         T.ToTensor()

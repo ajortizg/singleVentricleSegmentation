@@ -11,68 +11,43 @@ import pandas as pd
 from nibabel.processing import conform
 import numpy as np
 
-# from dataset import SVDataset, ACDCDataset
-# import transforms as T
-
+from monai.transforms import AsDiscrete
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 from utils import plots
-from segmentation.dataset import SVDataset
+from segmentation.dataset import SVDataset, SegmentationDataset
+import segmentation.transforms as T
 
 
 if __name__ == '__main__':
-    # ds = SVDataset(, 'full', None)
-    root_dir = 'data/singleVentricleData'
-    imgs_dir = osp.join(root_dir, 'NIFTI_4D_Datasets')
-    labels_dir = osp.join(root_dir, 'NIFTI_Single_Ventricle_Segmentations')
-    df = pd.read_excel(osp.join(root_dir, 'Segmentation_volumes.xlsx'))
 
-    save_dir = plots.createSaveDirectory('results', 'IMGS')
+    transforms = T.Compose([
+        T.AddChannelDim(keys=['image', 'label']),
+        T.CXYZ_To_CZYX(keys=['image', 'label']),
+        T.ToRAS(keys=['image', 'label']),
+        # T.CropForeground(keys=['image', 'label'], label_key='label'),
+        # T.Resize(1.0, (96, 96, 96), keys=['image', 'label']),
+        # T.ElasticDeformation(1.0, (0.5, 2.0), 8, 'constant', 'yx')
+        # T.RandomRotate(1.0, (0, 360), (0, 360), (0, 360), keys=['image', 'label'], label_key='label'),
+        T.ToTensor(keys=['image', 'label'])
+    ])
 
-    for i in tqdm(range(len(df))):
-        row = df.iloc[[i]]
-        patient = row.loc[i, 'Name']
-        es = row.loc[i, 'Systole']
-        ed = row.loc[i, 'Diastole']
+    ds = SegmentationDataset('data/nnUNet_raw/Dataset012_SVDraw', 'train', transforms)
 
-        nib_img = nib.load(osp.join(imgs_dir, patient + '.nii.gz'))
-        img = nib_img.get_fdata()[..., ed]
-        nib_img_reo = conform(nib.Nifti1Image(img, affine=nib_img.affine, header=nib_img.header), (256, 256, 16))
+    save_dir = plots.createSaveDirectory('results', 'TESTS')
 
-        nib_label_ed = nib.load(osp.join(labels_dir, patient, patient + '_Systole_Labelmap.nii'))
-        nib_label_ed_reo = conform(nib_label_ed, (256, 256, 16))
+    pbar = tqdm(total=len(ds))
+    for i, data in enumerate(ds):
+        img = data['image']
+        label = data['label']
 
-        img = torch.from_numpy(np.swapaxes(nib_img_reo.get_fdata(), 0, 2))
-        label = torch.from_numpy(np.swapaxes(nib_label_ed_reo.get_fdata(), 0, 2))
-
-        plots.save_overlaped_img_mask(img,
-                                      label,
-                                      '{}_t{}'.format(patient, ed),
-                                      save_dir,
-                                      0.5,
-                                      0.3)
-
-    # transforms = T.Compose([
-    #     T.ToRAS(),
-    #     T.Spacing((1.5, 1.5, 1.5)),
-    #     T.ToTensor()
-    # ])
-    # ds = SVDataset('data/singleVentricleData', 'full', None)
-
-    #     ts = data['mask'].shape[-1]
-    #     print(data['img'].shape)
-    #     print(data['mask'].shape)
-
-    #     for i in range(ts):
-    #         plots.save_overlaped_img_mask(data['img'][..., i],
-    #                                       data['mask'][..., i],
-    #                                       '{}_t{}'.format(patient, i),
-    #                                       save_dir,
-    #                                       0.5,
-    #                                       0.3)
-
-    # save_dir = plots.createSaveDirectory('results', 'TESTS')
+        plots.save_overlaped_img_mask(img.squeeze(0),
+                                      label.squeeze(0),
+                                      f'img_{i}.png',
+                                      save_dir, th=0.5,
+                                      alpha=0.3)
+        pbar.update(1)
 
     # transforms = T.Compose([
     #     T.CropForeground(p=1.0, tol=10),
