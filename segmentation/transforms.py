@@ -10,10 +10,11 @@ from abc import ABCMeta, abstractmethod
 import monai
 import monai.transforms
 import monai.data
+from scipy import ndimage
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
-from utils.transforms.basic_transforms import rotx, roty, rotz
+from utils.transforms.basic_transforms import rotx, roty, rotz, rot_x_rad, rot_y_rad, rot_z_rad
 
 metadata_subfix = '_meta'
 
@@ -41,8 +42,16 @@ class BaseTransform(object, metaclass=ABCMeta):
     def _transform_impl(self, x, metadata=None):
         pass
 
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}()"
+    def class_name(self):
+        return str(type(self).__name__)
+
+    def items(self):
+        return self.__dict__
+
+    def __repr__(self):
+        ret_str = str(type(self).__name__) + "( " + ", ".join(
+            [key + " = " + repr(val) for key, val in self.__dict__.items()]) + " )"
+        return ret_str
 
 
 class Compose:
@@ -136,9 +145,9 @@ class QuadraticNormalization(BaseTransform):
         return x_norm
 
 
-class MutiplicativeScaling(BaseTransform):
+class MultiplicativeScaling(BaseTransform):
     def __init__(self, p, scale_range, keys=['image']):
-        super(MutiplicativeScaling, self).__init__(keys)
+        super(MultiplicativeScaling, self).__init__(keys)
         self.p = p
         self.scale_range = scale_range
 
@@ -149,7 +158,7 @@ class MutiplicativeScaling(BaseTransform):
 
     def _transform_impl(self, x, metadata=None):
         sigma = np.random.uniform(self.scale_range[0], self.scale_range[1])
-        x = sigma * x
+        x *= sigma
         return x
 
 
@@ -167,11 +176,42 @@ class AdditiveScaling(BaseTransform):
 
     def _transform_impl(self, x, metadata=None):
         sigma = np.random.normal(self.mean, self.std)
-        x = sigma + x
+        x += sigma
         return x
 
 
-class GammaTransform(BaseTransform):
+class ContrastAugmentation(BaseTransform):
+    def __init__(self, p, contrast_range, preserve_range=True, keys=['image']):
+        super(ContrastAugmentation, self).__init__(keys)
+        self.p = p
+        self.contrast_range = contrast_range
+        self.preserve_range = preserve_range
+
+    def __call__(self, data):
+        if np.random.uniform() < self.p:
+            data = super().apply_transform(data)
+        return data
+
+    def _transform_impl(self, x, metadata=None):
+        if np.random.random() < 0.5 and self.contrast_range[0] < 1:
+            factor = np.random.uniform(self.contrast_range[0], 1)
+        else:
+            factor = np.random.uniform(max(self.contrast_range[0], 1), self.contrast_range[1])
+
+        mn = x.mean()
+        if self.preserve_range:
+            minm = x.min()
+            maxm = x.max()
+
+        x = (x - mn) * factor + mn
+
+        if self.preserve_range:
+            x[x < minm] = minm
+            x[x > maxm] = maxm
+        return x
+
+
+class GammaCorrection(BaseTransform):
     def __init__(self, p, gamma_range, invert_image=False, retain_stats=False, keys=['image']):
         """
         Augments by changing 'gamma' of the image (same as gamma correction in photos or computer monitors
@@ -186,7 +226,7 @@ class GammaTransform(BaseTransform):
         :param retain_stats: Gamma transformation will alter the mean and std of the data in the patch. If retain_stats=True,
         the data will be transformed to match the mean and standard deviation before gamma augmentation.
         """
-        super(GammaTransform, self).__init__(keys)
+        super(GammaCorrection, self).__init__(keys)
         self.p = p
         self.retain_stats = retain_stats
         self.gamma_range = gamma_range
@@ -220,6 +260,24 @@ class GammaTransform(BaseTransform):
             x = x + mn
         if self.invert_image:
             x = - x
+        return x
+
+
+class GaussialBlur(BaseTransform):
+    def __init__(self, p, sigma_range, keys=['image']):
+        super(GaussialBlur, self).__init__(keys)
+        self.p = p
+        self.sigma_range = sigma_range
+
+    def __call__(self, data):
+        if np.random.uniform() < self.p:
+            data = super().apply_transform(data)
+        return data
+
+    def _transform_impl(self, x, metadata=None):
+        sigma = np.random.uniform(self.sigma_range[0], self.sigma_range[1])
+        for c in range(x.shape[0]):
+            x[c] = ndimage.gaussian_filter(x[c], sigma, order=0)
         return x
 
 
@@ -312,11 +370,22 @@ class CXYZ_To_CZYX(BaseTransform):
         return np.transpose(x, (0, 3, 2, 1))
 
 
+class CZYX_To_CXYZ(BaseTransform):
+    def __init__(self, keys=['image', 'label']):
+        super(CZYX_To_CXYZ, self).__init__(keys)
+
+    def __call__(self, data):
+        return super().apply_transform(data)
+
+    def _transform_impl(self, x, metadata=None):
+        return np.transpose(x, (0, 3, 2, 1))
+
+
 class RandomFlip(BaseTransform):
     def __init__(self, p, axis, keys=['image', 'label']):
         """
         Args:
-            axis: 0, 1, 2 for depth, vertical and horizontal
+            axis: 1, 2, 3 for depth, vertical and horizontal
         """
         super(RandomFlip, self).__init__(keys)
         self.p = p
@@ -324,7 +393,7 @@ class RandomFlip(BaseTransform):
 
     def __call__(self, data):
         if np.random.uniform() < self.p:
-            data = super().apply_transform(data, self.p)
+            data = super().apply_transform(data)
         return data
 
     def _transform_impl(self, x, metadata=None):
@@ -522,6 +591,131 @@ class ElasticDeformation(BaseTransform):
         deform_shape = input_shapes[0]
         return axis, deform_shape
 
+
+from batchgenerators.augmentations.spatial_transformations import augment_spatial
+
+
+class SpatialTransform(BaseTransform):
+    def __init__(self, p_rot, p_scale, p_ed, keys=['image', 'label'], label_key='label'):
+        super(SpatialTransform, self).__init__(keys)
+        self.label_key = label_key
+        # elastic deformation
+        self.p_el_per_sample = p_ed
+        self.alpha = (0, 0)
+        self.sigma = (0, 0)
+        # rotation
+        self.p_rot_per_sample = p_rot
+        self.p_rot_per_axis = 1  # TODO: experiment with this
+        self.angle_x = (-0.523599, 0.523599)
+        self.angle_y = (-0.523599, 0.523599)
+        self.angle_z = (-0.523599, 0.523599)
+        # scaling
+        self.p_scale_per_sample = p_scale
+        self.scale = (0.7, 1.4)
+        # border mode
+        self.border_mode = 'constant'
+
+    def __call__(self, data):
+        patch_size = data[self.label_key].shape[1:]
+        self.coords, self.modified_coords = self.transform_coords(patch_size)
+
+        # Find a nice center location
+        if self.modified_coords:
+            for d in range(3):
+                ctr = data[self.label_key].shape[d + 1] / 2. - 0.5
+                self.coords[d] += ctr
+
+        return super().apply_transform(data)
+
+    def _transform_impl(self, x, metadata=None):
+        if self.modified_coords:
+            x_result = np.zeros(x.shape, dtype=np.float32)
+
+            order = 0 if self.cur_key == self.label_key else 3
+            for channel_id in range(x.shape[0]):
+                x_result[channel_id] = self.interpolate_img(x[channel_id], self.coords, order, self.border_mode, cval=0)
+            return x_result
+        else:
+            return x
+
+    def transform_coords(self, patch_size):
+        coords = self.create_zero_centered_coordinate_mesh(patch_size)
+        modified_coords = False
+
+        # Elastic deformation
+        if np.random.uniform() < self.p_el_per_sample:
+            a = np.random.uniform(self.alpha[0], self.alpha[1])
+            s = np.random.uniform(self.sigma[0], self.sigma[1])
+            coords = self.elastic_deform_coordinates(coords, a, s)
+            modified_coords = True
+
+        # Rotation
+        if np.random.uniform() < self.p_rot_per_sample:
+            if np.random.uniform() <= self.p_rot_per_axis:
+                a_x = np.random.uniform(self.angle_x[0], self.angle_x[1])
+            else:
+                a_x = 0
+
+            if np.random.uniform() <= self.p_rot_per_axis:
+                a_y = np.random.uniform(self.angle_y[0], self.angle_y[1])
+            else:
+                a_y = 0
+
+            if np.random.uniform() <= self.p_rot_per_axis:
+                a_z = np.random.uniform(self.angle_z[0], self.angle_z[1])
+            else:
+                a_z = 0
+
+            coords = self.rotate_coords_3d(coords, a_x, a_y, a_z)
+            modified_coords = True
+
+        # Scaling
+        if np.random.uniform() < self.p_scale_per_sample:
+            if np.random.random() < 0.5 and self.scale[0] < 1:
+                sc = np.random.uniform(self.scale[0], 1)
+            else:
+                sc = np.random.uniform(max(self.scale[0], 1), self.scale[1])
+
+            coords = self.scale_coords(coords, sc)
+            modified_coords = True
+
+        return coords, modified_coords
+
+    def create_zero_centered_coordinate_mesh(self, shape):
+        tmp = tuple([np.arange(i) for i in shape])
+        coords = np.array(np.meshgrid(*tmp, indexing='ij')).astype(float)
+        for d in range(len(shape)):
+            coords[d] -= ((np.array(shape).astype(float) - 1) / 2.)[d]
+        return coords
+
+    def elastic_deform_coordinates(self, coordinates, alpha, sigma):
+        n_dim = len(coordinates)
+        offsets = []
+        for _ in range(n_dim):
+            offsets.append(ndimage.filtersgaussian_filter((np.random.random(coordinates.shape[1:]) * 2 - 1), sigma, mode="constant", cval=0) * alpha)
+        offsets = np.array(offsets)
+        indices = offsets + coordinates
+        return indices
+
+    def rotate_coords_3d(self, coords, angle_x, angle_y, angle_z):
+        rot_matrix = np.identity(len(coords))
+        rot_matrix = rot_x_rad(angle_x, rot_matrix)
+        rot_matrix = rot_y_rad(angle_y, rot_matrix)
+        rot_matrix = rot_z_rad(angle_z, rot_matrix)
+        coords = np.dot(coords.reshape(len(coords), -1).transpose(), rot_matrix).transpose().reshape(coords.shape)
+        return coords
+
+    def scale_coords(self, coords, scale):
+        if isinstance(scale, (tuple, list, np.ndarray)):
+            assert len(scale) == len(coords)
+            for i in range(len(scale)):
+                coords[i] *= scale[i]
+        else:
+            coords *= scale
+        return coords
+
+    def interpolate_img(self, img, coords, order=3, mode='nearest', cval=0.0):
+        return ndimage.map_coordinates(img.astype(float), coords, order=order, mode=mode, cval=cval).astype(img.dtype)
 
 # class Spacing:
 #     def __init__(self, pixdim):

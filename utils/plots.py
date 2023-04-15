@@ -30,6 +30,13 @@ import json
 #########################
 
 
+def save_transforms_to_json(transforms, file) -> None:
+    json_list = []
+    for t in transforms.transforms:
+        json_list.append({t.class_name(): t.items()})
+    save_json(json_list, file, default=str)
+
+
 def save_json(obj, file: str, indent: int = 4, sort_keys: bool = True, default=None) -> None:
     with open(file, 'w') as f:
         json.dump(obj, f, sort_keys=sort_keys, indent=indent, default=default)

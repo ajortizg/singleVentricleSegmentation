@@ -256,7 +256,6 @@ class SegmentationDataset(Dataset):
 
         if self.transforms is not None:
             data = self.transforms(data)
-
         return data
 
     def read_json(self, filepath):
