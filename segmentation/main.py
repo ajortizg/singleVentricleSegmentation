@@ -21,27 +21,29 @@ import segmentation.transforms as T
 
 
 if __name__ == '__main__':
-
     transforms = T.Compose([
         T.AddChannelDim(keys=['image', 'label']),
         T.CXYZ_To_CZYX(keys=['image', 'label']),
         T.ToRAS(keys=['image', 'label']),
-        T.CropForeground(keys=['image', 'label'], label_key='label'),
+        # T.CropForeground(keys=['image', 'label'], label_key='label'),
         # T.RandomFlip(0.5, 1),
         # T.RandomFlip(0.5, 2),
         # T.RandomFlip(0.5, 3),
-        T.Resize(1.0, (96, 96, 96), keys=['image', 'label']),
+        T.Resize(1.0, (64, 256, 256), keys=['image', 'label']),
         # T.CZYX_To_CXYZ(keys=['image', 'label']),
-        T.SpatialTransform(p_rot=1.0, p_scale=1.0, p_ed=0.0),
+        # T.SpatialTransform(p_rot=1.0, p_rot_per_axis=1, angle_x=(-0.523599, 0.523599), angle_y=(-0.523599, 0.523599), angle_z=(-0.523599, 0.523599),
+        #                    p_scale=1.0, scale=(0.7, 1.4), border_mode='constant', keys=['image', 'label'], label_key='label'),
+        # T.CropForeground(keys=['image', 'label'], label_key='label'),
         # T.CXYZ_To_CZYX(keys=['image', 'label']),
         # T.ElasticDeformation(1.0, (0.5, 2.0), 8, 'constant', 'yx'),
-        # T.RandomRotate(1.0, (-30, 30), (-30, 30), (-30, 30), keys=['image', 'label'], label_key='label'),
+        T.RandomRotate(1.0, (-30, 30), (-30, 30), (-30, 30), keys=['image', 'label'], label_key='label'),
+        T.CropForeground(keys=['image', 'label'], label_key='label'),
         # T.Resize(1.0, (16, 96, 96)),
         # T.GammaCorrection(1.0, (0.5, 1.7), False, False, keys=['image']),
         # T.GaussialBlur(0.2, sigma_range=(0.5, 1.), keys=['image']),
         # T.MultiplicativeScaling(0.15, (0.75, 1.25), keys=['image']),
         # T.ContrastAugmentation(0.15, (0.75, 1.25), keys=['image']),
-        T.Resize(1.0, (16, 96, 96), keys=['image', 'label']),
+        T.Resize(1.0, (16, 256, 256), keys=['image', 'label']),
         T.ToTensor(keys=['image', 'label'])
     ])
 

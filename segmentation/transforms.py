@@ -124,7 +124,7 @@ class ZScoreNormalization(BaseTransform):
 
 
 class QuadraticNormalization(BaseTransform):
-    def __init__(self, q2=95, use_label=True, label_key='label', keys=['image']):
+    def __init__(self, q2=95, use_label=True, keys=['image'], label_key='label'):
         super(QuadraticNormalization, self).__init__(keys)
         self.q2 = q2
         self.label_key = label_key
@@ -359,6 +359,19 @@ class ToTensor(BaseTransform):
         return torch.from_numpy(x).float()
 
 
+class ClipRange(BaseTransform):
+    def __init__(self, min, max, keys=['image']):
+        super().__init__(keys)
+        self.min = min
+        self.max = max
+
+    def __call__(self, data):
+        return super().apply_transform(data)
+
+    def _transform_impl(self, x, metadata=None):
+        return np.clip(x, self.min, self.max)
+
+
 class CXYZ_To_CZYX(BaseTransform):
     def __init__(self, keys=['image', 'label']):
         super(CXYZ_To_CZYX, self).__init__(keys)
@@ -468,8 +481,7 @@ class CropForeground(BaseTransform):
         return zmin, zmax, ymin, ymax, xmin, xmax
 
     def _transform_impl(self, x, metadata=None):
-        x = x[:, self.zmin:self.zmax + 1, self.ymin:self.ymax + 1, self.xmin:self.xmax + 1]
-        return x
+        return x[:, self.zmin:self.zmax + 1, self.ymin:self.ymax + 1, self.xmin:self.xmax + 1]
 
 
 class RandomRotate(BaseTransform):
@@ -592,28 +604,29 @@ class ElasticDeformation(BaseTransform):
         return axis, deform_shape
 
 
-from batchgenerators.augmentations.spatial_transformations import augment_spatial
-
-
 class SpatialTransform(BaseTransform):
-    def __init__(self, p_rot, p_scale, p_ed, keys=['image', 'label'], label_key='label'):
+    def __init__(self, p_rot, p_rot_per_axis, angle_x, angle_y, angle_z,    # rot params
+                 p_scale, scale,                                            # scale params
+                 p_ed=0, alpha=(0, 0), sigma=(0, 0),                        # ed params
+                 border_mode='constant',                                    # nearest
+                 keys=['image', 'label'], label_key='label'):
         super(SpatialTransform, self).__init__(keys)
         self.label_key = label_key
         # elastic deformation
         self.p_el_per_sample = p_ed
-        self.alpha = (0, 0)
-        self.sigma = (0, 0)
+        self.alpha = alpha
+        self.sigma = sigma
         # rotation
         self.p_rot_per_sample = p_rot
-        self.p_rot_per_axis = 1  # TODO: experiment with this
-        self.angle_x = (-0.523599, 0.523599)
-        self.angle_y = (-0.523599, 0.523599)
-        self.angle_z = (-0.523599, 0.523599)
+        self.p_rot_per_axis = p_rot_per_axis  # TODO: experiment with this
+        self.angle_x = angle_x
+        self.angle_y = angle_y
+        self.angle_z = angle_z
         # scaling
         self.p_scale_per_sample = p_scale
-        self.scale = (0.7, 1.4)
+        self.scale = scale
         # border mode
-        self.border_mode = 'constant'
+        self.border_mode = border_mode
 
     def __call__(self, data):
         patch_size = data[self.label_key].shape[1:]
@@ -633,7 +646,9 @@ class SpatialTransform(BaseTransform):
 
             order = 0 if self.cur_key == self.label_key else 3
             for channel_id in range(x.shape[0]):
-                x_result[channel_id] = self.interpolate_img(x[channel_id], self.coords, order, self.border_mode, cval=0)
+                # x_result[channel_id] = self.interpolate_img(x[channel_id], self.coords, order, self.border_mode, cval=0)
+                x_result[channel_id] = ndimage.map_coordinates(x[channel_id].astype(float),
+                                                               self.coords, order=order, mode=self.border_mode, cval=0).astype(x.dtype)
             return x_result
         else:
             return x
@@ -692,7 +707,7 @@ class SpatialTransform(BaseTransform):
         n_dim = len(coordinates)
         offsets = []
         for _ in range(n_dim):
-            offsets.append(ndimage.filtersgaussian_filter((np.random.random(coordinates.shape[1:]) * 2 - 1), sigma, mode="constant", cval=0) * alpha)
+            offsets.append(ndimage.filters.gaussian_filter((np.random.random(coordinates.shape[1:]) * 2 - 1), sigma, mode="constant", cval=0) * alpha)
         offsets = np.array(offsets)
         indices = offsets + coordinates
         return indices
@@ -714,8 +729,8 @@ class SpatialTransform(BaseTransform):
             coords *= scale
         return coords
 
-    def interpolate_img(self, img, coords, order=3, mode='nearest', cval=0.0):
-        return ndimage.map_coordinates(img.astype(float), coords, order=order, mode=mode, cval=cval).astype(img.dtype)
+    # def interpolate_img(self, img, coords, order=3, mode='nearest', cval=0.0):
+    #     return ndimage.map_coordinates(img.astype(float), coords, order=order, mode=mode, cval=cval).astype(img.dtype)
 
 # class Spacing:
 #     def __init__(self, pixdim):

@@ -191,7 +191,7 @@ class TVL1OpticalFlow3D:
             # self.saveSingleStepToFile(s, I0s[s], I1s[s], us[s], ps[s], meshInfos[s])
 
             if s == 0:
-                self.saveSingleStepToFile(s, I0s[s], I1s[s], us[s], ps[s], meshInfos[s])
+                # self.saveSingleStepToFile(s, I0s[s], I1s[s], us[s], ps[s], meshInfos[s])
                 break
 
             # Prolongate the optical flow and dual variables to the next pyramid level
@@ -312,6 +312,14 @@ class TVL1OpticalFlow3D:
                             self.saveDirDebug, f"CPErrorUpdate_it{s}_warp{w}", "loglog")
 
         return u, p
+
+    def apply_median_filter(self, u):
+        if self.USE_MEDIAN_FILTER:
+            ks = self.KERNEL_MF
+            uf = ndimage.median_filter(u.cpu().detach().numpy(), size=(ks, ks, ks, 1))
+            return torch.from_numpy(uf).float().to(self.DEVICE)
+        else:
+            return u
 
     def saveSingleStepToFile(self, step, I0, I1, u, p, meshInfo):
         saveDirStep = os.path.sep.join([self.saveDir, f"it{step}"])
