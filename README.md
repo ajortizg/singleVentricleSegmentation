@@ -35,10 +35,24 @@ on windows:
 * New-Item -ItemType SymbolicLink -Target "C:\Users\...\results\" -Path "C:\Users\...\singleVentricleSegmentation\results"
 
 
-## preprocessing 
-Always use /parser/configPreprocessing.ini
+## 1. Preprocessing 
+*   First preprocess the raw data to store it in a specific format:
+    ```
+    python preprocessing/preprocess_{dataset_name}.py
+    ```
+    This will create a new folder *{dataset_name}_{date-time}* inside *{output_dir}*. 
+*   Use *parser/preprocessing.ini* to modify the configuration parameters.
 
-1. possibly flip the original data
+## 2. Optical flow
+*   After preprocess the data, the optical flow can be computed:
+    ```
+    python TVL1OF/compute_flow.py
+    ```
+*   This will create a folder *optical_flow* inside the *{root_dir}*. Use *parser/flow_compute.ini* to set the correct paths and desired configuration.
+
+## 3. Train CNN
+
+<!-- 1. possibly flip the original data
    in parser set BASE_PATH_3D to data/singleVentricleData
     ```
     python ./dataset/preprocessing/preprocessing_flipping.py
@@ -72,5 +86,5 @@ Always use /parser/configPreprocessing.ini
     ```
     python ./dataset/preprocessing/preprocessing_split.py
     ```
-    Save resulting folder to /data/singleVentricleData_split.
+    Save resulting folder to /data/singleVentricleData_split. -->
 

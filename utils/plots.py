@@ -321,9 +321,10 @@ def save_img_masks(img3d: torch.Tensor, masks3d: list[torch.Tensor], filename: s
     for z, ax in enumerate(axs.flat):
         if z < NZ:
             img = cv2.cvtColor(img3d[z, :, :].cpu().detach().numpy(), cv2.COLOR_GRAY2BGR)
-            for i, mask3d in enumerate(masks3d):
-                mask = mask3d[z, :, :].cpu().detach().numpy()
-                img = merge_img_mask(img, mask, th, alphas[i], colors[i])
+            if masks3d is not None:
+                for i, mask3d in enumerate(masks3d):
+                    mask = mask3d[z, :, :].cpu().detach().numpy()
+                    img = merge_img_mask(img, mask, th, alphas[i], colors[i])
             ax.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
             ax.set_title("layer {}".format(z))
             ax.axis('off')
@@ -345,9 +346,10 @@ def save_img_masks_slices(img3d: torch.Tensor, masks3d: list[torch.Tensor],
     for z in range(NZ):
         img = img3d[z, :, :].cpu().detach().numpy()
         img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-        for i, mask3d in enumerate(masks3d):
-            mask = mask3d[z, :, :].cpu().detach().numpy()
-            img = merge_img_mask(img, mask, th, alphas[i], colors[i])
+        if masks3d is not None:
+            for i, mask3d in enumerate(masks3d):
+                mask = mask3d[z, :, :].cpu().detach().numpy()
+                img = merge_img_mask(img, mask, th, alphas[i], colors[i])
         img_name = f"img_mask_z{z}.png"
         path_name = os.path.join(save_dir_slices, img_name)
         cv2.imwrite(path_name, factor_gray_value * img)
@@ -362,7 +364,7 @@ def merge_img_mask(img, mask, th=0.5, alpha=0.35, color=[1, 1, 0]):
     return img
 
 
-def save_overlaped_img_mask(img3d: torch.Tensor, mask3d: torch.Tensor, filename: str, save_dir: str, th: float, alpha: float):
+def save_overlaped_img_mask(img3d: torch.Tensor, mask3d: torch.Tensor, filename: str, save_dir: str, alpha: float):
     NZ = img3d.shape[0]
     aspect_ratio = 16. / 9.
     cols = int(NZ / aspect_ratio)
@@ -374,10 +376,11 @@ def save_overlaped_img_mask(img3d: torch.Tensor, mask3d: torch.Tensor, filename:
     fig.suptitle('file: {}'.format(os.path.basename(filename)), fontsize=16)
     for z, ax in enumerate(axs.flat):
         if z < NZ:
-            img = img3d[z, ...].cpu().detach().numpy()
-            mask = mask3d[z, ...].cpu().detach().numpy()
+            img = img3d[z].cpu().detach().numpy()
             ax.imshow(img, cmap="gray")
-            ax.imshow(mask, cmap='jet', alpha=alpha, interpolation='none')
+            if mask3d is not None:
+                mask = mask3d[z].cpu().detach().numpy()
+                ax.imshow(mask, cmap='jet', alpha=alpha, interpolation='none')
             ax.set_title("layer {}".format(z))
             ax.axis('off')
         else:

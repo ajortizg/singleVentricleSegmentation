@@ -36,6 +36,17 @@ class XYZT_To_TZYX(BaseTransform):
         return np.transpose(x, (3, 2, 1, 0))
 
 
+class TZYX_To_XYZT(BaseTransform):
+    def __init__(self, keys=['image', 'label']):
+        super().__init__(keys)
+
+    def __call__(self, data):
+        return super().apply_transform(data)
+
+    def _transform_impl(self, x, metadata=None):
+        return np.transpose(x, (3, 2, 1, 0))
+
+
 class QuadraticNormalization(_QuadraticNormalization):
     def __init__(self, q2=95, keys=['image'], label_key='label'):
         super().__init__(q2, True, keys, label_key)
@@ -61,7 +72,7 @@ class QuadraticNormalization(_QuadraticNormalization):
 class Resize(_Resize):
     def __init__(self, p, size, keys=['image', 'label'], label_key='label'):
         super().__init__(p, size, keys, label_key)
-    
+
     def _transform_impl(self, x, metadata=None):
         mode = 'nearest' if self.cur_key == self.label_key else 'trilinear'
         x = torch.from_numpy(x).float().unsqueeze(dim=1)    # add channel dim

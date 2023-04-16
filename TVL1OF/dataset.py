@@ -10,6 +10,7 @@ from torch.utils.data.dataloader import default_collate
 from collections import UserDict
 from sklearn.model_selection import KFold
 from glob import glob
+import json
 
 
 def get_bounds(es, ed, masks, fwd, test=False):
@@ -37,12 +38,11 @@ def get_bounds(es, ed, masks, fwd, test=False):
         return tf, ti, mf, mi, torch.flip(indices, (0,))
 
 
-class SVDataset(Dataset):
+class FlowUNetDataset(Dataset):
     def __init__(self, root_dir, mode='train', transforms=None, load_flow=False, fold_indices=None):
         """
         Args:
             mode: train, test, full
-            vxm: Set to True when computing optical flow
             load_flow: Set to True to load optical flows
             fold_indices: Indices for cross valiation
         """
@@ -50,12 +50,13 @@ class SVDataset(Dataset):
         self.transforms = transforms
         self.is_test = mode == 'test'
         self.load_flow = load_flow
-        self.class_names = ['background', 'sv']
-        self.num_classes = len(self.class_names)
 
-        self.imgs_dir = osp.join(root_dir, 'NIFTI_4D_Datasets')
-        self.masks_dir = osp.join(root_dir, 'NIFTI_Single_Ventricle_Segmentations')
-        df = pd.read_excel(osp.join(root_dir, 'Segmentation_volumes.xlsx'))
+        self.imgs_dir = osp.join(root_dir, 'images')
+        self.masks_dir = osp.join(root_dir, 'labels')
+        df = pd.read_excel(osp.join(root_dir, 'info.xlsx'))
+
+        # Read json
+        self.json_ds = self.read_json(osp.join(root_dir, 'dataset.json'))
 
         if mode == 'full':
             self.df_split = df
@@ -83,27 +84,20 @@ class SVDataset(Dataset):
         if self.is_test:
             label_xyzt = np.empty(shape=image_xyzt.shape, dtype=image_xyzt.dtype)
             for t in range(label_xyzt.shape[3]):
-                nib_label = nib.load(osp.join(self.masks_dir, patient_name, f'{patient_name}_{t}_Labelmap.nii'))
+                nib_label = nib.load(osp.join(self.masks_dir, patient_name, f'{patient_name}_{t}_Labelmap.nii.gz'))
                 label_xyzt[..., t] = nib_label.get_fdata()
         else:
-            nib_label = nib.load(osp.join(self.masks_dir, patient_name, patient_name + '_Systole_Labelmap.nii'))
+            nib_label = nib.load(osp.join(self.masks_dir, patient_name, patient_name + '_Systole_Labelmap.nii.gz'))
             label_xyz_es = nib_label.get_fdata()
-            nib_label = nib.load(osp.join(self.masks_dir, patient_name, patient_name + '_Diastole_Labelmap.nii'))
+            nib_label = nib.load(osp.join(self.masks_dir, patient_name, patient_name + '_Diastole_Labelmap.nii.gz'))
             label_xyz_ed = nib_label.get_fdata()
             label_xyzt = np.stack((label_xyz_es, label_xyz_ed), axis=3)
-
-        # Load metadata
-        # img_meta = dict(nii_img.header)
-        image_meta = {'affine': nib_image.affine}
-
-        # mask_meta = dict(nii_mask.header)
-        label_meta = {'affine': nib_label.affine}
 
         # Group data in a dictionary
         data = {'image': image_xyzt,
                 'label': label_xyzt,
-                'image_meta': image_meta,
-                'label_meta': label_meta,
+                'image_meta': {'affine': nib_image.affine},
+                'label_meta': {'affine': nib_label.affine},
                 'patient': patient_name,
                 'es': es, 'ed': ed}
 
@@ -122,6 +116,27 @@ class SVDataset(Dataset):
         if self.transforms is not None:
             data = self.transforms(data)
 
+        return data
+
+    def class_names(self):
+        self.class_names = self.json_ds['labels']
+
+    def num_classes(self):
+        return len(self.class_names())
+
+    def dataset_name(self):
+        return self.json_ds['name']
+
+    def file_ending(self):
+        return self.json_ds['file_ending']
+
+    def num_training_casses(self):
+        return self.json_ds['numTraining']
+
+    def read_json(self, filepath):
+        f = open(filepath, mode='r')
+        data = json.load(f)
+        f.close()
         return data
 
     @staticmethod
