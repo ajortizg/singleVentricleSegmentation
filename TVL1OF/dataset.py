@@ -1,15 +1,9 @@
 import os.path as osp
-import configparser
 import torch
-import os
 from torch.utils.data import Dataset
 import pandas as pd
 import numpy as np
 import nibabel as nib
-from torch.utils.data.dataloader import default_collate
-from collections import UserDict
-from sklearn.model_selection import KFold
-from glob import glob
 import json
 
 
@@ -105,17 +99,13 @@ class FlowUNetDataset(Dataset):
         if self.load_flow:
             directions = ['forward', 'backward']
             for d in directions:
-                patient_dir = osp.join(self.root_dir, 'optical_flow', d, patient_name)
-                *_, indices = get_bounds(es, ed, None, fwd=d == 'forward')
-                indices = indices[:-1]
-                flows_list = [np.load(osp.join(patient_dir, f'time{t}', 'it0', 'flow_m_it0.npy')) for t in indices]
-                flows_np = np.stack([flow for flow in flows_list], axis=4)
-                data[d + '_flow'] = flows_np
+                key = d + '_flow'
+                data[key] = np.load(osp.join(self.root_dir, 'optical_flow', d, f'{patient_name}_{d}_flow.npy'))
+                data[key + '_meta'] = None
 
         # Apply transformations to data
         if self.transforms is not None:
             data = self.transforms(data)
-
         return data
 
     def class_names(self):
@@ -138,8 +128,3 @@ class FlowUNetDataset(Dataset):
         data = json.load(f)
         f.close()
         return data
-
-    @staticmethod
-    def collate_fn(batch):
-        ret = UserDict(**default_collate(batch))
-        return ret

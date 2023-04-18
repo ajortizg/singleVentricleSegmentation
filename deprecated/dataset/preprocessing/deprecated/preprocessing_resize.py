@@ -6,7 +6,7 @@ import pandas as pd
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../..'))
 sys.path.append(ROOT_DIR)
-from utils import plots
+from utilities import plots
 from cnn.dataset import SingleVentricleDataset, DatasetMode
 import cnn.transforms as T
 

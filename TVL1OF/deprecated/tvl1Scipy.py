@@ -10,9 +10,9 @@ from tqdm import tqdm
 
 
 sys.path.append("../utils")
-from utils.plots import *
-from utils.config import *
-from utils.flow_viz import *
+from utilities.plots import *
+from utilities.config import *
+from utilities.flow_viz import *
 
 # sys.path.append("../pythonOps/")
 # from pythonOps.mesh import *

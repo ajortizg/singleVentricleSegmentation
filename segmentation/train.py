@@ -24,17 +24,13 @@ from tqdm import tqdm
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
-from utils import plots
+from utilities.fold import create_5fold
+import utilities.file_paths_utils as fpu
+from utilities import stuff
 from cnn.models.model_factory import create_model, save_model
-from segmentation.dataset import SVDataset, create_5fold
+from segmentation.dataset import SegmentationDataset
 import segmentation.transforms as T
-
-
-def get_fold(config):
-    root_dir = config.get('DATA', 'BASE_PATH_3D')
-    fold = config.getint('DATA', 'fold')
-    dataset = SVDataset(root_dir, mode='train')
-    return create_5fold(len(dataset))[fold], fold
+from segmentation import utils
 
 
 def create_dataloaders(config, fold):
@@ -42,53 +38,7 @@ def create_dataloaders(config, fold):
     num_classes = config.getint('PARAMETERS', 'NUM_CLASSES')
     data_aug = config['DATA_AUGMENTATION']
 
-    train_transforms = T.Compose([
-        T.ToRAS(),
-        T.CropForeground(p=1.0, tol=10),
-        T.Resize(p=1.0, size=(img_sz, img_sz, img_sz)),
-        T.RandomRotate(p=data_aug.getfloat('ROT_PROB'),
-                       range_z=tuple(map(float, data_aug['ROT_Z_RANGE'].split(','))),
-                       range_y=tuple(map(float, data_aug['ROT_Y_RANGE'].split(','))),
-                       range_x=tuple(map(float, data_aug['ROT_X_RANGE'].split(','))),
-                       boundary=data_aug['ROT_BOUNDARY']),
-        T.RandomVerticalFlip(data_aug.getfloat('VERTICAL_FLIP_PROB')),
-        T.RandomHorizontalFlip(data_aug.getfloat('HORIZONTAL_FLIP_PROB')),
-        T.RandomDepthFlip(data_aug.getfloat('DEPTH_FLIP_PROB')),
-        T.ElasticDeformation(p=data_aug.getfloat('ED_PROB'),
-                             sigma_range=tuple(map(float, data_aug['ED_SIGMA_RANGE'].split(','))),
-                             points=data_aug.getint('ED_GRID'),
-                             boundary=data_aug['ED_BOUNDARY'],
-                             prefilter=data_aug.getboolean('ED_USE_PREFILTER'),
-                             axis=data_aug['ED_AXIS'],
-                             order=data_aug.getint('ED_ORDER')),
-        # T.GammaScaling(data_aug.getfloat('GAMMA_SCALING_PROB'), tuple(map(float, data_aug['GAMMA_SCALING_RANGE'].split(',')))),
-        T.GammaTransform(0.1, (0.7, 1.5), True, False),
-        T.GammaTransform(0.3, (0.7, 1.5), False, False),
-        T.MutiplicativeScaling(data_aug.getfloat('MULT_SCALING_PROB'),
-                               tuple(map(float, data_aug['MULT_SCALING_RANGE'].split(',')))),
-        T.AdditiveScaling(data_aug.getfloat('ADD_SCALING_PROB'),
-                          data_aug.getfloat('ADD_SCALING_MEAN'),
-                          data_aug.getfloat('ADD_SCALING_STD')),
-        T.AdditiveGaussianNoise(data_aug.getfloat('NOISE_PROB'),
-                                data_aug.getfloat('NOISE_MU'),
-                                data_aug.getfloat('NOISE_STD')),
-        T.QuadraticNormalization(mean_inside_mask=True),
-        T.Discretize(th=0.5),
-        T.AddChannelDim(),
-        T.OneHotEncoding(num_classes),
-        T.ToTensor()
-    ])
-
-    val_transforms = T.Compose([
-        T.ToRAS(),
-        T.CropForeground(p=1.0, tol=10),
-        T.Resize(p=1.0, size=(img_sz, img_sz, img_sz)),
-        T.QuadraticNormalization(mean_inside_mask=True),
-        T.Discretize(th=0.5),
-        T.AddChannelDim(),
-        T.OneHotEncoding(num_classes),
-        T.ToTensor()
-    ])
+    train_transforms = utils.train_transforms(config)
 
     root_dir = config.get('DATA', 'BASE_PATH_3D')
     batch_size = config.getint('PARAMETERS', 'BATCH_SIZE')
@@ -166,20 +116,21 @@ def test(net, loader, device):
 
 
 if __name__ == '__main__':
-    plots.seeding(42)
+    stuff.seeding(42)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     config = configparser.ConfigParser()
     config.read('parser/seg_train.ini')
+    data_cfg = config['DATA']
 
-    fold, n = get_fold(config)
+    fold, n = get_fold(data_cfg)
     train_loader, val_loader, test_loader = create_dataloaders(config, fold)
 
-    save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), f'SEG-{n}')
-    plots.save_config(config, save_dir)
+    save_dir = fpu.create_save_dir(data_cfg['output_dir'], f'fold_{n}')
+    fpu.save_config(config, save_dir)
     writer = SummaryWriter(log_dir=save_dir)
-    logger = plots.create_logger(save_dir)
-    plots.save_json([fold], osp.join(save_dir, f'fold.json'), default=int)
+    logger = stuff.create_logger(save_dir)
+    fpu.save_json([fold], osp.join(save_dir, 'fold.json'), default=int)
     logger.info('Save dir: {}'.format(save_dir))
     logger.info('Device: {}'.format(device))
 

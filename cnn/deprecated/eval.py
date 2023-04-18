@@ -15,11 +15,11 @@ from monai.metrics.meandice import compute_meandice
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
-from utils import plots
-from utils.collate import collate_fn
-from utils import param_reader
-import utils.transforms.senary_transforms as T6
-import utils.transforms.unary_transforms as T1
+from utilities import plots
+from utilities.collate import collate_fn
+from utilities import param_reader
+import utilities.transforms.senary_transforms as T6
+import utilities.transforms.unary_transforms as T1
 from cnn.dataset import SingleVentricleDataset, DatasetMode, LoadFlowMode
 from cnn.trainer import Trainer
 from cnn.models.model_factory import create_model, save_model

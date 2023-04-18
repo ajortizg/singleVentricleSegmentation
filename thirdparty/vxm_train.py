@@ -17,9 +17,12 @@ import voxelmorph.voxelmorph as vxm  # nopep8
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
-from utils import plots
-from segmentation.dataset import SVDataset
-import segmentation.transforms as T
+from utilities import file_paths_utils as fpu
+from utilities import stuff
+# from segmentation.dataset import SVDataset
+# import segmentation.transforms as T
+from TVL1OF.dataset import FlowUNetDataset
+import TVL1OF.transforms as T
 
 
 def train(train_loader, model, optimizer, losses, weights):
@@ -76,7 +79,7 @@ def validate(val_loader, model, losses, weights):
 
 if __name__ == '__main__':
     # Seeding for reproducible results
-    plots.seeding(42)
+    stuff.seeding(42)
 
     # Read configuration options
     config = configparser.ConfigParser()
@@ -103,8 +106,8 @@ if __name__ == '__main__':
     torch.backends.cudnn.deterministic = not cudnn_nondet
     print('cudnn.deterministic: ', (not cudnn_nondet))
 
-    save_dir = plots.createSaveDirectory(output_dir, 'VXM')
-    plots.save_config(config, save_dir)
+    save_dir = fpu.create_save_dir(output_dir, 'VXM')
+    fpu.save_config(config, save_dir)
     writer = SummaryWriter(log_dir=save_dir)
 
     # Create dataloaders
@@ -140,8 +143,8 @@ if __name__ == '__main__':
         T.ToTensor(add_ch_dim=False)
     ])
 
-    train_ds = SVDataset(root_dir, 'train', train_transforms, vxm=True)
-    val_ds = SVDataset(root_dir, 'val', val_transforms, vxm=True)
+    train_ds = FlowUNetDataset(root_dir, 'train', train_transforms)
+    val_ds = FlowUNetDataset(root_dir, 'val', val_transforms)
     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=workers, collate_fn=SVDataset.collate_fn)
     val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=workers, collate_fn=SVDataset.collate_fn)
 

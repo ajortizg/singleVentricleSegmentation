@@ -14,9 +14,9 @@ from tabulate import tabulate
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
-from utils import plots
-from segmentation.dataset import SVDataset, get_bounds
-import segmentation.transforms as T
+from utilities import file_paths_utils as fpu
+from TVL1OF.dataset import FlowUNetDataset, get_bounds
+import TVL1OF.transforms as T
 from cnn.warp import WarpCNN
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -29,17 +29,12 @@ if __name__ == '__main__':
     param_cfg = cfg['PARAMETERS']
 
     # Create dataset
-    img_sz = param_cfg.getint('img_sz')
     transforms = T.Compose([
-        T.ToRAS(),
-        T.CropForeground(p=1.0, tol=10),
-        T.Resize(p=1.0, size=(img_sz, img_sz, img_sz)),
-        T.Discretize(th=0.5),
-        T.MinMaxNormalization(q1=5, q2=95),
-        T.AddChannelDim(),
-        T.ToTensor()
+        T.XYZT_To_TZYX(keys=['image','label']),
+        T.Flow_T3XYZ_To_T3ZYX(keys=['forward_flow', 'backward_flow']),
+        T.ToTensor(keys=['image', 'label', 'forward_flow', 'backward_flow'])
     ])
-    dset = SVDataset(data_cfg['base_path_3d'], 'full', transforms, vxm=True, load_flow=True)
+    dset = FlowUNetDataset(data_cfg['root_dir'], 'full', transforms, load_flow=True)
     loader = DataLoader(dset, batch_size=1, shuffle=False, num_workers=8)
 
     # Saving directory for debug outputs
@@ -53,19 +48,23 @@ if __name__ == '__main__':
         patient = data['patient'][0]
         es = data['es'].item()
         ed = data['ed'].item()
-        imgs = data['img'].to(device)
-        masks = data['mask'].to(device)
-        ff = data['forward_flow'].to(device)
-        bf = data['backward_flow'].to(device)
+        images = data['image'].to(device).squeeze(dim=0)        # remove the first batch dim
+        labels = data['label'].to(device).squeeze(dim=0)
+        ff = data['forward_flow'].to(device).squeeze(dim=0)
+        bf = data['backward_flow'].to(device).squeeze(dim=0)
 
-        BS, CH, NZ, NY, NX, NT = imgs.shape
+        NT, NZ, NY, NX = images.shape
         warp = WarpCNN(cfg, NZ, NY, NX)
-        *_, mi, mf, indices = get_bounds(es, ed, masks, fwd=True)
+        *_, mi, mf, _ = get_bounds(es, ed, labels, fwd=True)
 
+        # Add batch and channel dim
+        mi = mi.unsqueeze(0).unsqueeze(0)
+        mf = mf.unsqueeze(0).unsqueeze(0)
         out = {'fwd': [mi], 'bwd': [mf]}
-        for i in range(ff.shape[-1]):
-            out['fwd'].append(warp(out['fwd'][-1], ff[..., i]))
-            out['bwd'].append(warp(out['bwd'][-1], bf[..., i]))
+
+        for i in range(ff.shape[0]):
+            out['fwd'].append(warp(out['fwd'][-1], ff[i].unsqueeze(0)))
+            out['bwd'].append(warp(out['bwd'][-1], bf[i].unsqueeze(0)))
         assert(len(out['fwd']) == len(out['bwd']))
 
         out['bwd'].reverse()

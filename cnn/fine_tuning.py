@@ -13,10 +13,10 @@ import os.path as osp
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
-from utils import plots
-from utils.collate import collate_fn_batch
-from utils import param_reader
-import utils.transforms.senary_transforms as T6
+from utilities import plots
+from utilities.collate import collate_fn_batch
+from utilities import param_reader
+import utilities.transforms.senary_transforms as T6
 from cnn.dataset import *
 # from cnn.trainer import Trainer
 from cnn.trainer_multi_batch import Trainer

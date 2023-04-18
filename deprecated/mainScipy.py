@@ -3,7 +3,7 @@ import numpy as np
 import time
 import os
 
-from utils.config import *
+from utilities.config import *
 from TVL1OF.tvl1Scipy import TVL1Scipy
 
 if __name__ == "__main__":

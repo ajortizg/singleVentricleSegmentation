@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 import elasticdeform as ed
-from utils.basic_transforms import rotx, roty, rotz
+from utilities.basic_transforms import rotx, roty, rotz
 
 
 class Compose:

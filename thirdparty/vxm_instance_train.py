@@ -17,7 +17,7 @@ import voxelmorph.voxelmorph as vxm  # nopep8
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
-from utils import plots
+from utilities import plots
 from segmentation.dataset import SVDataset
 import segmentation.transforms as T
 

@@ -10,8 +10,8 @@ from tqdm import tqdm
 
 
 sys.path.append("../utils")
-from utils.plots import *
-from utils.flow_viz import *
+from utilities.plots import *
+from utilities.flow_viz import *
 # utils_lib_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../utils'))
 # sys.path.append(utils_lib_path)
 
@@ -226,16 +226,16 @@ class ROF2D:
             progress_bar.update(1)
  
         if self.useDebugOutput:
-                saveCurve1D(primalFctVec_F, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"PrimalFct_F_it{s}")
-                saveCurve1D(primalFctVec_G, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"PrimalFct_G_it{s}")
-                saveCurve1D(primalFctVec_Total, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"PrimalFct_Total_it{s}")
-                saveCurve1D(dualFctVec_F, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"DualFct_F_it{s}")
-                saveCurve1D(dualFctVec_G, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"DualFct_G_it{s}")
-                saveCurve1D(dualFctVec_Total, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"DualFct_Total_it{s}")
-                saveCurve1D(primalDualGabVec, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"primalDualGabVec_it{s}", "loglog")
-                saveCurve1D(breakConditionVecPrimal, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"CPErrorPrimal_it{s}", "loglog")
-                saveCurve1D(breakConditionVecDual, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"CPErrorDual_it{s}", "loglog")
-                saveCurve1D(breakConditionVecUpdate, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"CPErrorUpdate_it{s}", "loglog")
+                save_curve_1d(primalFctVec_F, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"PrimalFct_F_it{s}")
+                save_curve_1d(primalFctVec_G, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"PrimalFct_G_it{s}")
+                save_curve_1d(primalFctVec_Total, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"PrimalFct_Total_it{s}")
+                save_curve_1d(dualFctVec_F, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"DualFct_F_it{s}")
+                save_curve_1d(dualFctVec_G, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"DualFct_G_it{s}")
+                save_curve_1d(dualFctVec_Total, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"DualFct_Total_it{s}")
+                save_curve_1d(primalDualGabVec, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"primalDualGabVec_it{s}", "loglog")
+                save_curve_1d(breakConditionVecPrimal, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"CPErrorPrimal_it{s}", "loglog")
+                save_curve_1d(breakConditionVecDual, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"CPErrorDual_it{s}", "loglog")
+                save_curve_1d(breakConditionVecUpdate, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"CPErrorUpdate_it{s}", "loglog")
 
         return I, p
 
@@ -245,7 +245,7 @@ class ROF2D:
         if not os.path.exists(saveDirStep):
             os.makedirs(saveDirStep)
 
-        saveImage(I0,saveDirStep,f"I0_it{step}.png")
-        saveImage(I,saveDirStep,f"I_it{step}.png")
+        save_image(I0,saveDirStep,f"I0_it{step}.png")
+        save_image(I,saveDirStep,f"I_it{step}.png")
 
 

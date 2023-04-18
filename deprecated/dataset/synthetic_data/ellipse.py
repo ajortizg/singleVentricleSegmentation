@@ -6,9 +6,9 @@ import torch
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
-from utils import plots
-from utils import torch_utils
-from utils.quaternary_transforms import rotx, roty, rotz
+from utilities import plots
+from utilities import torch_utils
+from utilities.quaternary_transforms import rotx, roty, rotz
 
 
 class Ellipse:

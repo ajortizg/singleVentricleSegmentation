@@ -14,9 +14,13 @@ from scipy import ndimage
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
-from utils.transforms.basic_transforms import rotx, roty, rotz, rot_x_rad, rot_y_rad, rot_z_rad
+from utilities.transforms.basic_transforms import rotx, roty, rotz, rot_x_rad, rot_y_rad, rot_z_rad
 
 metadata_subfix = '_meta'
+
+# Modify this oporetations to make them compatible with optical flow + UNet
+# All the operatios must expect a tensor with shape (bs, ch, nz, ny, nx),
+# where bs = nt
 
 
 class BaseTransform(object, metaclass=ABCMeta):
@@ -89,6 +93,135 @@ class OneOf:
         format_string += "\n)"
         return format_string
 
+# -----------------------------------------------------------
+#               Conversion transformations
+# -----------------------------------------------------------
+
+
+class ToArray(BaseTransform):
+    def __init__(self, keys=['image', 'label']):
+        super(ToArray, self).__init__(keys)
+
+    def __call__(self, data):
+        return super().apply_transform(data)
+
+    def _transform_impl(self, x, metadata=None):
+        return x.cpu().detach().numpy()
+
+
+class ToTensor(BaseTransform):
+    def __init__(self, keys=['image', 'label']):
+        super(ToTensor, self).__init__(keys)
+
+    def __call__(self, data):
+        return super().apply_transform(data)
+
+    def _transform_impl(self, x, metadata=None):
+        return torch.from_numpy(x).float()
+
+
+class AddDimAt(BaseTransform):
+    def __init__(self, axis=0, keys=['image', 'label']):
+        super(AddDimAt, self).__init__(keys)
+        self.axis = axis
+
+    def __call__(self, data):
+        return super().apply_transform(data)
+
+    def _transform_impl(self, x, metadata=None):
+        return np.expand_dims(x, axis=self.axis)
+
+
+class AddNLeadingDims(BaseTransform):
+    """
+    Args:
+        n: number of leading dimensions to add
+    """
+
+    def __init__(self, n, keys=['image', 'label']):
+        super().__init__(keys)
+        self.n = n
+
+    def __call__(self, data):
+        return super().apply_transform(data)
+
+    def _transform_impl(self, x, metadata=None):
+        for _ in range(self.n):
+            x = np.expand_dims(x, axis=0)
+        return x
+
+
+class RemoveNLeadingDims(BaseTransform):
+    """
+    Args:
+        n: number of leading dimensions to remove
+    """
+
+    def __init__(self, n, keys=['image', 'label']):
+        super().__init__(keys)
+        self.n = n
+
+    def __call__(self, data):
+        return super().apply_transform(data)
+
+    def _transform_impl(self, x, metadata=None):
+        for _ in range(self.n):
+            x = np.squeeze(x, axis=0)
+        return x
+
+
+class OneHotEncoding(BaseTransform):
+    def __init__(self, n, keys=['label']):
+        super(OneHotEncoding, self).__init__(keys)
+        self.tr = monai.transforms.AsDiscrete(to_onehot=n)
+        self.n = n
+
+    def __call__(self, data):
+        return super().apply_transform(data)
+
+    def _transform_impl(self, x, metadata=None):
+        bs, ch, d1, d2, d3 = x.shape
+        assert ch == 1
+        x_onehot = np.zeros((bs, self.n, d1, d2, d3), dtype=np.float32)
+        for b in range(bs):
+            x_onehot[b] = self.tr(x[b]).numpy()
+        return x_onehot
+
+
+class BCXYZ_To_BCZYX(BaseTransform):
+    def __init__(self, keys=['image', 'label']):
+        super().__init__(keys)
+
+    def __call__(self, data):
+        return super().apply_transform(data)
+
+    def _transform_impl(self, x, metadata=None):
+        return np.transpose(x, (0, 1, 4, 3, 2))
+
+# class CXYZ_To_CZYX(BaseTransform):
+#     def __init__(self, keys=['image', 'label']):
+#         super(CXYZ_To_CZYX, self).__init__(keys)
+
+#     def __call__(self, data):
+#         return super().apply_transform(data)
+
+#     def _transform_impl(self, x, metadata=None):
+#         return np.transpose(x, (0, 3, 2, 1))
+
+
+# class CZYX_To_CXYZ(BaseTransform):
+#     def __init__(self, keys=['image', 'label']):
+#         super(CZYX_To_CXYZ, self).__init__(keys)
+
+#     def __call__(self, data):
+#         return super().apply_transform(data)
+
+#     def _transform_impl(self, x, metadata=None):
+#         return np.transpose(x, (0, 3, 2, 1))
+
+# -----------------------------------------------------------
+#               Intensity transformations
+# -----------------------------------------------------------
 
 class MinMaxNormalization(BaseTransform):
     def __init__(self, q1=0, q2=100, keys=['image']):
@@ -123,6 +256,7 @@ class ZScoreNormalization(BaseTransform):
         return x
 
 
+# This function is incompatible with of+unet
 class QuadraticNormalization(BaseTransform):
     def __init__(self, q2=95, use_label=True, keys=['image'], label_key='label'):
         super(QuadraticNormalization, self).__init__(keys)
@@ -276,17 +410,19 @@ class GaussialBlur(BaseTransform):
 
     def _transform_impl(self, x, metadata=None):
         sigma = np.random.uniform(self.sigma_range[0], self.sigma_range[1])
-        for c in range(x.shape[0]):
-            x[c] = ndimage.gaussian_filter(x[c], sigma, order=0)
+        batch_dim, chan_dim = x.shape[:2]
+        for b in range(batch_dim):
+            for c in range(chan_dim):
+                x[b, c] = ndimage.gaussian_filter(x[b, c], sigma, order=0)
         return x
 
 
 class AdditiveGaussianNoise(BaseTransform):
-    def __init__(self, p, mu, sigma, keys=['image']):
+    def __init__(self, p, sigma_range, mu=0, keys=['image']):
         super(AdditiveGaussianNoise, self).__init__(keys)
         self.p = p
         self.mu = mu
-        self.sigma = sigma
+        self.sigma_range = sigma_range
 
     def __call__(self, data):
         if np.random.uniform() < self.p:
@@ -294,7 +430,8 @@ class AdditiveGaussianNoise(BaseTransform):
         return data
 
     def _transform_impl(self, x, metadata=None):
-        noise = np.random.normal(self.mu, self.sigma, size=x.shape)
+        sigma = np.random.uniform(self.sigma_range[0], self.sigma_range[1])
+        noise = np.random.normal(self.mu, sigma, size=x.shape)
         x = noise + x
         return x
 
@@ -311,54 +448,6 @@ class Discretize(BaseTransform):
         return np.where(x > self.th, 1.0, 0.0)
 
 
-class ToArray(BaseTransform):
-    def __init__(self, keys=['image', 'label']):
-        super(ToArray, self).__init__(keys)
-
-    def __call__(self, data):
-        return super().apply_transform(data)
-
-    def _transform_impl(self, x, metadata=None):
-        return x.cpu().detach().numpy()
-
-
-class AddChannelDim(BaseTransform):
-    def __init__(self, axis=0, keys=['image', 'label']):
-        super(AddChannelDim, self).__init__(keys)
-        self.axis = axis
-
-    def __call__(self, data):
-        return super().apply_transform(data)
-
-    def _transform_impl(self, x, metadata=None):
-        return np.expand_dims(x, axis=self.axis)
-
-
-class OneHotEncoding(BaseTransform):
-    def __init__(self, n, keys=['label']):
-        super(OneHotEncoding, self).__init__(keys)
-        self.tr = monai.transforms.AsDiscrete(to_onehot=n)
-
-    def __call__(self, data):
-        return super().apply_transform(data)
-
-    def _transform_impl(self, x, metadata=None):
-        # x = torch.eye(4)[x]
-        # return = x.permute(3, 0, 1, 2).numpy()
-        return self.tr(x).numpy()
-
-
-class ToTensor(BaseTransform):
-    def __init__(self, keys=['image', 'label']):
-        super(ToTensor, self).__init__(keys)
-
-    def __call__(self, data):
-        return super().apply_transform(data)
-
-    def _transform_impl(self, x, metadata=None):
-        return torch.from_numpy(x).float()
-
-
 class ClipRange(BaseTransform):
     def __init__(self, min, max, keys=['image']):
         super().__init__(keys)
@@ -372,33 +461,15 @@ class ClipRange(BaseTransform):
         return np.clip(x, self.min, self.max)
 
 
-class CXYZ_To_CZYX(BaseTransform):
-    def __init__(self, keys=['image', 'label']):
-        super(CXYZ_To_CZYX, self).__init__(keys)
-
-    def __call__(self, data):
-        return super().apply_transform(data)
-
-    def _transform_impl(self, x, metadata=None):
-        return np.transpose(x, (0, 3, 2, 1))
-
-
-class CZYX_To_CXYZ(BaseTransform):
-    def __init__(self, keys=['image', 'label']):
-        super(CZYX_To_CXYZ, self).__init__(keys)
-
-    def __call__(self, data):
-        return super().apply_transform(data)
-
-    def _transform_impl(self, x, metadata=None):
-        return np.transpose(x, (0, 3, 2, 1))
-
+# -----------------------------------------------------------
+#               Geometric transformations
+# -----------------------------------------------------------
 
 class RandomFlip(BaseTransform):
     def __init__(self, p, axis, keys=['image', 'label']):
         """
         Args:
-            axis: 1, 2, 3 for depth, vertical and horizontal
+            axis: 2, 3, 4 for depth, vertical and horizontal flips
         """
         super(RandomFlip, self).__init__(keys)
         self.p = p
@@ -424,14 +495,15 @@ class ToRAS(BaseTransform):
 
     def _transform_impl(self, x, metadata=None):
         affine = metadata['affine']
-        shape_1 = x.shape
-        x = self.ortr(monai.data.MetaTensor(x, affine=affine))
-        shape_2 = x.shape
-
-        # TODO: I don't know why this happens :(
-        if shape_1 != shape_2:
-            x = x.permute(0, 2, 3, 1)
-        return x.numpy()
+        batch_dim = x.shape[0]
+        for b in range(batch_dim):
+            xc_new = self.ortr(monai.data.MetaTensor(x[b], affine=affine))
+            try:
+                x[b] = xc_new.numpy()
+            except ValueError:
+                # TODO: I don't know why this happens with svd :(
+                x[b] = xc_new.permute(0, 2, 3, 1).numpy()
+        return x
 
 
 class Resize(BaseTransform):
@@ -448,9 +520,9 @@ class Resize(BaseTransform):
 
     def _transform_impl(self, x, metadata=None):
         mode = 'nearest' if self.cur_key == self.label_key else 'trilinear'
-        x = torch.from_numpy(x).float().unsqueeze(0)  # add batch dim
+        x = torch.from_numpy(x).float()
         x = F.interpolate(x, size=self.size, mode=mode)
-        return x.squeeze(0).numpy()  # remove batch dim and convert to numpy
+        return x.numpy()
 
 
 class CropForeground(BaseTransform):
@@ -460,7 +532,7 @@ class CropForeground(BaseTransform):
         self.label_key = label_key
 
     def __call__(self, data):
-        _, NZ, NY, NX = data[self.label_key].shape
+        *_, NZ, NY, NX = data[self.label_key].shape
         self.zmin, self.zmax, self.ymin, self.ymax, self.xmin, self.xmax = self.mask_range(data[self.label_key])
         self.zmin = max(0, self.zmin - self.tol)
         self.zmax = min(NZ - 1, self.zmax + self.tol)
@@ -471,7 +543,7 @@ class CropForeground(BaseTransform):
         return super().apply_transform(data)
 
     def mask_range(self, label):
-        _, z, y, x = np.nonzero(label)
+        *_, z, y, x = np.nonzero(label)
         xmin = np.min(x)
         xmax = np.max(x)
         ymin = np.min(y)
@@ -481,7 +553,38 @@ class CropForeground(BaseTransform):
         return zmin, zmax, ymin, ymax, xmin, xmax
 
     def _transform_impl(self, x, metadata=None):
-        return x[:, self.zmin:self.zmax + 1, self.ymin:self.ymax + 1, self.xmin:self.xmax + 1]
+        return x[..., self.zmin:self.zmax + 1, self.ymin:self.ymax + 1, self.xmin:self.xmax + 1]
+
+
+def _create_zero_centered_coordinate_mesh(shape):
+    tmp = tuple([torch.arange(i) for i in shape])
+    zz, yy, xx = torch.meshgrid(*tmp, indexing='ij')
+    coords = torch.stack((xx, yy, zz), dim=3).float().unsqueeze(0)
+
+    NZ, NY, NX = shape
+    ordered_shape = (NX, NY, NZ)
+    for d in range(len(ordered_shape)):
+        coords[..., d] -= ((torch.tensor(ordered_shape).float() - 1) / 2.)[d]
+    return coords
+
+
+def _normalize_coords(coords):
+    # normalize coords to [-1,1]
+    _, NZ, NY, NX, _ = coords.shape
+    shape = (NX, NY, NZ)
+    for i in range(len(shape)):
+        coords[..., i] = 2 * (coords[..., i] / (shape[i] - 1) - 0.5)
+    return coords
+
+
+def _find_center(coords):
+    # Find a nice center location
+    _, NZ, NY, NX, _ = coords.shape
+    shape = (NX, NY, NZ)
+    for d in range(3):
+        ctr = shape[d] / 2. - 0.5
+        coords[..., d] += ctr
+    return coords
 
 
 class RandomRotate(BaseTransform):
@@ -497,34 +600,26 @@ class RandomRotate(BaseTransform):
 
     def __call__(self, data):
         if np.random.rand() < self.p:
-            _, NZ, NY, NX = data[self.label_key].shape
-            R, offset = self.create_rot_mat(NZ, NY, NX)
-            self.grid = self.scale_grid(self.generate_rotation_grid(R, offset, NZ, NY, NX).unsqueeze(0))
+            *_, NZ, NY, NX = data[self.label_key].shape
+            R, offset = self.create_rot(NZ, NY, NX)
+            self.coords = _normalize_coords(self.rotate_coords(R, offset, NZ, NY, NX))
             data = super().apply_transform(data)
         return data
 
     def _transform_impl(self, x, metadata=None):
-        x = torch.from_numpy(x).float().unsqueeze(0)  # add batch dim
         mode = 'nearest' if self.cur_key == self.label_key else 'bilinear'
-        x_new = F.grid_sample(x, self.grid, mode=mode, padding_mode=self.boundary, align_corners=False)
-        return x_new.squeeze(0).numpy()  # remove batch dim
+        x = torch.from_numpy(x).float()
+        x_new = F.grid_sample(x, self.coords.repeat(x.shape[0], 1, 1, 1, 1), mode=mode, padding_mode=self.boundary, align_corners=False)
+        return x_new.numpy()
 
-    def scale_grid(self, grid):
-        # scale grid to [-1,1]
-        _, NZ, NY, NX, _ = grid.shape
-        grid[..., 0] = 2.0 * grid[..., 0] / max(NX - 1, 1) - 1.0
-        grid[..., 1] = 2.0 * grid[..., 1] / max(NY - 1, 1) - 1.0
-        grid[..., 2] = 2.0 * grid[..., 2] / max(NZ - 1, 1) - 1.0
-        return grid
-
-    def generate_rotation_grid(self, rot, offset, NZ, NY, NX):
+    def rotate_coords(self, rot, offset, NZ, NY, NX):
         zz, yy, xx = torch.meshgrid(torch.arange(NZ), torch.arange(NY), torch.arange(NX), indexing="ij")
         xx_t = (rot[0, 0] * xx + rot[0, 1] * yy + rot[0, 2] * zz) + offset[0]
         yy_t = (rot[1, 0] * xx + rot[1, 1] * yy + rot[1, 2] * zz) + offset[1]
         zz_t = (rot[2, 0] * xx + rot[2, 1] * yy + rot[2, 2] * zz) + offset[2]
-        return torch.stack((xx_t, yy_t, zz_t), dim=3).float()
+        return torch.stack((xx_t, yy_t, zz_t), dim=3).float().unsqueeze(0)
 
-    def create_rot_mat(self, NZ, NY, NX):
+    def create_rot(self, NZ, NY, NX):
         angx = np.random.uniform(self.range_x[0], self.range_x[1])
         angy = np.random.uniform(self.range_y[0], self.range_y[1])
         angz = np.random.uniform(self.range_z[0], self.range_z[1])
@@ -546,6 +641,37 @@ class RandomRotate(BaseTransform):
         return R, offset
 
 
+class RandomScale(BaseTransform):
+    def __init__(self, p, scale_range, boundary='zeros', keys=['image', 'label'], label_key='label'):
+        super().__init__(keys)
+        self.p = p
+        self.scale_range = scale_range
+        self.label_key = label_key
+        self.boundary = boundary
+
+    def __call__(self, data):
+        if np.random.uniform() < self.p:
+            spatial_shape = data[self.label_key].shape[2:]
+            coords = self.scale_coords(_create_zero_centered_coordinate_mesh(spatial_shape))
+            self.coords = _normalize_coords(_find_center(coords))
+            data = super().apply_transform(data)
+        return data
+
+    def _transform_impl(self, x, metadata=None):
+        mode = 'nearest' if self.cur_key == self.label_key else 'bilinear'
+        x = torch.from_numpy(x).float()
+        x_new = F.grid_sample(x, self.coords.repeat(x.shape[0], 1, 1, 1, 1), mode=mode, padding_mode=self.boundary, align_corners=False)
+        return x_new.numpy()
+
+    def scale_coords(self, coords):
+        if np.random.random() < 0.5 and self.scale_range[0] < 1:
+            sc = np.random.uniform(self.scale_range[0], 1)
+        else:
+            sc = np.random.uniform(max(self.scale_range[0], 1), self.scale_range[1])
+        coords *= sc
+        return coords
+
+
 class ElasticDeformation(BaseTransform):
     def __init__(self, p, sigma_range, points, boundary, axis,
                  keys=['image', 'label'], label_key='label'):
@@ -559,16 +685,7 @@ class ElasticDeformation(BaseTransform):
 
     def __call__(self, data):
         if np.random.rand() < self.p:
-            Xs = [data[self.label_key]]
-            axis = [(1, 2, 3)] if self.axis_str == 'zyx' else [(2, 3)]
-            self.axis, deform_shape = self.normalize_axis_list(axis, Xs)
-
-            if not isinstance(self.points, (list, tuple)):
-                self.points = [self.points] * len(deform_shape)
-
-            sigma = np.random.uniform(self.sigma_range[0], self.sigma_range[1])
-            self.displacement = np.random.randn(len(deform_shape), *self.points) * sigma
-
+            self.displacement = self.create_displacement(data)
             data = super().apply_transform(data)
         return data
 
@@ -580,8 +697,18 @@ class ElasticDeformation(BaseTransform):
                                  mode=self.boundary,
                                  prefilter=False,
                                  axis=self.axis)
-
         return x_new
+
+    def create_displacement(self, data):
+        Xs = [data[self.label_key]]
+        axis = [(2, 3, 4)] if self.axis_str == 'zyx' else [(3, 4)]
+        self.axis, deform_shape = self.normalize_axis_list(axis, Xs)
+
+        if not isinstance(self.points, (list, tuple)):
+            self.points = [self.points] * len(deform_shape)
+
+        sigma = np.random.uniform(self.sigma_range[0], self.sigma_range[1])
+        return np.random.randn(len(deform_shape), *self.points) * sigma
 
     def normalize_axis_list(self, axis, Xs):
         if axis is None:
@@ -629,13 +756,13 @@ class SpatialTransform(BaseTransform):
         self.border_mode = border_mode
 
     def __call__(self, data):
-        patch_size = data[self.label_key].shape[1:]
+        patch_size = data[self.label_key].shape[2:]
         self.coords, self.modified_coords = self.transform_coords(patch_size)
 
         # Find a nice center location
         if self.modified_coords:
             for d in range(3):
-                ctr = data[self.label_key].shape[d + 1] / 2. - 0.5
+                ctr = data[self.label_key].shape[d + 2] / 2. - 0.5
                 self.coords[d] += ctr
 
         return super().apply_transform(data)
@@ -643,12 +770,13 @@ class SpatialTransform(BaseTransform):
     def _transform_impl(self, x, metadata=None):
         if self.modified_coords:
             x_result = np.zeros(x.shape, dtype=np.float32)
-
             order = 0 if self.cur_key == self.label_key else 3
-            for channel_id in range(x.shape[0]):
-                # x_result[channel_id] = self.interpolate_img(x[channel_id], self.coords, order, self.border_mode, cval=0)
-                x_result[channel_id] = ndimage.map_coordinates(x[channel_id].astype(float),
-                                                               self.coords, order=order, mode=self.border_mode, cval=0).astype(x.dtype)
+
+            for b in range(x.shape[0]):
+                for c in range(x.shape[1]):
+                    # x_result[channel_id] = self.interpolate_img(x[channel_id], self.coords, order, self.border_mode, cval=0)
+                    x_result[b, c] = ndimage.map_coordinates(x[b, c].astype(float),
+                                                             self.coords, order=order, mode=self.border_mode, cval=0).astype(x.dtype)
             return x_result
         else:
             return x
@@ -728,9 +856,6 @@ class SpatialTransform(BaseTransform):
         else:
             coords *= scale
         return coords
-
-    # def interpolate_img(self, img, coords, order=3, mode='nearest', cval=0.0):
-    #     return ndimage.map_coordinates(img.astype(float), coords, order=order, mode=mode, cval=cval).astype(img.dtype)
 
 # class Spacing:
 #     def __init__(self, pixdim):

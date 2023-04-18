@@ -11,7 +11,7 @@ import nibabel as nib
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../../'))
 sys.path.append(ROOT_DIR)
-from utils import plots
+from utilities import file_paths_utils as fpu
 from thirdparty.nnUNet.nnunetv2.dataset_conversion.generate_dataset_json import generate_dataset_json
 
 
@@ -33,17 +33,17 @@ if __name__ == '__main__':
 
     # Split in training and testing
     df = pd.read_excel(osp.join(root_dir, 'Segmentation_volumes.xlsx'))
-    df_train = df[(df['Split'] == 'train') | (df['Split'] == 'val')]
+    df_train = df[(df['Split'] == 'train')]
     df_train.reset_index(inplace=True)
     df_test = df[df['Split'] == 'test']
     df_test.reset_index(inplace=True)
 
     # Output paths
-    save_dir = plots.createSaveDirectory('results', 'svd_nnunet_raw')
-    train_imgs_dir = plots.createSubDirectory(save_dir, 'imagesTr')
-    train_labels_dir = plots.createSubDirectory(save_dir, 'labelsTr')
-    test_imgs_dir = plots.createSubDirectory(save_dir, 'imagesTs')
-    test_labels_dir = plots.createSubDirectory(save_dir, 'labelsTs')
+    save_dir = fpu.create_save_dir('results', 'svd_nnunet_raw')
+    train_imgs_dir = fpu.create_sub_dir(save_dir, 'imagesTr')
+    train_labels_dir = fpu.create_sub_dir(save_dir, 'labelsTr')
+    test_imgs_dir = fpu.create_sub_dir(save_dir, 'imagesTs')
+    test_labels_dir = fpu.create_sub_dir(save_dir, 'labelsTs')
 
     k = 1
     for i in tqdm(range(len(df_train))):

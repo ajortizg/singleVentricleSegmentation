@@ -7,7 +7,7 @@ from natsort import natsorted
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
-import utils.plots as plots
+import utilities.plots as plots
 from preprocessing.transforms import get_viz_transforms
 
 
@@ -33,5 +33,4 @@ def save_png(data, viz_cfg, save_dir):
                 label = data['label'][1]
             else:
                 label = None
-
         plots.save_overlaped_img_mask(data['image'][t], label, '{}_{}.png'.format(data['patient'], t), save_dir, 0.3)

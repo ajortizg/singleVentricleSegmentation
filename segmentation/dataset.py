@@ -1,12 +1,14 @@
 import os.path as osp
-from torch.utils.data import Dataset
-import nibabel as nib
 import json
 from glob import glob
 
+from torch.utils.data import Dataset
+import nibabel as nib
+import numpy as np
+
 
 class SegmentationDataset(Dataset):
-    def __init__(self, root_dir, mode='train', transforms=None, fold_indices=None):
+    def __init__(self, root_dir, mode='train', transforms=None, fold_idxs=None):
         """
         Args:
             mode: train, test
@@ -19,10 +21,15 @@ class SegmentationDataset(Dataset):
             self.img_paths = sorted(glob(osp.join(root_dir, 'imagesTr', f'*{self.file_ending()}')))
             self.label_paths = sorted(glob(osp.join(root_dir, 'labelsTr', f'*{self.file_ending()}')))
             assert len(self.img_paths) == self.num_training() and len(self.label_paths) == self.num_training()
+
+            if fold_idxs is not None:
+                self.img_paths = np.array(self.img_paths)[fold_idxs].tolist()
+                self.label_paths = np.array(self.img_paths)[fold_idxs].tolist()
         elif mode == 'test':
             raise NotImplementedError(self.__class__.__name__ + ' test no implemented yet')
         else:
             raise ValueError('{} is not a valid mode. Use train or test'.format(mode))
+        
 
     def __len__(self):
         return len(self.img_paths)

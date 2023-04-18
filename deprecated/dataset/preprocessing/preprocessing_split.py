@@ -10,7 +10,7 @@ import shutil
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../../'))
 sys.path.append(ROOT_DIR)
-from utils import plots
+from utilities import plots
 from dataset.singleVentricleDataset import SingleVentricleDataset
 
 

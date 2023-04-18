@@ -9,8 +9,8 @@ import numpy as np
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../..'))
 sys.path.append(ROOT_DIR)
-from utils import plots
-import utils.quaternary_transforms as T
+from utilities import plots
+import utilities.quaternary_transforms as T
 from dataset.singleVentricleDataset import SingleVentricleDataset, SingleVentriclePatient
 
 

@@ -9,7 +9,7 @@ from natsort import natsorted
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../../'))
 sys.path.append(ROOT_DIR)
-from utils import plots
+from utilities import file_paths_utils as fpu
 from thirdparty.nnUNet.nnunetv2.dataset_conversion.generate_dataset_json import generate_dataset_json
 
 
@@ -25,9 +25,9 @@ if __name__ == '__main__':
     split_dir = osp.join('data/acdc', 'training')
     patients_list_dir = [osp.join(split_dir, p) for p in natsorted(os.listdir(split_dir))]
 
-    save_dir = plots.createSaveDirectory('results', 'acdc_nnunet_raw')
-    train_imgs_dir = plots.createSubDirectory(save_dir, 'imagesTr')
-    train_labels_dir = plots.createSubDirectory(save_dir, 'labelsTr')
+    save_dir = fpu.create_save_dir('results', 'acdc_nnunet_raw')
+    train_imgs_dir = fpu.create_sub_dir(save_dir, 'imagesTr')
+    train_labels_dir = fpu.create_sub_dir(save_dir, 'labelsTr')
 
     k = 1
     for patient_dir in tqdm(patients_list_dir):

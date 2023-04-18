@@ -20,9 +20,9 @@ import voxelmorph.voxelmorph as vxm   # nopep8
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
-from utils import plots
-from segmentation.dataset import SVDataset
-import segmentation.transforms as T
+import utilities.file_paths_utils as fpu
+from TVL1OF.dataset import FlowUNetDataset
+import TVL1OF.transforms as T
 
 
 def bounds(data, device, test, fwd):
@@ -164,11 +164,11 @@ if __name__ == '__main__':
                             T.Discretize(th=0.5),
                             T.ToTensor(add_ch_dim=False)])
 
-    val_ds = SVDataset(root_dir, 'val', transforms, vxm=True)
-    val_loader = DataLoader(val_ds, batch_size=1, shuffle=False, num_workers=4, collate_fn=SVDataset.collate_fn)
+    val_ds = FlowUNetDataset(root_dir, 'val', transforms)
+    val_loader = DataLoader(val_ds, batch_size=1, shuffle=False, num_workers=4)
 
-    test_ds = SVDataset(root_dir, 'test', transforms, vxm=True)
-    test_loader = DataLoader(test_ds, batch_size=1, shuffle=False, num_workers=1, collate_fn=SVDataset.collate_fn)
+    test_ds = FlowUNetDataset(root_dir, 'test', transforms, vxm=True)
+    test_loader = DataLoader(test_ds, batch_size=1, shuffle=False, num_workers=1)
 
     # save_dir = plots.createSaveDirectory(output_dir, 'REG')
 

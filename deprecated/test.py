@@ -3,7 +3,7 @@ import numpy as np
 import torch
 import os
 
-from utils.config import *
+from utilities.config import *
 from TVL1OF.tvl1Scipy import TVL1Scipy
 from TVL1OF.tvl1Cuda import *
 

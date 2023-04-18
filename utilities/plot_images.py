@@ -7,8 +7,8 @@ import sys
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
-import utils.plots as plots
-import utils.transforms.unary_transforms as T1
+import utilities.plots as plots
+import utilities.transforms.unary_transforms as T1
 from cnn.dataset import SingleVentricleDataset, DatasetMode, LoadFlowMode
 
 if __name__ == "__main__":

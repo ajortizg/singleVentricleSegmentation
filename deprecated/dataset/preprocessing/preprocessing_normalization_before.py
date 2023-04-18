@@ -12,7 +12,7 @@ from intensity_normalization.normalize.fcm import FCMNormalize
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../../'))
 sys.path.append(ROOT_DIR)
-from utils import plots
+from utilities import plots
 from dataset import singleVentricleDataset
 
 def save_np_to_nifty(file, saveDir, fileName, hdr_old):

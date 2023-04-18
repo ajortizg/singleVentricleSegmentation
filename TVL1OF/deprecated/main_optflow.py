@@ -7,8 +7,8 @@ import time
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 from cnn.dataset import *
-from utils import plots
-import utils.transforms.unary_transforms as T1
+from utilities import plots
+import utilities.transforms.unary_transforms as T1
 
 
 class OpticalFlowMode(Enum):

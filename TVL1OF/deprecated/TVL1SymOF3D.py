@@ -11,12 +11,12 @@ import time
 from tqdm import tqdm
 
 sys.path.append("../utils")
-from utils.plots import *
-from utils.flow_viz import *
+from utilities.plots import *
+from utilities.flow_viz import *
 
 pythonOps_lib_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../pythonOps'))
 sys.path.append(pythonOps_lib_path)
-import utils.torch_utils as tu
+import utilities.torch_utils as tu
 
 from opticalFlow_cuda_ext import opticalFlow
 
@@ -309,11 +309,11 @@ class TVL1SymOpticalFlow3D:
 
             if self.useDebugOutput:
                 #saveCurve1D(primalFctVec, MAX_OUTER_ITERATIONS, self.saveDirDebug, f"PrimalFct_it{s}_warp{w}")
-                saveCurve1D(breakConditionVecPrimal, self.MAX_OUTER_ITERATIONS,
+                save_curve_1d(breakConditionVecPrimal, self.MAX_OUTER_ITERATIONS,
                             self.saveDirDebug, f"CPErrorPrimal_it{s}_warp{w}", "loglog")
-                saveCurve1D(breakConditionVecDual, self.MAX_OUTER_ITERATIONS,
+                save_curve_1d(breakConditionVecDual, self.MAX_OUTER_ITERATIONS,
                             self.saveDirDebug, f"CPErrorDual_it{s}_warp{w}", "loglog")
-                saveCurve1D(breakConditionVecUpdate, self.MAX_OUTER_ITERATIONS,
+                save_curve_1d(breakConditionVecUpdate, self.MAX_OUTER_ITERATIONS,
                             self.saveDirDebug, f"CPErrorUpdate_it{s}_warp{w}", "loglog")
 
         return u, p

@@ -13,13 +13,11 @@ from TVL1OF3D import *
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
-from utils import plots
+from utilities import file_paths_utils as fpu
 from TVL1OF.dataset import FlowUNetDataset, get_bounds
 import TVL1OF.transforms as T
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
-# found = False
 
 
 def optical_flow(data, mode, cfg, save_dir, pbar):
@@ -28,17 +26,7 @@ def optical_flow(data, mode, cfg, save_dir, pbar):
 
     img = data['image'].squeeze(0).to(device)
     patient = data['patient'][0]
-    # global found
-    # if patient == 'Adult_81':
-    #     found = True
-
-    # if not found:
-    #     return report
-
     *_, indices = get_bounds(data['es'].item(), data['ed'].item(), None, fwd=mode == 'forward')
-
-    # Create saving directory for current patient
-    # patient_dir = plots.createSubDirectory(save_dir, patient)
 
     # Initialization of optical flow and mask
     NT, NZ, NY, NX = img.shape
@@ -53,10 +41,8 @@ def optical_flow(data, mode, cfg, save_dir, pbar):
         t1 = indices[i].item()
         I0 = img[t0]
         I1 = img[t1]
-
+        
         pbar.set_postfix_str(f'P: {patient}, ({t1}->{t0}/{indices[-1]})')
-        # save_dir_timestep = plots.createSubDirectory(patient_dir, f'time{t1}')
-        # alg.set_save_dir(save_dir_timestep)
 
         u, p = alg.computeOnPyramid(I0, I1, u, p)
         u = alg.apply_median_filter(u)
@@ -68,6 +54,8 @@ def optical_flow(data, mode, cfg, save_dir, pbar):
     # torch.cuda.empty_cache()
     return report
 
+    # xyzt3
+
 
 if __name__ == '__main__':
     # Read configuration parameters
@@ -78,10 +66,10 @@ if __name__ == '__main__':
 
     # Create save directory and console logger
     mode = param_cfg.get('mode').lower()
-    save_dir = plots.createSaveDirectory(data_cfg.get('output_path'), f'TVL1OF3D{mode}')
-    logger = plots.create_logger(save_dir)
+    save_dir = fpu.createSaveDirectory(data_cfg.get('output_path'), f'TVL1OF3D{mode}')
+    logger = fpu.create_logger(save_dir)
     logger.info(f'Compute TV-L1 optical flow ({mode})')
-    plots.save_config(cfg, save_dir)
+    fpu.save_config(cfg, save_dir)
 
     # Create dataset
     img_sz = param_cfg.getint('img_sz')
@@ -89,9 +77,9 @@ if __name__ == '__main__':
         T.XYZT_To_TZYX(keys=['image', 'label']),
         T.ToTensor()
     ])
-    plots.save_transforms_to_json(transforms, osp.join(save_dir, 'transforms.json'))
+    fpu.save_transforms_to_json(transforms, osp.join(save_dir, 'transforms.json'))
 
-    dataset = FlowUNetDataset(data_cfg['base_path_3d'], 'full', transforms)
+    dataset = FlowUNetDataset(data_cfg['root_dir'], 'full', transforms)
     loader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=4)
 
     pbar = tqdm(total=len(loader))

@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 from cnn.warp import WarpCNN
-from utils import plots
+from utilities import plots
 
 
 __all__ = ['Trainer']

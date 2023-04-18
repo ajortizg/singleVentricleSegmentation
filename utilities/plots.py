@@ -13,108 +13,9 @@ import matplotlib.pyplot as plt
 import cv2
 import numpy as np
 import math
-import time
-from termcolor import colored
-from PIL import Image
-import logging
-import csv
-import json
-
-# scipy
-# from mpl_toolkits.mplot3d.art3d import Poly3DCollection
-# from skimage import measure
-# from mpl_toolkits.mplot3d import axes3d
-
-##########################
-# general helper functions
-#########################
 
 
-def save_transforms_to_json(transforms, file) -> None:
-    json_list = []
-    for t in transforms.transforms:
-        json_list.append({t.class_name(): t.items()})
-    save_json(json_list, file, default=str)
-
-
-def save_json(obj, file: str, indent: int = 4, sort_keys: bool = True, default=None) -> None:
-    with open(file, 'w') as f:
-        json.dump(obj, f, sort_keys=sort_keys, indent=indent, default=default)
-
-
-def save_config(config, save_dir, filename='config.ini'):
-    # save config file to save directory
-    fout = osp.join(save_dir, filename)
-    with open(fout, 'w') as config_file:
-        config.write(config_file)
-
-
-def createSaveDirectory(OUTPUT_PATH, name):
-    timestr = time.strftime("%Y%m%d-%H%M%S")
-    saveDir = os.path.sep.join([OUTPUT_PATH, name + "_" + timestr])
-    if not os.path.exists(saveDir):
-        os.makedirs(saveDir)
-    # print("save results to directory: ", saveDir, "\n")
-    return saveDir
-
-
-def createSubDirectory(saveDir, SUBDIR_PATH):
-    subDir = os.path.sep.join([saveDir, SUBDIR_PATH])
-    if not os.path.exists(subDir):
-        os.makedirs(subDir)
-    return subDir
-
-
-def create_logger(save_dir) -> logging.Logger:
-    logging.basicConfig(filename=os.path.join(save_dir, "console.log"),
-                        format='%(asctime)s %(levelname)s %(message)s',
-                        datefmt='%H:%M:%S',
-                        level=logging.INFO, force=True)
-    logger = logging.getLogger()
-    logger.addHandler(logging.StreamHandler(sys.stdout))
-    return logger
-
-
-def save_config(config, save_dir, filename='config.ini'):
-    # save config file to save directory
-    conifg_output = osp.join(save_dir, filename)
-    with open(conifg_output, 'w') as config_file:
-        config.write(config_file)
-
-
-def printConsoleOutput_Header(title):
-    print("\n\n")
-    print("==================================================")
-    print("==================================================")
-    print("  ", title)
-    print("==================================================")
-    print("==================================================")
-    print("\n\n")
-
-
-def printColoredError(diff, tol=1.e-5, accTol=1.e-2):
-    if(diff < tol):
-        print(colored(diff, 'green'))
-    elif(diff < accTol):
-        print(colored(diff, 'yellow'))
-    else:
-        print(colored(diff, 'red'))
-
-
-def seeding(seed):
-    np.random.seed(seed)
-    os.environ["PYTHONHASHSEED"] = str(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.backends.cudnn.deterministic = True
-
-##########################
-# pytorch input
-#########################
-
-
-def saveCurve1D(input, LX1D, saveDir, name, type="plot"):
+def save_curve_1d(input, LX1D, saveDir, name, type="plot"):
     NX1D = input.shape[0]
     grid1D = torch.linspace(0, LX1D, steps=NX1D).cuda()
     if type == "plot":
@@ -129,7 +30,7 @@ def saveCurve1D(input, LX1D, saveDir, name, type="plot"):
     plt.close('all')
 
 
-def saveImage(input, saveDir, name, max_gray_value=1.):
+def save_image(input, saveDir, name, max_gray_value=1.):
     factor_gray_value = 255. / max_gray_value
     # NY2D = input.shape[0]
     # NX2D = input.shape[1]
@@ -159,19 +60,6 @@ def save4D_torch_to_nifty(data, saveDir, fileName, affine=None):
     # save
     outputFile = os.path.sep.join([saveDir, fileName])
     nib.save(nii_img, outputFile)
-
-    # #convert
-    # prolongation_4d_np = prolongation_4d.cpu().detach().numpy()
-    # prolongation_4d_xyzt = np.swapaxes(prolongation_4d_np, 0, 2)
-    # #header
-    # ni_img_4d_hdr = nib.nifti1.Nifti1Header()
-    # ni_img_4d_hdr.set_data_shape((NX_prolong,NY_prolong,NZ_prolong,NT))
-    # ni_img_4d_hdr.set_zooms( vol_hdr.get_zooms()  )
-    # #img
-    # ni_img_4d = nib.Nifti1Image(prolongation_4d_xyzt, affine=vol_affine, header=ni_img_4d_hdr)
-    # #save
-    # outputFile_4d = os.path.sep.join([saveDir4D, PATIENT_NAME + ".nii.gz"])
-    # nib.save(ni_img_4d, outputFile_4d)
 
 
 def save_torch_to_nifty_header(data: torch.Tensor, header_old, saveDir, fileName, affine=None):
@@ -377,7 +265,7 @@ def save_overlaped_img_mask(img3d: torch.Tensor, mask3d: torch.Tensor, filename:
     for z, ax in enumerate(axs.flat):
         if z < NZ:
             img = img3d[z].cpu().detach().numpy()
-            ax.imshow(img, cmap="gray")
+            ax.imshow(img, cmap="gray", interpolation='none')
             if mask3d is not None:
                 mask = mask3d[z].cpu().detach().numpy()
                 ax.imshow(mask, cmap='jet', alpha=alpha, interpolation='none')
@@ -421,13 +309,6 @@ def plot_lr_vs_loss(lrs, losses, save_dir, filename):
     plt.xlabel('LR')
     plt.ylabel('Loss')
     plt.savefig(os.path.join(save_dir, filename))
-
-
-def write_list(save_dir, filename, lst):
-    with open(osp.join(save_dir, filename), 'w') as fp:
-        writer = csv.writer(fp)
-        for elem in lst:
-            writer.writerow(elem)
 
 
 def save_nifti_mask(mask, header, save_dir, filename):

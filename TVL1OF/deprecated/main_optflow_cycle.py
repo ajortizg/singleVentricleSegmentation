@@ -5,8 +5,8 @@ from TVL1OF3D import *
 
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
-from utils import plots
-import utils.transforms.unary_transforms as T1
+from utilities import plots
+import utilities.transforms.unary_transforms as T1
 from cnn.dataset import *
 
 

@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 from cnn.warp import WarpCNN
-from utils import plots
+import utilities.file_paths_utils as fpu
 
 
 __all__ = ['Trainer']
@@ -320,7 +320,7 @@ class Trainer:
 
     def save_stats(self, save_dir):
         for k, v in self.mean_epoch_stat.items():
-            plots.write_list(save_dir, k + '.csv', v)
+            fpu.write_list(save_dir, k + '.csv', v)
 
     def compute_dice_acc(self, mts, mtts, offsets, batch_indices):
         m0 = mts[0, batch_indices]

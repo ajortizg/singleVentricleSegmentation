@@ -1,5 +1,5 @@
 import numpy as np
-import utils
+import utilities
 import os.path as osp
 import nibabel as nib
 import configparser
@@ -79,7 +79,7 @@ nii_mask_diastole = np.swapaxes(nii_mask_xyz_diastole, 0, 2)
 
 for t in range(initTimeStep, finalTimeStep+1):
     data = nii_data[:, :, :, t]
-    utils.plot_slices(data, str=f"data_t{t}", block=True)
+    utilities.plot_slices(data, str=f"data_t{t}", block=True)
 
-utils.plot_slices(nii_mask_systole, str=f"mask_systole", block=False)
-utils.plot_slices(nii_mask_diastole, str=f"mask_diastole", block=True)
+utilities.plot_slices(nii_mask_systole, str=f"mask_systole", block=False)
+utilities.plot_slices(nii_mask_diastole, str=f"mask_diastole", block=True)

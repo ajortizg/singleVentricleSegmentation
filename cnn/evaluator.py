@@ -13,12 +13,12 @@ import csv
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 from cnn.dataset import *
-import utils.transforms.senary_transforms as T6
-import utils.transforms.unary_transforms as T1
-from utils.collate import collate_fn_batch
+import utilities.transforms.senary_transforms as T6
+import utilities.transforms.unary_transforms as T1
+from utilities.collate import collate_fn_batch
 from cnn.models.model_factory import create_model
 from cnn.trainer_multi_batch import Trainer
-from utils import plots
+from utilities import plots
 
 __all__ = ['Evalautor']
 

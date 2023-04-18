@@ -11,12 +11,12 @@ import torch.nn as nn
 import torch.optim as optim
 from monai.metrics.meandice import compute_meandice
 from monai.losses.dice import DiceCELoss, DiceLoss
-from utils import cnn_utils
+from utilities import cnn_utils
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
-from utils import plots
-import utils.binary_transforms as T
+from utilities import plots
+import utilities.binary_transforms as T
 
 
 def plot_pred(writer, pred, mask, tag, p=0.2):

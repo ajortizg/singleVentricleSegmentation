@@ -22,7 +22,13 @@ from segmentation.transforms import (
     Resize as _Resize
 )
 
-# All transforms assume data with shape (T, Z, Y, X)
+# All transforms assume images and labels with shape (T, Z, Y, X)
+# and flow with shape (T, 3, Z, Y, X)
+
+# Note: The data is aved as:
+# imgs: xyzt
+# mask: xyzt
+# flow: t3xyz
 
 
 class XYZT_To_TZYX(BaseTransform):
@@ -34,6 +40,17 @@ class XYZT_To_TZYX(BaseTransform):
 
     def _transform_impl(self, x, metadata=None):
         return np.transpose(x, (3, 2, 1, 0))
+
+
+class Flow_T3XYZ_To_T3ZYX(BaseTransform):
+    def __init__(self, keys=['forward_flow', 'backward_flow']):
+        super().__init__(keys)
+
+    def __call__(self, data):
+        return super().apply_transform(data)
+
+    def _transform_impl(self, x, metadata=None):
+        return np.transpose(x, (0, 1, 4, 3, 2))
 
 
 class TZYX_To_XYZT(BaseTransform):
@@ -69,12 +86,12 @@ class QuadraticNormalization(_QuadraticNormalization):
         return x_norm
 
 
-class Resize(_Resize):
-    def __init__(self, p, size, keys=['image', 'label'], label_key='label'):
-        super().__init__(p, size, keys, label_key)
+# class Resize(_Resize):
+#     def __init__(self, p, size, keys=['image', 'label'], label_key='label'):
+#         super().__init__(p, size, keys, label_key)
 
-    def _transform_impl(self, x, metadata=None):
-        mode = 'nearest' if self.cur_key == self.label_key else 'trilinear'
-        x = torch.from_numpy(x).float().unsqueeze(dim=1)    # add channel dim
-        x = F.interpolate(x, size=self.size, mode=mode)
-        return x.squeeze(1).numpy()                         # remove channel dim and convert back to numpy
+#     def _transform_impl(self, x, metadata=None):
+#         mode = 'nearest' if self.cur_key == self.label_key else 'trilinear'
+#         x = torch.from_numpy(x).float().unsqueeze(dim=1)    # add channel dim
+#         x = F.interpolate(x, size=self.size, mode=mode)
+#         return x.squeeze(1).numpy()                         # remove channel dim and convert back to numpy

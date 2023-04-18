@@ -18,11 +18,11 @@ from trainer_multi_batch import Trainer
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
-from utils import param_reader
-import utils.transforms.senary_transforms as T6
+from utilities import param_reader
+import utilities.transforms.senary_transforms as T6
 from cnn.dataset import *
-from utils.collate import *
-from utils import plots
+from utilities.collate import *
+import utilities.file_paths_utils as fpu
 
 
 if __name__ == "__main__":
@@ -59,8 +59,8 @@ if __name__ == "__main__":
     val_loader = DataLoader(val_ds, batch_size=P['batch_size'], shuffle=False, num_workers=P['workers'], collate_fn=collate_fn_batch)
     test_loader = DataLoader(test_ds, batch_size=1, shuffle=False, num_workers=3, collate_fn=collate_fn_batch)
 
-    save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'CNN')
-    logger = plots.create_logger(save_dir)
+    save_dir = fpu.create_save_dir(config.get('DATA', 'OUTPUT_PATH'), 'CNN')
+    logger = fpu.create_logger(save_dir)
     writer = SummaryWriter(log_dir=save_dir)
     logger.info(f'Using device {device}')
 

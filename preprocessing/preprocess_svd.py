@@ -11,7 +11,7 @@ import numpy as np
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
-import utils.plots as plots
+import utilities.file_paths_utils as fpu
 from preprocessing.transforms import get_transforms
 import preprocessing.viz as viz
 import preprocessing.nib_utils as nib_utils
@@ -20,7 +20,7 @@ from thirdparty.nnUNet.nnunetv2.dataset_conversion.generate_dataset_json import 
 
 def preprocess_train_split(data, transforms, src_labels_dir, dst_imgs_dir, dst_labels_dir):
     patient_name = data['patient']
-    dst_labels_patient_dir = plots.createSubDirectory(dst_labels_dir, patient_name)
+    dst_labels_patient_dir = fpu.create_sub_dir(dst_labels_dir, patient_name)
 
     nib_label_es = nib.load(osp.join(src_labels_dir, patient_name, patient_name + '_Systole_Labelmap.nii'))
     nib_label_ed = nib.load(osp.join(src_labels_dir, patient_name, patient_name + '_Diastole_Labelmap.nii'))
@@ -44,7 +44,7 @@ def preprocess_train_split(data, transforms, src_labels_dir, dst_imgs_dir, dst_l
 def preprocess_test_split(data, transforms, src_labels_dir, dst_imgs_dir, dst_labels_dir):
     patient_name = data['patient']
     img_xyzt = data['image']
-    dst_labels_patient_dir = plots.createSubDirectory(dst_labels_dir, patient_name)
+    dst_labels_patient_dir = fpu.create_sub_dir(dst_labels_dir, patient_name)
 
     label_xyzt = np.empty(shape=img_xyzt.shape, dtype=img_xyzt.dtype)
     for t in range(label_xyzt.shape[3]):
@@ -84,14 +84,14 @@ if __name__ == '__main__':
     df = pd.read_excel(osp.join(root_dir, 'Segmentation_volumes.xlsx'))
 
     # Output paths
-    save_dir = plots.createSaveDirectory(data_cfg['output_dir'], f'{osp.basename(root_dir)}')
-    plots.save_config(cfg, save_dir)
-    dst_imgs_dir = plots.createSubDirectory(save_dir, data_cfg['dst_images_folder'])
-    dst_labels_dir = plots.createSubDirectory(save_dir, data_cfg['dst_labels_folder'])
+    save_dir = fpu.create_save_dir(data_cfg['output_dir'], f'{osp.basename(root_dir)}')
+    fpu.save_config(cfg, save_dir)
+    dst_imgs_dir = fpu.create_sub_dir(save_dir, data_cfg['dst_images_folder'])
+    dst_labels_dir = fpu.create_sub_dir(save_dir, data_cfg['dst_labels_folder'])
 
     # Preprocessing transforms
     transforms = get_transforms(transforms_cfg)
-    plots.save_transforms_to_json(transforms, osp.join(save_dir, 'transforms.json'))
+    fpu.save_transforms_to_json(transforms, osp.join(save_dir, 'transforms.json'))
 
     pbar = tqdm(total=len(df))
     num_training_casses = 0
@@ -122,7 +122,7 @@ if __name__ == '__main__':
 
         # Save images
         if viz_cfg.getboolean('save_png'):
-            viz_dir = plots.createSubDirectory(osp.join(save_dir, viz_cfg['viz_dir']), patient_name)
+            viz_dir = fpu.create_sub_dir(osp.join(save_dir, viz_cfg['viz_dir']), patient_name)
             viz.save_png(data, viz_cfg=viz_cfg, save_dir=viz_dir)
             if viz_cfg.getboolean('save_gif'):
                 viz.save_gif(viz_dir, viz_cfg.getint('dur_gif'))

@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from ellipse import Ellipsoid
 from transforms import rotx, roty, rotz
-import utils
+import utilities
 from tqdm import trange
 import sys
 
@@ -39,7 +39,7 @@ def combine_voxels(ellipsoids):
 
 # Size of voxel map
 NZ, NY, NX = 16, 352, 352
-grid = utils.create_grid(NZ, NY, NX)
+grid = utilities.create_grid(NZ, NY, NX)
 
 e1A = Ellipsoid(cx=0, cy=0, cz=0, rx=90, ry=150, rz=9, angx=0, angy=0, angz=0)
 e1A.create_voxels(grid, False, value1=0.1, value2=0.3)
@@ -92,8 +92,8 @@ for i in trange(ts):
 
 
 # img_t0 = combine_voxels(e)
-utils.plot_slices(imgA, str="A", block=False)
-utils.plot_slices(imgB, str="B", block=True)
+utilities.plot_slices(imgA, str="A", block=False)
+utilities.plot_slices(imgB, str="B", block=True)
 # utils.plot_slices(img_t0, str="t0", block=True)
 
 # fig = plt.figure()

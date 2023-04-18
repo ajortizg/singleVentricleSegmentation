@@ -10,9 +10,9 @@ from tqdm import tqdm
 
 
 sys.path.append("../utils")
-from utils.plots import *
+from utilities.plots import *
 # from utils.config import *
-from utils.flow_viz import *
+from utilities.flow_viz import *
 # utils_lib_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../utils'))
 # sys.path.append(utils_lib_path)
 
@@ -304,12 +304,12 @@ class TVL1OpticalFlow2D:
                 progress_bar.update(1)
  
             if self.useDebugOutput:
-                saveCurve1D(primalFctVec, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"PrimalFct_it{s}_warp{w}")
-                saveCurve1D(dualFctVec, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"DualFct_it{s}_warp{w}")
-                saveCurve1D(totalFctVec, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"TotalFct_it{s}_warp{w}")
-                saveCurve1D(breakConditionVecPrimal, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"CPErrorPrimal_it{s}_warp{w}", "loglog")
-                saveCurve1D(breakConditionVecDual, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"CPErrorDual_it{s}_warp{w}", "loglog")
-                saveCurve1D(breakConditionVecUpdate, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"CPErrorUpdate_it{s}_warp{w}", "loglog")
+                save_curve_1d(primalFctVec, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"PrimalFct_it{s}_warp{w}")
+                save_curve_1d(dualFctVec, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"DualFct_it{s}_warp{w}")
+                save_curve_1d(totalFctVec, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"TotalFct_it{s}_warp{w}")
+                save_curve_1d(breakConditionVecPrimal, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"CPErrorPrimal_it{s}_warp{w}", "loglog")
+                save_curve_1d(breakConditionVecDual, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"CPErrorDual_it{s}_warp{w}", "loglog")
+                save_curve_1d(breakConditionVecUpdate, self.MAX_OUTER_ITERATIONS, self.saveDirDebug, f"CPErrorUpdate_it{s}_warp{w}", "loglog")
 
         return u, p
 
@@ -321,12 +321,12 @@ class TVL1OpticalFlow2D:
             os.makedirs(saveDirStep)
 
         plotOpticalFlow2D(u.cpu().detach().numpy(), "u", saveDirStep, step)
-        saveImage(I0,saveDirStep,f"I0_it{step}.png")
-        saveImage(I1,saveDirStep,f"I1_it{step}.png")
+        save_image(I0,saveDirStep,f"I0_it{step}.png")
+        save_image(I1,saveDirStep,f"I1_it{step}.png")
         warpingOp = opticalFlow.Warping2D(meshInfo,self.InterpolationTypeCuda,self.BoundaryTypeCuda)
         I1_warped = warpingOp.forward(I1,u)
-        saveImage(I1_warped,saveDirStep,f"I1_warped_it{step}.png")
-        saveImage(torch.abs(I1_warped-I0),saveDirStep,f"Diff_I1warped_to_I0_it{step}.png")
+        save_image(I1_warped,saveDirStep,f"I1_warped_it{step}.png")
+        save_image(torch.abs(I1_warped-I0),saveDirStep,f"Diff_I1warped_to_I0_it{step}.png")
         
         flowName = f"flow_it{step}.pt"
         fileNameFlow = os.path.join(saveDirStep, flowName) 

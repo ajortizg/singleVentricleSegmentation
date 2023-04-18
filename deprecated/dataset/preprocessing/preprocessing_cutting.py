@@ -9,7 +9,7 @@ import os.path as osp
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../../'))
 sys.path.append(ROOT_DIR)
-from utils import plots
+from utilities import plots
 from dataset import singleVentricleDataset
 
 __all__ = ['cut_patient']
