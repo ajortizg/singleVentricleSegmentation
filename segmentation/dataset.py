@@ -24,7 +24,7 @@ class SegmentationDataset(Dataset):
 
             if fold_idxs is not None:
                 self.img_paths = np.array(self.img_paths)[fold_idxs].tolist()
-                self.label_paths = np.array(self.img_paths)[fold_idxs].tolist()
+                self.label_paths = np.array(self.label_paths)[fold_idxs].tolist()
         elif mode == 'test':
             raise NotImplementedError(self.__class__.__name__ + ' test no implemented yet')
         else:

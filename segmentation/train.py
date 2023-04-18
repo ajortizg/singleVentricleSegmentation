@@ -30,27 +30,23 @@ from utilities import stuff
 from cnn.models.model_factory import create_model, save_model
 from segmentation.dataset import SegmentationDataset
 import segmentation.transforms as T
-from segmentation import utils
+import segmentation.utils as utils
 
 
 def create_dataloaders(config, fold):
-    img_sz = config.getint('PARAMETERS', 'IMG_SIZE')
-    num_classes = config.getint('PARAMETERS', 'NUM_CLASSES')
-    data_aug = config['DATA_AUGMENTATION']
+    train_transforms, val_transforms = utils.get_transforms(config)
 
-    train_transforms = utils.train_transforms(config)
+    root_dir = config.get('DATA', 'root_dir')
+    batch_size = config.getint('PARAMETERS', 'batch_size')
+    workers = config.getint('PARAMETERS', 'num_workers')
 
-    root_dir = config.get('DATA', 'BASE_PATH_3D')
-    batch_size = config.getint('PARAMETERS', 'BATCH_SIZE')
-    workers = config.getint('PARAMETERS', 'NUM_WORKERS')
-
-    train_ds = SVDataset(root_dir, mode='train', transforms=train_transforms, fold_indices=fold['train'])
-    val_ds = SVDataset(root_dir, mode='train', transforms=val_transforms, fold_indices=fold['val'])
-    test_ds = SVDataset(root_dir, mode='test', transforms=val_transforms)
-    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=workers, collate_fn=SVDataset.collate_fn)
-    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=workers, collate_fn=SVDataset.collate_fn)
-    test_loader = DataLoader(test_ds, batch_size=1, shuffle=False, num_workers=1, collate_fn=SVDataset.collate_fn)
-    return train_loader, val_loader, test_loader
+    train_ds = SegmentationDataset(root_dir, 'train', train_transforms, fold['train'])
+    val_ds = SegmentationDataset(root_dir, 'train', val_transforms, fold['val'])
+    # test_ds = SegmentationDataset(root_dir, 'test', val_transforms)
+    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=workers)
+    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=workers)
+    # test_loader = DataLoader(test_ds, batch_size=1, shuffle=False, num_workers=1)
+    return train_loader, val_loader
 
 
 def train(net, loss_fn, opt, loader, device):
@@ -58,21 +54,20 @@ def train(net, loss_fn, opt, loader, device):
     report = pd.DataFrame(columns=['Loss', 'Dice'])
 
     for data in loader:
-        img = data['img'].to(device)
-        mask = data['mask'].to(device)
+        img = data['image'].to(device)
+        label = data['label'].to(device)
 
-        for k in range(2):
-            logits, _ = net(img[..., k])
-            loss = loss_fn(logits, mask[..., k])
-            opt.zero_grad()
-            loss.backward()
-            opt.step()
+        logits, _ = net(img)
+        loss = loss_fn(logits, label)
+        opt.zero_grad()
+        loss.backward()
+        opt.step()
 
-            with torch.no_grad():
-                pred = torch.softmax(logits, dim=1)
-                pred = torch.where(pred > 0.5, 1.0, 0.0)
-                dice = compute_dice(pred, mask[..., k], include_background=False).mean()
-                report.loc[len(report)] = [loss.item(), dice.item()]
+        with torch.no_grad():
+            pred = torch.softmax(logits, dim=1)
+            pred = torch.where(pred > 0.5, 1.0, 0.0)
+            dice = compute_dice(pred, label, include_background=False).mean()
+            report.loc[len(report)] = [loss.item(), dice.item()]
     return report
 
 
@@ -82,17 +77,16 @@ def validate(net, loss_fn, loader, device):
     report = pd.DataFrame(columns=['Loss', 'Dice'])
 
     for data in loader:
-        img = data['img'].to(device)
-        mask = data['mask'].to(device)
+        img = data['image'].to(device)
+        label = data['label'].to(device)
 
-        for k in range(2):
-            logits, _ = net(img[..., k])
-            loss = loss_fn(logits, mask[..., k])
+        logits, _ = net(img)
+        loss = loss_fn(logits, label)
 
-            pred = torch.softmax(logits, dim=1)
-            pred = torch.where(pred > 0.5, 1.0, 0.0)
-            dice = compute_dice(pred, mask[..., k], include_background=False).mean()
-            report.loc[len(report)] = [loss.item(), dice.item()]
+        pred = torch.softmax(logits, dim=1)
+        pred = torch.where(pred > 0.5, 1.0, 0.0)
+        dice = compute_dice(pred, label, include_background=False).mean()
+        report.loc[len(report)] = [loss.item(), dice.item()]
     return report
 
 
@@ -102,8 +96,9 @@ def test(net, loader, device):
     report = pd.DataFrame(columns=['Dice'])
 
     for data in loader:
-        img = data['img'].to(device).squeeze(0)
-        mask = data['mask'].to(device).squeeze(0)
+        img = data['image'].to(device).squeeze(0)
+        mask = data['label'].to(device).squeeze(0)
+        # TODO: check the shape
         img = torch.permute(img, (4, 0, 1, 2, 3))
         mask = torch.permute(mask, (4, 0, 1, 2, 3))
 
@@ -123,8 +118,8 @@ if __name__ == '__main__':
     config.read('parser/seg_train.ini')
     data_cfg = config['DATA']
 
-    fold, n = get_fold(data_cfg)
-    train_loader, val_loader, test_loader = create_dataloaders(config, fold)
+    fold, n = utils.get_fold(data_cfg)
+    train_loader, val_loader = create_dataloaders(config, fold)
 
     save_dir = fpu.create_save_dir(data_cfg['output_dir'], f'fold_{n}')
     fpu.save_config(config, save_dir)
@@ -139,15 +134,15 @@ if __name__ == '__main__':
     # loss_fn = nn.BCEWithLogitsLoss()
     # loss_fn = nn.CrossEntropyLoss()
     loss_fn = DiceCELoss(softmax=True, lambda_dice=0.4, lambda_ce=0.6)
-    optimizer = optim.Adam(net.parameters(), lr=config.getfloat('PARAMETERS', 'LR'), weight_decay=config.getfloat('PARAMETERS', 'WEIGHT_DECAY'))
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=config.getint('PARAMETERS', 'STEP_SIZE'), gamma=config.getfloat('PARAMETERS', 'GAMMA'))
+    optimizer = optim.Adam(net.parameters(), lr=config.getfloat('PARAMETERS', 'lr'), weight_decay=config.getfloat('PARAMETERS', 'weight_decay'))
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=config.getint('PARAMETERS', 'step_size'), gamma=config.getfloat('PARAMETERS', 'gamma'))
 
     H = {'train_loss': [], 'train_dice': [], 'val_loss': [], 'val_dice': [], 'test_dice': []}
     epochs_since_last_improvement = 0
     best_dice = 0.0
 
-    num_epochs = config.getint('PARAMETERS', 'NUM_EPOCHS')
-    patience = config.getint('PARAMETERS', 'PATIENCE')
+    num_epochs = config.getint('PARAMETERS', 'num_epochs')
+    patience = config.getint('PARAMETERS', 'patience')
     tic = time.time()
     for e in tqdm(range(1, num_epochs + 1)):
         epoch_tic = time.time()
@@ -159,8 +154,9 @@ if __name__ == '__main__':
         H['val_loss'].append(report['Loss'].mean())
         H['val_dice'].append(report['Dice'].mean())
 
-        report = test(net, test_loader, device)
-        H['test_dice'].append(report['Dice'].mean())
+        # report = test(net, test_loader, device)
+        # H['test_dice'].append(report['Dice'].mean())
+        H['test_dice'].append(0)
 
         writer.add_scalar('lr', optimizer.param_groups[0]['lr'], e)
         scheduler.step()

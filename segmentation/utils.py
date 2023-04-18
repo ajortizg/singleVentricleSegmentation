@@ -19,7 +19,7 @@ def get_fold(config):
 def get_transforms(config):
     img_sz = config.getint('PARAMETERS', 'img_size')
     num_classes = config.getint('PARAMETERS', 'num_classes')
-    # data_aug = config['DATA_AUGMENTATION']
+    data_aug = config['DATA_AUGMENTATION']
 
     train_transforms = T.Compose([
         T.AddNLeadingDims(n=2, keys=['image', 'label']),
@@ -55,7 +55,7 @@ def get_transforms(config):
         T.CropForeground(keys=['image', 'label'], label_key='label'),
         T.QuadraticNormalization(q2=99, use_label=True, keys=['image'], label_key='label'),
         T.Resize(1.0, (img_sz, img_sz, img_sz), keys=['image', 'label']),
-        T.OneHotEncoding(num_classes),
+        T.OneHotEncoding(num_classes, keys=['label']),
         T.RemoveNLeadingDims(n=1, keys=['image', 'label']),
         T.ToTensor()
     ])

@@ -214,26 +214,6 @@ class BCXYZ_To_BCZYX(BaseTransform):
     def _transform_impl(self, x, metadata=None):
         return np.transpose(x, (0, 1, 4, 3, 2))
 
-# class CXYZ_To_CZYX(BaseTransform):
-#     def __init__(self, keys=['image', 'label']):
-#         super(CXYZ_To_CZYX, self).__init__(keys)
-
-#     def __call__(self, data):
-#         return super().apply_transform(data)
-
-#     def _transform_impl(self, x, metadata=None):
-#         return np.transpose(x, (0, 3, 2, 1))
-
-
-# class CZYX_To_CXYZ(BaseTransform):
-#     def __init__(self, keys=['image', 'label']):
-#         super(CZYX_To_CXYZ, self).__init__(keys)
-
-#     def __call__(self, data):
-#         return super().apply_transform(data)
-
-#     def _transform_impl(self, x, metadata=None):
-#         return np.transpose(x, (0, 3, 2, 1))
 
 # -----------------------------------------------------------
 #               Intensity transformations
