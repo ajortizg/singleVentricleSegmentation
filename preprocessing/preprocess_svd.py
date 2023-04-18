@@ -8,7 +8,6 @@ from tqdm import tqdm
 import nibabel as nib
 import numpy as np
 
-
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 import utilities.file_paths_utils as fpu
@@ -34,9 +33,9 @@ def preprocess_train_split(data, transforms, src_labels_dir, dst_imgs_dir, dst_l
     data = transforms(data)
 
     nib_utils.save_np_to_nifty(data['image'], dst_imgs_dir, f'{patient_name}.nii.gz', data['image_nib'].affine, data['image_nib'].header)
-    nib_utils.save_np_to_nifty(data['label'][0], dst_labels_patient_dir, f'{patient_name}_Systole_Labelmap.nii.gz', data['label_es_nib'].affine,
+    nib_utils.save_np_to_nifty(data['label'][..., 0], dst_labels_patient_dir, f'{patient_name}_Systole_Labelmap.nii.gz', data['label_es_nib'].affine,
                                data['label_es_nib'].header)
-    nib_utils.save_np_to_nifty(data['label'][1], dst_labels_patient_dir, f'{patient_name}_Diastole_Labelmap.nii.gz', data['label_ed_nib'].affine,
+    nib_utils.save_np_to_nifty(data['label'][..., 1], dst_labels_patient_dir, f'{patient_name}_Diastole_Labelmap.nii.gz', data['label_ed_nib'].affine,
                                data['label_ed_nib'].header)
     return data
 

@@ -121,7 +121,7 @@ class ToTensor(BaseTransform):
 
 
 class AddDimAt(BaseTransform):
-    def __init__(self, axis=0, keys=['image', 'label']):
+    def __init__(self, axis, keys=['image', 'label']):
         super(AddDimAt, self).__init__(keys)
         self.axis = axis
 
@@ -130,6 +130,18 @@ class AddDimAt(BaseTransform):
 
     def _transform_impl(self, x, metadata=None):
         return np.expand_dims(x, axis=self.axis)
+
+
+class RemoveDimAt(BaseTransform):
+    def __init__(self, axis, keys=['image', 'label']):
+        super(RemoveDimAt, self).__init__(keys)
+        self.axis = axis
+
+    def __call__(self, data):
+        return super().apply_transform(data)
+
+    def _transform_impl(self, x, metadata=None):
+        return np.squeeze(x, axis=self.axis)
 
 
 class AddNLeadingDims(BaseTransform):
@@ -172,6 +184,10 @@ class RemoveNLeadingDims(BaseTransform):
 
 class OneHotEncoding(BaseTransform):
     def __init__(self, n, keys=['label']):
+        """
+        Args:
+            n: Number of classes
+        """
         super(OneHotEncoding, self).__init__(keys)
         self.tr = monai.transforms.AsDiscrete(to_onehot=n)
         self.n = n
@@ -181,7 +197,7 @@ class OneHotEncoding(BaseTransform):
 
     def _transform_impl(self, x, metadata=None):
         bs, ch, d1, d2, d3 = x.shape
-        assert ch == 1
+        assert ch == 1, 'Labels must have a channel dimension of len 1'
         x_onehot = np.zeros((bs, self.n, d1, d2, d3), dtype=np.float32)
         for b in range(bs):
             x_onehot[b] = self.tr(x[b]).numpy()
@@ -256,7 +272,6 @@ class ZScoreNormalization(BaseTransform):
         return x
 
 
-# This function is incompatible with of+unet
 class QuadraticNormalization(BaseTransform):
     def __init__(self, q2=95, use_label=True, keys=['image'], label_key='label'):
         super(QuadraticNormalization, self).__init__(keys)
@@ -265,13 +280,29 @@ class QuadraticNormalization(BaseTransform):
         self.use_label = use_label
 
     def __call__(self, data):
-        self.label = data[self.label_key]
+        self.label = data[self.label_key].copy()
+        bs = self.label.shape[0]
+        if bs == 1:
+            self.t = None
+        elif bs == 2:
+            self.t = [data['es'], data['ed']]
+        elif bs > 2:
+            self.t = [data['es'], data['ed']]
+            self.label = self.label[self.t]
+        else:
+            # this should not happen
+            self.t = None
+            raise ValueError('There is something strange with bs in QuadraticNormalization')
+
         return super().apply_transform(data)
 
     def _transform_impl(self, x, metadata=None):
         per2 = np.percentile(x, self.q2)
         x = np.clip(x, 0, per2)
-        avg = np.mean(x, where=self.label.astype('bool')) if self.use_label else np.mean(x)
+        if self.t is not None:
+            avg = np.mean(x[self.t], where=self.label.astype('bool')) if self.use_label else np.mean(x)
+        else:
+            avg = np.mean(x, where=self.label.astype('bool')) if self.use_label else np.mean(x)
         # normalization n(I) = a I/sqrt(1+beta I**2)
         norm_a = np.sqrt(per2 * per2 - avg * avg) / (np.sqrt(3) * per2 * avg)
         norm_b = (per2 * per2 - 4. * avg * avg) / (3. * per2 * per2 * avg * avg)
@@ -410,10 +441,11 @@ class GaussialBlur(BaseTransform):
 
     def _transform_impl(self, x, metadata=None):
         sigma = np.random.uniform(self.sigma_range[0], self.sigma_range[1])
-        batch_dim, chan_dim = x.shape[:2]
-        for b in range(batch_dim):
-            for c in range(chan_dim):
-                x[b, c] = ndimage.gaussian_filter(x[b, c], sigma, order=0)
+        # batch_dim, chan_dim = x.shape[:2]
+        # for b in range(batch_dim):
+        # for c in range(chan_dim):
+        # x[b, c] = ndimage.gaussian_filter(x[b, c], sigma, order=0)
+        x = ndimage.gaussian_filter(x, sigma, order=0)
         return x
 
 
@@ -888,3 +920,63 @@ class SpatialTransform(BaseTransform):
 
 #     def __repr__(self) -> str:
 #         return f"{self.__class__.__name__}()"
+
+
+# -----------------------------------------------------------
+#              Optical flow + UNet transformations
+# -----------------------------------------------------------
+# All transforms assume images and labels with shape (T, C, Z, Y, X)
+# and flow with shape (T, 3, Z, Y, X)
+
+# Note: The data is saved as:
+# imgs: xyzt
+# mask: xyzt
+# flow: t3xyz
+
+
+class XYZT_To_TZYX(BaseTransform):
+    def __init__(self, keys=['image', 'label']):
+        super().__init__(keys)
+
+    def __call__(self, data):
+        return super().apply_transform(data)
+
+    def _transform_impl(self, x, metadata=None):
+        return np.transpose(x, (3, 2, 1, 0))
+
+
+class TZYX_To_XYZT(BaseTransform):
+    def __init__(self, keys=['image', 'label']):
+        super().__init__(keys)
+
+    def __call__(self, data):
+        return super().apply_transform(data)
+
+    def _transform_impl(self, x, metadata=None):
+        return np.transpose(x, (3, 2, 1, 0))
+
+
+class Flow_T3XYZ_To_T3ZYX(BaseTransform):
+    def __init__(self, keys=['forward_flow', 'backward_flow']):
+        super().__init__(keys)
+
+    def __call__(self, data):
+        return super().apply_transform(data)
+
+    def _transform_impl(self, x, metadata=None):
+        return np.transpose(x, (0, 1, 4, 3, 2))
+
+
+class FlowChannelToLastDim(BaseTransform):
+    """
+    Expects optical flow with shape (t,3,z,y,x)
+    """
+
+    def __init__(self, keys=['forward_flow', 'backward_flow']):
+        super().__init__(keys)
+
+    def __call__(self, data):
+        return super().apply_transform(data)
+
+    def _transform_impl(self, x, metadata=None):
+        return np.transpose(x, (0, 2, 3, 4, 1))

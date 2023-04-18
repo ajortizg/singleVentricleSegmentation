@@ -16,7 +16,7 @@ ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 from utilities import file_paths_utils as fpu
 from TVL1OF.dataset import FlowUNetDataset, get_bounds
-import TVL1OF.transforms as T
+import segmentation.transforms as T
 from cnn.warp import WarpCNN
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -32,6 +32,7 @@ if __name__ == '__main__':
     transforms = T.Compose([
         T.XYZT_To_TZYX(keys=['image','label']),
         T.Flow_T3XYZ_To_T3ZYX(keys=['forward_flow', 'backward_flow']),
+        T.FlowChannelToLastDim(keys=['forward_flow', 'backward_flow']),
         T.ToTensor(keys=['image', 'label', 'forward_flow', 'backward_flow'])
     ])
     dset = FlowUNetDataset(data_cfg['root_dir'], 'full', transforms, load_flow=True)

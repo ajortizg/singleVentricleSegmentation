@@ -23,11 +23,11 @@ if __name__ == '__main__':
     # stuff.seeding(42)
     transforms = T.Compose([
         T.AddNLeadingDims(n=2, keys=['image', 'label']),
-        # T.BCXYZ_To_BCZYX(keys=['image', 'label']),
-        # T.ToRAS(keys=['image', 'label']),
-        # T.CropForeground(keys=['image', 'label'], label_key='label'),
-        # T.QuadraticNormalization(q2=99, use_label=True, keys=['image'], label_key='label'),
-        # T.Resize(1.0, (96, 96, 96), keys=['image', 'label']),
+        T.BCXYZ_To_BCZYX(keys=['image', 'label']),
+        T.ToRAS(keys=['image', 'label']),
+        T.CropForeground(keys=['image', 'label'], label_key='label'),
+        T.QuadraticNormalization(q2=99, use_label=True, keys=['image'], label_key='label'),
+        T.Resize(1.0, (96, 96, 96), keys=['image', 'label']),
 
         # T.RandomRotate(0.2, (-30, 30), (-30, 30), (-30, 30), keys=['image', 'label'], label_key='label'),
         # T.RandomScale(0.2, (0.7, 1.4), keys=['image', 'label'], label_key='label'),
@@ -37,15 +37,16 @@ if __name__ == '__main__':
         # T.ElasticDeformation(0.1, (0.5, 2.0), 8, 'constant', 'zyx'),
 
         # T.AdditiveGaussianNoise(0.1, sigma_range=(0.0, 0.1), mu=0.0, keys=['image']),
-        # T.GaussialBlur(0.2, sigma_range=(0.5, 1.), keys=['image']),
+        T.GaussialBlur(1.0, sigma_range=(0.5, 1.), keys=['image']),
         # T.MultiplicativeScaling(0.15, (0.75, 1.25), keys=['image']),
         # T.ContrastAugmentation(0.15, (0.75, 1.25), keys=['image']),
         # T.GammaCorrection(0.1, (0.7, 1.5), True, True, keys=['image']),
         # T.GammaCorrection(0.3, (0.7, 1.5), False, True, keys=['image']),
        
-        # T.Resize(1.0, (16, 96, 96), keys=['image', 'label']),  # For vizualization
-        # T.RemoveNLeadingDims(n=2, keys=['image', 'label']),
-        T.OneHotEncoding(n=2, keys=['label']),
+        T.Resize(1.0, (16, 96, 96), keys=['image', 'label']),  # For vizualization
+        
+        # T.OneHotEncoding(n=2, keys=['label']),
+        T.RemoveNLeadingDims(n=1, keys=['image', 'label']),
         T.ToTensor(keys=['image', 'label'])
     ])
 
@@ -56,16 +57,16 @@ if __name__ == '__main__':
 
     pbar = tqdm(total=len(ds))
     for i, data in enumerate(ds):
-        # img = data['image']
+        img = data['image']
         label = data['label']
 
         print(label.shape)
 
-        # plots.save_overlaped_img_mask(img,
-        #                               label,
-        #                               f'img_{i}.png',
-        #                               save_dir,
-        #                               alpha=0.3)
+        plots.save_overlaped_img_mask(img.squeeze(0),
+                                      label.squeeze(0),
+                                      f'img_{i}.png',
+                                      save_dir,
+                                      alpha=0.3)
         # plots.save_img_masks(img.squeeze(0),
         #                      [label.squeeze(0)],
         #                      f'img_{i}.png',

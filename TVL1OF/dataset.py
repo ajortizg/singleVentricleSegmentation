@@ -101,7 +101,7 @@ class FlowUNetDataset(Dataset):
             for d in directions:
                 key = d + '_flow'
                 data[key] = np.load(osp.join(self.root_dir, 'optical_flow', d, f'{patient_name}_{d}_flow.npy'))
-                data[key + '_meta'] = None
+                data[key + '_meta'] = 0
 
         # Apply transformations to data
         if self.transforms is not None:

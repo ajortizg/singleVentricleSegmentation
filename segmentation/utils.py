@@ -16,25 +16,25 @@ def get_fold(config):
     return create_5fold(len(dataset))[fold], fold
 
 
-def train_transforms(config):
-    # img_sz = config.getint('PARAMETERS', 'img_size')
-    # num_classes = config.getint('PARAMETERS', 'num_classes')
+def get_transforms(config):
+    img_sz = config.getint('PARAMETERS', 'img_size')
+    num_classes = config.getint('PARAMETERS', 'num_classes')
     # data_aug = config['DATA_AUGMENTATION']
 
-    transforms = T.Compose([
+    train_transforms = T.Compose([
         T.AddNLeadingDims(n=2, keys=['image', 'label']),
         T.BCXYZ_To_BCZYX(keys=['image', 'label']),
         T.ToRAS(keys=['image', 'label']),
         T.CropForeground(keys=['image', 'label'], label_key='label'),
         T.QuadraticNormalization(q2=99, use_label=True, keys=['image'], label_key='label'),
-        T.Resize(1.0, (96, 96, 96), keys=['image', 'label']),
+        T.Resize(1.0, (img_sz, img_sz, img_sz), keys=['image', 'label']),
 
         T.RandomRotate(0.2, (-30, 30), (-30, 30), (-30, 30), keys=['image', 'label'], label_key='label'),
         T.RandomScale(0.2, (0.7, 1.4), keys=['image', 'label'], label_key='label'),
         T.RandomFlip(0.5, 2, keys=['image', 'label']),
         T.RandomFlip(0.5, 3, keys=['image', 'label']),
         T.RandomFlip(0.5, 4, keys=['image', 'label']),
-        T.ElasticDeformation(0.1, (0.5, 2.0), 8, 'constant', 'zyx'),
+        T.ElasticDeformation(0.1, (0.5, 2.0), 8, 'constant', 'zyx', keys=['image', 'label'], label_key='label'),
 
         T.AdditiveGaussianNoise(0.1, sigma_range=(0.0, 0.1), mu=0.0, keys=['image']),
         T.GaussialBlur(0.2, sigma_range=(0.5, 1.), keys=['image']),
@@ -43,11 +43,24 @@ def train_transforms(config):
         T.GammaCorrection(0.1, (0.7, 1.5), True, True, keys=['image']),
         T.GammaCorrection(0.3, (0.7, 1.5), False, True, keys=['image']),
 
+        T.OneHotEncoding(num_classes, keys=['label']),
         T.RemoveNLeadingDims(n=1, keys=['image', 'label']),
         T.ToTensor(keys=['image', 'label'])
     ])
 
-    return transforms
+    val_transforms = T.Compose([
+        T.AddNLeadingDims(n=2, keys=['image', 'label']),
+        T.BCXYZ_To_BCZYX(keys=['image', 'label']),
+        T.ToRAS(keys=['image', 'label']),
+        T.CropForeground(keys=['image', 'label'], label_key='label'),
+        T.QuadraticNormalization(q2=99, use_label=True, keys=['image'], label_key='label'),
+        T.Resize(1.0, (img_sz, img_sz, img_sz), keys=['image', 'label']),
+        T.OneHotEncoding(num_classes),
+        T.RemoveNLeadingDims(n=1, keys=['image', 'label']),
+        T.ToTensor()
+    ])
+
+    return train_transforms, val_transforms
 
 
 #   train_transforms = T.Compose([
