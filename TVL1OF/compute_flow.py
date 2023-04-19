@@ -14,6 +14,7 @@ from TVL1OF3D import *
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 from utilities import file_paths_utils as fpu
+from utilities import stuff
 from TVL1OF.dataset import FlowUNetDataset, get_bounds
 import segmentation.transforms as T
 
@@ -54,8 +55,6 @@ def optical_flow(data, mode, cfg, save_dir, pbar):
     # torch.cuda.empty_cache()
     return report
 
-    # xyzt3
-
 
 if __name__ == '__main__':
     # Read configuration parameters
@@ -66,8 +65,8 @@ if __name__ == '__main__':
 
     # Create save directory and console logger
     mode = param_cfg.get('mode').lower()
-    save_dir = fpu.createSaveDirectory(data_cfg.get('output_path'), f'TVL1OF3D{mode}')
-    logger = fpu.create_logger(save_dir)
+    save_dir = fpu.create_save_dir(data_cfg.get('output_path'), f'TVL1OF3D{mode}')
+    logger = stuff.create_logger(save_dir)
     logger.info(f'Compute TV-L1 optical flow ({mode})')
     fpu.save_config(cfg, save_dir)
 

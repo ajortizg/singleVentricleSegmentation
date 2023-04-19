@@ -5,6 +5,7 @@ from glob import glob
 from torch.utils.data import Dataset
 import nibabel as nib
 import numpy as np
+import pandas as pd
 
 
 class SegmentationDataset(Dataset):
@@ -16,6 +17,7 @@ class SegmentationDataset(Dataset):
         """
         self.transforms = transforms
         self.json_ds = self.read_json(osp.join(root_dir, 'dataset.json'))
+        self.test_json = None
 
         if mode == 'train':
             self.img_paths = sorted(glob(osp.join(root_dir, 'imagesTr', f'*{self.file_ending()}')))
@@ -26,31 +28,39 @@ class SegmentationDataset(Dataset):
                 self.img_paths = np.array(self.img_paths)[fold_idxs].tolist()
                 self.label_paths = np.array(self.label_paths)[fold_idxs].tolist()
         elif mode == 'test':
-            raise NotImplementedError(self.__class__.__name__ + ' test no implemented yet')
+            self.img_paths = sorted(glob(osp.join(root_dir, 'imagesTs', f'*{self.file_ending()}')))
+            self.label_paths = sorted(glob(osp.join(root_dir, 'labelsTs', f'*{self.file_ending()}')))
+            self.test_json = self.read_json(osp.join(root_dir, 'test.json'))
         else:
             raise ValueError('{} is not a valid mode. Use train or test'.format(mode))
-        
 
     def __len__(self):
         return len(self.img_paths)
 
     def __getitem__(self, idx):
-        # Read image
+        # Read image in xyz or xyzt order for train and test respectively
         nib_image = nib.load(self.img_paths[idx])
-        image_xyz = nib_image.get_fdata()
+        image = nib_image.get_fdata()
 
-        # Read mask
+        # Read mask in xyz or xyzt order for train and test respectively
         nib_label = nib.load(self.label_paths[idx])
-        label_xyz = nib_label.get_fdata()
+        label = nib_label.get_fdata()
 
         # Read metadata
         image_meta = {'affine': nib_image.affine}
         label_meta = {'affine': nib_label.affine}
 
-        data = {'image': image_xyz,
-                'label': label_xyz,
+        data = {'image': image,
+                'label': label,
                 'image_meta': image_meta,
                 'label_meta': label_meta}
+
+        # Read some metada for the test split
+        if self.test_json is not None:
+            img_file = osp.basename(self.img_paths[idx])
+            data['es'] = self.test_json[img_file]['es']
+            data['ed'] = self.test_json[img_file]['ed']
+            data['patient'] = self.test_json[img_file]['patient']
 
         if self.transforms is not None:
             data = self.transforms(data)

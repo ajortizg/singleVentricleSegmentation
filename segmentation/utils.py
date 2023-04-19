@@ -28,14 +28,14 @@ def get_transforms(config):
         T.CropForeground(keys=['image', 'label'], label_key='label'),
         T.QuadraticNormalization(q2=99, use_label=True, keys=['image'], label_key='label'),
         T.Resize(1.0, (img_sz, img_sz, img_sz), keys=['image', 'label']),
-
+        # Geometric transformations
         T.RandomRotate(0.2, (-30, 30), (-30, 30), (-30, 30), keys=['image', 'label'], label_key='label'),
         T.RandomScale(0.2, (0.7, 1.4), keys=['image', 'label'], label_key='label'),
         T.RandomFlip(0.5, 2, keys=['image', 'label']),
         T.RandomFlip(0.5, 3, keys=['image', 'label']),
         T.RandomFlip(0.5, 4, keys=['image', 'label']),
         T.ElasticDeformation(0.1, (0.5, 2.0), 8, 'constant', 'zyx', keys=['image', 'label'], label_key='label'),
-
+        # Intensity transformations
         T.AdditiveGaussianNoise(0.1, sigma_range=(0.0, 0.1), mu=0.0, keys=['image']),
         T.GaussialBlur(0.2, sigma_range=(0.5, 1.), keys=['image']),
         T.MultiplicativeScaling(0.15, (0.75, 1.25), keys=['image']),
@@ -57,10 +57,21 @@ def get_transforms(config):
         T.Resize(1.0, (img_sz, img_sz, img_sz), keys=['image', 'label']),
         T.OneHotEncoding(num_classes, keys=['label']),
         T.RemoveNLeadingDims(n=1, keys=['image', 'label']),
-        T.ToTensor()
+        T.ToTensor(keys=['image', 'label'])
     ])
 
-    return train_transforms, val_transforms
+    test_transforms = T.Compose([
+        T.XYZT_To_TZYX(keys=['image', 'label']),
+        T.AddDimAt(axis=1, keys=['image', 'label']),
+        T.ToRAS(keys=['image', 'label']),
+        T.CropForeground(keys=['image', 'label'], label_key='label'),
+        T.QuadraticNormalization(q2=99, use_label=True, keys=['image'], label_key='label'),
+        T.Resize(1.0, (img_sz, img_sz, img_sz), keys=['image', 'label']),
+        T.OneHotEncoding(num_classes, keys=['label']),
+        T.ToTensor(keys=['image', 'label'])
+    ])
+
+    return train_transforms, val_transforms, test_transforms
 
 
 #   train_transforms = T.Compose([

@@ -3,7 +3,6 @@ import configparser
 import time
 import sys
 
-
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -13,9 +12,7 @@ import torch.optim as optim
 import torch.backends.cudnn as cudnn
 from torch.utils.tensorboard import SummaryWriter
 from monai.metrics.meandice import compute_dice
-from monai.metrics import DiceMetric
 from monai.metrics.hausdorff_distance import compute_hausdorff_distance
-
 from monai.losses import DiceCELoss
 import matplotlib.pyplot as plt
 from terminaltables import AsciiTable
@@ -29,12 +26,11 @@ import utilities.file_paths_utils as fpu
 from utilities import stuff
 from cnn.models.model_factory import create_model, save_model
 from segmentation.dataset import SegmentationDataset
-import segmentation.transforms as T
 import segmentation.utils as utils
 
 
 def create_dataloaders(config, fold):
-    train_transforms, val_transforms = utils.get_transforms(config)
+    train_transforms, val_transforms, test_transforms = utils.get_transforms(config)
 
     root_dir = config.get('DATA', 'root_dir')
     batch_size = config.getint('PARAMETERS', 'batch_size')
@@ -42,11 +38,11 @@ def create_dataloaders(config, fold):
 
     train_ds = SegmentationDataset(root_dir, 'train', train_transforms, fold['train'])
     val_ds = SegmentationDataset(root_dir, 'train', val_transforms, fold['val'])
-    # test_ds = SegmentationDataset(root_dir, 'test', val_transforms)
+    test_ds = SegmentationDataset(root_dir, 'test', test_transforms)
     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=workers)
     val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=workers)
-    # test_loader = DataLoader(test_ds, batch_size=1, shuffle=False, num_workers=1)
-    return train_loader, val_loader
+    test_loader = DataLoader(test_ds, batch_size=1, shuffle=False, num_workers=2)
+    return train_loader, val_loader, test_loader
 
 
 def train(net, loss_fn, opt, loader, device):
@@ -65,7 +61,11 @@ def train(net, loss_fn, opt, loader, device):
 
         with torch.no_grad():
             pred = torch.softmax(logits, dim=1)
-            pred = torch.where(pred > 0.5, 1.0, 0.0)
+            # Get the indices for the max prob along chan dim
+            indices = torch.argmax(pred, dim=1, keepdim=True)
+            # The max prob is set to 1.0
+            pred.scatter_(1, indices, 1.0)
+            pred = torch.where(pred == 1.0, 1.0, 0.0)
             dice = compute_dice(pred, label, include_background=False).mean()
             report.loc[len(report)] = [loss.item(), dice.item()]
     return report
@@ -84,7 +84,9 @@ def validate(net, loss_fn, loader, device):
         loss = loss_fn(logits, label)
 
         pred = torch.softmax(logits, dim=1)
-        pred = torch.where(pred > 0.5, 1.0, 0.0)
+        indices = torch.argmax(pred, dim=1, keepdim=True)
+        pred.scatter_(1, indices, 1.0)
+        pred = torch.where(pred == 1.0, 1.0, 0.0)
         dice = compute_dice(pred, label, include_background=False).mean()
         report.loc[len(report)] = [loss.item(), dice.item()]
     return report
@@ -97,15 +99,15 @@ def test(net, loader, device):
 
     for data in loader:
         img = data['image'].to(device).squeeze(0)
-        mask = data['label'].to(device).squeeze(0)
-        # TODO: check the shape
-        img = torch.permute(img, (4, 0, 1, 2, 3))
-        mask = torch.permute(mask, (4, 0, 1, 2, 3))
+        label = data['label'].to(device).squeeze(0)
 
         logits, _ = net(img)
         pred = torch.softmax(logits, dim=1)
-        pred = torch.where(pred > 0.5, 1.0, 0.0)
-        dice = compute_dice(pred, mask, include_background=False).mean()
+        # pred = torch.where(pred > 0.5, 1.0, 0.0)
+        indices = torch.argmax(pred, dim=1, keepdim=True)
+        pred.scatter_(1, indices, 1.0)
+        pred = torch.where(pred == 1.0, 1.0, 0.0)
+        dice = compute_dice(pred, label, include_background=False).mean()
         report.loc[len(report)] = [dice.item()]
     return report
 
@@ -119,7 +121,7 @@ if __name__ == '__main__':
     data_cfg = config['DATA']
 
     fold, n = utils.get_fold(data_cfg)
-    train_loader, val_loader = create_dataloaders(config, fold)
+    train_loader, val_loader, test_loader = create_dataloaders(config, fold)
 
     save_dir = fpu.create_save_dir(data_cfg['output_dir'], f'fold_{n}')
     fpu.save_config(config, save_dir)
@@ -128,6 +130,7 @@ if __name__ == '__main__':
     fpu.save_json([fold], osp.join(save_dir, 'fold.json'), default=int)
     logger.info('Save dir: {}'.format(save_dir))
     logger.info('Device: {}'.format(device))
+    logger.info('Fold: {}'.format(n))
 
     net = create_model(config, logger).to(device)
     save_model(net, save_dir, 'net.txt')
@@ -154,9 +157,8 @@ if __name__ == '__main__':
         H['val_loss'].append(report['Loss'].mean())
         H['val_dice'].append(report['Dice'].mean())
 
-        # report = test(net, test_loader, device)
-        # H['test_dice'].append(report['Dice'].mean())
-        H['test_dice'].append(0)
+        report = test(net, test_loader, device)
+        H['test_dice'].append(report['Dice'].mean())
 
         writer.add_scalar('lr', optimizer.param_groups[0]['lr'], e)
         scheduler.step()

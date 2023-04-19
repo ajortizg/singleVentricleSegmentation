@@ -2,11 +2,13 @@ import os
 import os.path as osp
 import sys
 import shutil
+import json
 
 from tqdm import tqdm
 from natsort import natsorted
 import pandas as pd
 import nibabel as nib
+import numpy as np
 
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../../'))
@@ -15,12 +17,15 @@ from utilities import file_paths_utils as fpu
 from thirdparty.nnUNet.nnunetv2.dataset_conversion.generate_dataset_json import generate_dataset_json
 
 
-def save_np_to_nifty(x, save_dir, filename, affine, hdr_old):
+def save_np_to_nifty(x, save_dir, filename, affine, hdr_old, remove_last_zoom):
     hdr = nib.nifti1.Nifti1Header.from_header(hdr_old)
     hdr.set_data_shape(x.shape)
     hdr.set_qform(hdr_old.get_qform())
     hdr.set_sform(hdr_old.get_sform())
-    hdr.set_zooms(hdr_old.get_zooms()[:-1])
+    if remove_last_zoom:
+        hdr.set_zooms(hdr_old.get_zooms()[:-1])
+    else:
+        hdr.set_zooms(hdr_old.get_zooms() + (1.0,))
     nii_data = nib.Nifti1Image(x, affine=affine, header=hdr)
     nib.save(nii_data, osp.join(save_dir, filename))
 
@@ -34,9 +39,9 @@ if __name__ == '__main__':
     # Split in training and testing
     df = pd.read_excel(osp.join(root_dir, 'Segmentation_volumes.xlsx'))
     df_train = df[(df['Split'] == 'train')]
-    df_train.reset_index(inplace=True)
+    df_train.reset_index(inplace=True, drop=True)
     df_test = df[df['Split'] == 'test']
-    df_test.reset_index(inplace=True)
+    df_test.reset_index(inplace=True, drop=True)
 
     # Output paths
     save_dir = fpu.create_save_dir('results', 'svd_nnunet_raw')
@@ -45,6 +50,7 @@ if __name__ == '__main__':
     test_imgs_dir = fpu.create_sub_dir(save_dir, 'imagesTs')
     test_labels_dir = fpu.create_sub_dir(save_dir, 'labelsTs')
 
+    # Save training data
     k = 1
     for i in tqdm(range(len(df_train))):
         df_row = df_train.iloc[[i]]
@@ -54,13 +60,13 @@ if __name__ == '__main__':
 
         times = [ed, es]
         endings = ['_Diastole_Labelmap.nii', '_Systole_Labelmap.nii']
-        nii_img = nib.load(osp.join(imgs_dir, patient_name + '.nii.gz'))
+        nib_img = nib.load(osp.join(imgs_dir, patient_name + '.nii.gz'))
 
         for t, ending in zip(times, endings):
-            img = nii_img.get_fdata()[..., t]
+            img = nib_img.get_fdata()[..., t]
             label = nib.load(osp.join(labels_dir, patient_name, patient_name + ending))
 
-            save_np_to_nifty(img, train_imgs_dir, 'SVD_{:03d}_0001.nii.gz'.format(k), nii_img.affine, nii_img.header)
+            save_np_to_nifty(img, train_imgs_dir, 'SVD_{:03d}_0001.nii.gz'.format(k), nib_img.affine, nib_img.header, remove_last_zoom=True)
             nib.save(label, osp.join(train_labels_dir, 'SVD_{:03d}.nii.gz'.format(k)))
             k += 1
 
@@ -71,3 +77,28 @@ if __name__ == '__main__':
                           file_ending='.nii.gz',
                           dataset_name='SVD',
                           overwrite_image_reader_writer='NibabelIOWithReorient')
+
+    # Save test data
+    k = 1
+    json_dict = {}
+    for i in tqdm(range(len(df_test))):
+        df_row = df_test.iloc[[i]]
+        patient_name = df_row.loc[i, 'Name']
+        es = int(df_row.loc[i, 'Systole'])
+        ed = int(df_row.loc[i, 'Diastole'])
+
+        nib_img = nib.load(osp.join(imgs_dir, patient_name + '.nii.gz'))
+        img_xyzt = nib_img.get_fdata()
+        nib.save(nib_img, osp.join(test_imgs_dir, 'SVD_{:03d}_0001.nii.gz'.format(k)))
+
+        labels = np.zeros(img_xyzt.shape, dtype=img_xyzt.dtype)
+        for t in range(img_xyzt.shape[-1]):
+            nib_label = nib.load(osp.join(labels_dir, patient_name, patient_name + f'_{t}_Labelmap.nii'))
+            labels[..., t] = nib_label.get_fdata()
+
+        save_np_to_nifty(labels, test_labels_dir, 'SVD_{:03d}.nii.gz'.format(k), nib_label.affine, nib_label.header, remove_last_zoom=False)
+        json_dict['SVD_{:03d}_0001.nii.gz'.format(k)] = {'patient': patient_name, 'es': es, 'ed': ed}
+        k += 1
+
+    # shutil.copy(osp.join(root_dir, 'Segmentation_volumes.xlsx'), osp.join(save_dir, 'info.xlsx'))
+    fpu.save_json(json_dict, osp.join(save_dir, 'test.json'))
