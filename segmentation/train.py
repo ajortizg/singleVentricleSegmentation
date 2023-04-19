@@ -3,17 +3,12 @@ import configparser
 import time
 import sys
 
-import numpy as np
 import torch
-import torch.nn.functional as F
 from torch.utils.data import DataLoader
-import torch.nn as nn
 import torch.optim as optim
-import torch.backends.cudnn as cudnn
 from torch.utils.tensorboard import SummaryWriter
 from monai.metrics.meandice import compute_dice
 from monai.metrics.hausdorff_distance import compute_hausdorff_distance
-from monai.losses import DiceCELoss
 import matplotlib.pyplot as plt
 from terminaltables import AsciiTable
 import pandas as pd
@@ -21,7 +16,6 @@ from tqdm import tqdm
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
-from utilities.fold import create_5fold
 import utilities.file_paths_utils as fpu
 from utilities import stuff
 from cnn.models.model_factory import create_model, save_model
@@ -61,11 +55,12 @@ def train(net, loss_fn, opt, loader, device):
 
         with torch.no_grad():
             pred = torch.softmax(logits, dim=1)
-            # Get the indices for the max prob along chan dim
-            indices = torch.argmax(pred, dim=1, keepdim=True)
-            # The max prob is set to 1.0
-            pred.scatter_(1, indices, 1.0)
-            pred = torch.where(pred == 1.0, 1.0, 0.0)
+            # # Get the indices for the max prob along chan dim
+            # indices = torch.argmax(pred, dim=1, keepdim=True)
+            # # The max prob is set to 1.0
+            # pred.scatter_(1, indices, 1.0)
+            # pred = torch.where(pred == 1.0, 1.0, 0.0)
+            pred = torch.where(pred > 0.5, 1.0, 0.0)
             dice = compute_dice(pred, label, include_background=False).mean()
             report.loc[len(report)] = [loss.item(), dice.item()]
     return report
@@ -84,9 +79,10 @@ def validate(net, loss_fn, loader, device):
         loss = loss_fn(logits, label)
 
         pred = torch.softmax(logits, dim=1)
-        indices = torch.argmax(pred, dim=1, keepdim=True)
-        pred.scatter_(1, indices, 1.0)
-        pred = torch.where(pred == 1.0, 1.0, 0.0)
+        # indices = torch.argmax(pred, dim=1, keepdim=True)
+        # pred.scatter_(1, indices, 1.0)
+        # pred = torch.where(pred == 1.0, 1.0, 0.0)
+        pred = torch.where(pred > 0.5, 1.0, 0.0)
         dice = compute_dice(pred, label, include_background=False).mean()
         report.loc[len(report)] = [loss.item(), dice.item()]
     return report
@@ -103,10 +99,10 @@ def test(net, loader, device):
 
         logits, _ = net(img)
         pred = torch.softmax(logits, dim=1)
-        # pred = torch.where(pred > 0.5, 1.0, 0.0)
-        indices = torch.argmax(pred, dim=1, keepdim=True)
-        pred.scatter_(1, indices, 1.0)
-        pred = torch.where(pred == 1.0, 1.0, 0.0)
+        pred = torch.where(pred > 0.5, 1.0, 0.0)
+        # indices = torch.argmax(pred, dim=1, keepdim=True)
+        # pred.scatter_(1, indices, 1.0)
+        # pred = torch.where(pred == 1.0, 1.0, 0.0)
         dice = compute_dice(pred, label, include_background=False).mean()
         report.loc[len(report)] = [dice.item()]
     return report
@@ -127,6 +123,7 @@ if __name__ == '__main__':
     fpu.save_config(config, save_dir)
     writer = SummaryWriter(log_dir=save_dir)
     logger = stuff.create_logger(save_dir)
+    fpu.save_transforms_to_json(train_loader.dataset.transforms, osp.join(save_dir, 'train_transforms.json'))
     fpu.save_json([fold], osp.join(save_dir, 'fold.json'), default=int)
     logger.info('Save dir: {}'.format(save_dir))
     logger.info('Device: {}'.format(device))
@@ -134,9 +131,7 @@ if __name__ == '__main__':
 
     net = create_model(config, logger).to(device)
     save_model(net, save_dir, 'net.txt')
-    # loss_fn = nn.BCEWithLogitsLoss()
-    # loss_fn = nn.CrossEntropyLoss()
-    loss_fn = DiceCELoss(softmax=True, lambda_dice=0.4, lambda_ce=0.6)
+    loss_fn = utils.get_loss_fn(config)
     optimizer = optim.Adam(net.parameters(), lr=config.getfloat('PARAMETERS', 'lr'), weight_decay=config.getfloat('PARAMETERS', 'weight_decay'))
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=config.getint('PARAMETERS', 'step_size'), gamma=config.getfloat('PARAMETERS', 'gamma'))
 

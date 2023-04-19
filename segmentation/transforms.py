@@ -11,6 +11,7 @@ import monai
 import monai.transforms
 import monai.data
 from scipy import ndimage
+from skimage.transform import resize
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
@@ -33,7 +34,8 @@ class BaseTransform(object, metaclass=ABCMeta):
         for key in self.keys:
             self.cur_key = key
             x = data[key]
-            metadata = data[key + metadata_subfix]
+            metadata_key = key + metadata_subfix
+            metadata = data[metadata_key] if metadata_key in data else None
             x_new = self._transform_impl(x, metadata)
             data[key] = x_new
         return data
@@ -868,6 +870,31 @@ class SpatialTransform(BaseTransform):
         else:
             coords *= scale
         return coords
+
+
+class SimulateLowResolution(BaseTransform):
+    def __init__(self, p, zoom_range, keys=['image', 'label'], label_key='label'):
+        super().__init__(keys)
+        self.p = p
+        self.zoom_range = zoom_range
+        self.label_key = label_key
+
+    def __call__(self, data):
+        if np.random.uniform() < self.p:
+            self.zoom = np.random.uniform(self.zoom_range[0], self.zoom_range[1])
+            data = super().apply_transform(data)
+        return data
+
+    def _transform_impl(self, x, metadata=None):
+        order = 0 if self.cur_key == self.label_key else 3
+        shp = np.array(x.shape[2:])
+        target_shape = np.round(shp * self.zoom).astype(int)
+
+        for b in range(x.shape[0]):
+            for c in range(x.shape[1]):
+                down = resize(x[b, c].astype(float), target_shape, order=order, mode='edge', anti_aliasing=False)
+                x[b, c] = resize(down, shp, order=0, mode='edge', anti_aliasing=False)
+        return x
 
 # class Spacing:
 #     def __init__(self, pixdim):

@@ -32,11 +32,14 @@ def preprocess_train_split(data, transforms, src_labels_dir, dst_imgs_dir, dst_l
     # Save transformed data
     data = transforms(data)
 
-    nib_utils.save_np_to_nifty(data['image'], dst_imgs_dir, f'{patient_name}.nii.gz', data['image_nib'].affine, data['image_nib'].header)
+    nib_utils.save_np_to_nifty(data['image'], dst_imgs_dir, f'{patient_name}.nii.gz', data['image_nib'].affine, data['image_nib'].header,
+                               data['image_nib'].header.get_qform(), data['image_nib'].header.get_sform(), data['image_nib'].header.get_zooms())
     nib_utils.save_np_to_nifty(data['label'][..., 0], dst_labels_patient_dir, f'{patient_name}_Systole_Labelmap.nii.gz', data['label_es_nib'].affine,
-                               data['label_es_nib'].header)
+                               data['label_es_nib'].header, data['label_es_nib'].header.get_qform(), data['label_es_nib'].header.get_sform(),
+                               data['label_es_nib'].header.get_zooms())
     nib_utils.save_np_to_nifty(data['label'][..., 1], dst_labels_patient_dir, f'{patient_name}_Diastole_Labelmap.nii.gz', data['label_ed_nib'].affine,
-                               data['label_ed_nib'].header)
+                               data['label_ed_nib'].header, data['label_ed_nib'].header.get_qform(), data['label_ed_nib'].header.get_sform(),
+                               data['label_ed_nib'].header.get_zooms())
     return data
 
 
@@ -57,14 +60,21 @@ def preprocess_test_split(data, transforms, src_labels_dir, dst_imgs_dir, dst_la
     # Save transformed data
     data = transforms(data)
 
-    nib_utils.save_np_to_nifty(data['image'], dst_imgs_dir, f'{patient_name}.nii.gz', data['image_nib'].affine, data['image_nib'].header)
-    for t in range(data['label'].shape[3]):
-        nib_utils.save_np_to_nifty(data['label'][..., t], dst_labels_patient_dir,
-                                   f'{patient_name}_{t}_Labelmap.nii.gz', data['label_nib'].affine, data['label_nib'].header)
+    nib_utils.save_np_to_nifty(data['image'], dst_imgs_dir, f'{patient_name}.nii.gz', data['image_nib'].affine, data['image_nib'].header,
+                               data['image_nib'].header.get_qform(), data['image_nib'].header.get_sform(), data['image_nib'].header.get_zooms())
+    # for t in range(data['label'].shape[3]):
+    #     nib_utils.save_np_to_nifty(data['label'][..., t], dst_labels_patient_dir,
+    #                                f'{patient_name}_{t}_Labelmap.nii.gz', data['label_nib'].affine, data['label_nib'].header)
+
+    nib_utils.save_np_to_nifty(data['label'], dst_labels_patient_dir, f'{patient_name}_Labelmap.nii.gz', data['label_nib'].affine,
+                               data['label_nib'].header, data['label_nib'].header.get_qform(), data['label_nib'].header.get_sform(),
+                               data['label_nib'].header.get_zooms() + (1.0,))
     nib_utils.save_np_to_nifty(data['label'][..., data['es']], dst_labels_patient_dir, f'{patient_name}_Systole_Labelmap.nii.gz',
-                               data['label_nib'].affine, data['label_nib'].header)
+                               data['label_nib'].affine, data['label_nib'].header, data['label_nib'].header.get_qform(),
+                               data['label_nib'].header.get_sform(), data['label_nib'].header.get_zooms())
     nib_utils.save_np_to_nifty(data['label'][..., data['ed']], dst_labels_patient_dir, f'{patient_name}_Diastole_Labelmap.nii.gz',
-                               data['label_nib'].affine, data['label_nib'].header)
+                               data['label_nib'].affine, data['label_nib'].header, data['label_nib'].header.get_qform(),
+                               data['label_nib'].header.get_sform(), data['label_nib'].header.get_zooms())
     return data
 
 

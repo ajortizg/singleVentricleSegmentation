@@ -76,10 +76,12 @@ class FlowUNetDataset(Dataset):
         image_xyzt = nib_image.get_fdata()
 
         if self.is_test:
-            label_xyzt = np.empty(shape=image_xyzt.shape, dtype=image_xyzt.dtype)
-            for t in range(label_xyzt.shape[3]):
-                nib_label = nib.load(osp.join(self.masks_dir, patient_name, f'{patient_name}_{t}_Labelmap.nii.gz'))
-                label_xyzt[..., t] = nib_label.get_fdata()
+            # label_xyzt = np.empty(shape=image_xyzt.shape, dtype=image_xyzt.dtype)
+            # for t in range(label_xyzt.shape[3]):
+            #     nib_label = nib.load(osp.join(self.masks_dir, patient_name, f'{patient_name}_{t}_Labelmap.nii.gz'))
+            #     label_xyzt[..., t] = nib_label.get_fdata()
+            nib_label = nib.load(osp.join(self.masks_dir, patient_name, f'{patient_name}_Labelmap.nii.gz'))
+            label_xyzt = nib_label.get_fdata()
         else:
             nib_label = nib.load(osp.join(self.masks_dir, patient_name, patient_name + '_Systole_Labelmap.nii.gz'))
             label_xyz_es = nib_label.get_fdata()
@@ -101,7 +103,6 @@ class FlowUNetDataset(Dataset):
             for d in directions:
                 key = d + '_flow'
                 data[key] = np.load(osp.join(self.root_dir, 'optical_flow', d, f'{patient_name}_{d}_flow.npy'))
-                data[key + '_meta'] = 0
 
         # Apply transformations to data
         if self.transforms is not None:
