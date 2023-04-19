@@ -3,6 +3,7 @@ import sys
 
 from monai.losses import DiceCELoss, DiceLoss
 import torch.nn as nn
+import torch
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
@@ -23,6 +24,7 @@ def get_transforms(config):
     params = config['PARAMETERS']
     DA = config['DATA_AUGMENTATION']
     img_sz = params.getint('img_size')
+    img_shape = (img_sz, img_sz, img_sz)
     num_classes = params.getint('num_classes')
 
     norm_type = params['norm']
@@ -54,7 +56,7 @@ def get_transforms(config):
         norm_fns[0],
         T.Resize(
             1.0,
-            (img_sz, img_sz, img_sz),
+            img_shape,
             keys=['image', 'label'],
             label_key='label'
         ),
@@ -176,7 +178,7 @@ def get_transforms(config):
         norm_fns[1],
         T.Resize(
             1.0,
-            (img_sz, img_sz, img_sz),
+            img_shape,
             keys=['image', 'label']
         ),
         T.OneHotEncoding(
@@ -210,7 +212,7 @@ def get_transforms(config):
         norm_fns[2],
         T.Resize(
             1.0,
-            (img_sz, img_sz, img_sz),
+            img_shape,
             keys=['image', 'label']
         ),
         T.OneHotEncoding(
@@ -239,3 +241,15 @@ def get_loss_fn(config):
         loss_fn = None
         raise ValueError('Unsoported loss function.')
     return loss_fn
+
+
+def create_checkpoint(net, e, opt, H, filepath):
+    torch.save({'epoch': e,
+                'model_state_dict': net.state_dict(),
+                'optimizer_state_dict': opt.state_dict(),
+                'train_loss': H['train_loss'][-1],
+                'train_acc': H['train_dice'][-1],
+                'val_loss': H['val_loss'][-1],
+                'val_acc': H['val_dice'][-1],
+                'test_acc': H['test_dice'][-1]
+                }, filepath)

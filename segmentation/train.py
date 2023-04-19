@@ -115,6 +115,7 @@ if __name__ == '__main__':
     config = configparser.ConfigParser()
     config.read('parser/seg_train.ini')
     data_cfg = config['DATA']
+    params_cfg = config['PARAMETERS']
 
     fold, n = utils.get_fold(data_cfg)
     train_loader, val_loader, test_loader = create_dataloaders(config, fold)
@@ -132,15 +133,15 @@ if __name__ == '__main__':
     net = create_model(config, logger).to(device)
     save_model(net, save_dir, 'net.txt')
     loss_fn = utils.get_loss_fn(config)
-    optimizer = optim.Adam(net.parameters(), lr=config.getfloat('PARAMETERS', 'lr'), weight_decay=config.getfloat('PARAMETERS', 'weight_decay'))
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=config.getint('PARAMETERS', 'step_size'), gamma=config.getfloat('PARAMETERS', 'gamma'))
+    optimizer = optim.Adam(net.parameters(), lr=params_cfg.getfloat('lr'), weight_decay=params_cfg.getfloat('weight_decay'))
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=params_cfg.getint('step_size'), gamma=params_cfg.getfloat('gamma'))
 
     H = {'train_loss': [], 'train_dice': [], 'val_loss': [], 'val_dice': [], 'test_dice': []}
     epochs_since_last_improvement = 0
     best_dice = 0.0
 
-    num_epochs = config.getint('PARAMETERS', 'num_epochs')
-    patience = config.getint('PARAMETERS', 'patience')
+    num_epochs = params_cfg.getint('num_epochs')
+    patience = params_cfg.getint('patience')
     tic = time.time()
     for e in tqdm(range(1, num_epochs + 1)):
         epoch_tic = time.time()
@@ -169,15 +170,7 @@ if __name__ == '__main__':
         if H['val_dice'][-1] > best_dice:
             best_dice = H['val_dice'][-1]
             epochs_since_last_improvement = 0
-            torch.save({'epoch': e,
-                        'model_state_dict': net.state_dict(),
-                        'optimizer_state_dict': optimizer.state_dict(),
-                        'train_loss': H['train_loss'][-1],
-                        'train_acc': H['train_dice'][-1],
-                        'val_loss': H['val_loss'][-1],
-                        'val_acc': H['val_dice'][-1],
-                        'test_acc': H['test_dice'][-1]
-                        }, osp.join(save_dir, 'checkpoint.pth'))
+            utils.create_checkpoint(net, e, optimizer, H, osp.join(save_dir, 'checkpoint_best.pth'))
             logger.info(f'Checkpoint updated with dice: {best_dice:,.3f}')
         else:
             epochs_since_last_improvement += 1
@@ -191,6 +184,7 @@ if __name__ == '__main__':
             logger.info(f'Early stop at epoch: {e}')
             break
 
+    utils.create_checkpoint(net, e, optimizer, H, osp.join(save_dir, 'checkpoint_final.pth'))
     logger.info('\nTraining time: {:.3f} hrs.'.format((time.time() - tic) / 3600.0))
 
     # Plot loss history
