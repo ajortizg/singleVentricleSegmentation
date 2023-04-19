@@ -9,6 +9,11 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 from torch import nn
+from tabulate import tabulate
+import pandas as pd
+import time
+from monai.metrics.meandice import compute_dice
+from monai.metrics.hausdorff_distance import compute_hausdorff_distance
 
 # import voxelmorph with pytorch backend
 os.environ['NEURITE_BACKEND'] = 'pytorch'
@@ -19,168 +24,241 @@ ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 from utilities import file_paths_utils as fpu
 from utilities import stuff
-# from segmentation.dataset import SVDataset
-# import segmentation.transforms as T
-from TVL1OF.dataset import FlowUNetDataset
-import TVL1OF.transforms as T
+from TVL1OF.dataset import FlowUNetDataset, get_bounds
+import segmentation.transforms as T
+from segmentation.utils import create_checkpoint
+from utilities.parser_conversions import str_to_tuple
+from utilities.fold import create_5fold
+from utilities import stuff
 
 
-def train(train_loader, model, optimizer, losses, weights):
-    model.train()
-    epoch_total_loss = []
-
-    for data in train_loader:
-        img = data['img'].permute(4, 0, 1, 2, 3).to(device)  # NT, CH, NZ, NY, NX
-        # img = data['img'].permute(4, 0, 3, 2, 1).to(device)  # NT, CH, NX, NY, NZ
-
-        for t in range(img.shape[0] - 1):
-            moving = img[t, ...].unsqueeze(0)
-            fixed = img[t + 1, ...].unsqueeze(0)
-            y_pred = model(moving, fixed)
-
-            # calculate total loss
-            y_true = [fixed, None]
-            loss = 0
-            for n, loss_function in enumerate(losses):
-                curr_loss = loss_function(y_true[n], y_pred[n]) * weights[n]
-                loss += curr_loss
-            epoch_total_loss.append(loss.item())
-
-            # backpropagate and optimize
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-    return np.array(epoch_total_loss).mean()
+def get_fold(data_cfg):
+    root_dir = data_cfg['root_dir']
+    fold = data_cfg.getint('fold')
+    dataset = FlowUNetDataset(root_dir, mode='train')
+    return create_5fold(len(dataset))[fold], fold
 
 
 @torch.no_grad()
-def validate(val_loader, model, losses, weights):
+def propagate_label(model, img, label, es, ed, fwd, is_test=False):
+    *_, mi, mf, indices = get_bounds(es, ed, label, fwd=fwd, test=is_test)
+    mi.unsqueeze_(0)
+    mf.unsqueeze_(0)
+    propagated_mask = mi.clone()
+
+    if is_test:
+        est_masks = []
+
+    for i in range(len(indices) - 1):
+        tm = indices[i].item()
+        tf = indices[i + 1].item()
+        moving = img[tm].unsqueeze(0)
+        fixed = img[tf].unsqueeze(0)
+
+        # Compute flow between two consecutive frames
+        _, flow = model(moving, fixed, registration=True)
+
+        # Propagate masks
+        propagated_mask = model.transformer(propagated_mask, flow)
+        # propagated_mask = torch.where(propagated_mask > 0.5, 1.0, 0.0)
+        if is_test:
+            est_masks.append(propagated_mask)
+
+    if is_test:
+        est_masks = torch.cat(est_masks)
+        est_masks = torch.where(est_masks > 0.5, 1.0, 0.0)
+        true_masks = label[indices[1:]]
+        dice = compute_dice(est_masks, true_masks).mean()
+        hd = compute_hausdorff_distance(est_masks, true_masks).mean()
+        return dice, hd
+    else:
+        propagated_mask = torch.where(propagated_mask > 0.5, 1.0, 0.0)
+        dice = compute_dice(propagated_mask, mf).mean()
+        return dice
+
+
+def train(train_loader, model, optimizer, losses, weights, device):
+    model.train()
+    report = pd.DataFrame(columns=['Loss', 'Dice'])
+
+    for data in train_loader:
+        img = data['image'].squeeze(0).to(device)
+        label = data['label'].squeeze(0).to(device)
+
+        m_idx = torch.arange(img.shape[0] - 1)
+        f_idx = torch.arange(1, img.shape[0])
+        moving = img[m_idx]
+        fixed = img[f_idx]
+
+        y_pred = model(moving, fixed)
+
+        # calculate total loss
+        y_true = [fixed, None]
+        loss = 0
+        for n, loss_function in enumerate(losses):
+            curr_loss = loss_function(y_true[n], y_pred[n]) * weights[n]
+            loss += curr_loss
+
+        # backpropagate and optimize
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        with torch.no_grad():
+            dice = propagate_label(model, img, label, data['es'][0], data['ed'][0], fwd=True)
+            report.loc[len(report)] = [loss.item(), dice.item()]
+    return report
+
+
+@torch.no_grad()
+def validate(val_loader, model, losses, weights, device):
     model.eval()
-    epoch_total_loss = []
+    report = pd.DataFrame(columns=['Loss', 'Dice'])
 
     for data in val_loader:
-        img = data['img'].permute(4, 0, 1, 2, 3).to(device)  # NT, CH, NZ, NY, NX
-        # img = data['img'].permute(4, 0, 3, 2, 1).to(device)  # NT, CH, NX, NY, NZ
+        img = data['image'].squeeze(0).to(device)
+        label = data['label'].squeeze(0).to(device)
 
-        for t in range(img.shape[0] - 1):
-            moving = img[t, ...].unsqueeze(0)
-            fixed = img[t + 1, ...].unsqueeze(0)
-            y_pred = model(moving, fixed)
+        m_idx = torch.arange(img.shape[0] - 1)
+        f_idx = torch.arange(1, img.shape[0])
+        moving = img[m_idx]
+        fixed = img[f_idx]
 
-            # calculate total loss
-            y_true = [fixed, None]
-            loss = 0
-            for n, loss_function in enumerate(losses):
-                curr_loss = loss_function(y_true[n], y_pred[n]) * weights[n]
-                loss += curr_loss
-            epoch_total_loss.append(loss.item())
-    return np.array(epoch_total_loss).mean()
+        y_pred = model(moving, fixed)
+
+        # calculate total loss
+        y_true = [fixed, None]
+        loss = 0
+        for n, loss_function in enumerate(losses):
+            curr_loss = loss_function(y_true[n], y_pred[n]) * weights[n]
+            loss += curr_loss
+
+        dice = propagate_label(model, img, label, data['es'][0], data['ed'][0], fwd=True)
+        report.loc[len(report)] = [loss.item(), dice.item()]
+    return report
+
+
+@torch.no_grad()
+def test(test_loader, model, device, logger=None, verbose=False):
+    model.eval()
+    report = pd.DataFrame(columns=['Patient', 'Dice', 'HD', 'Time'])
+
+    for data in test_loader:
+        img = data['image'].squeeze(0).to(device)
+        label = data['label'].squeeze(0).to(device)
+        patient = data['patient'][0]
+        tic = time.time()
+        dice, hd = propagate_label(model, img, label, data['es'][0], data['ed'][0], fwd=True, is_test=True)
+        report.loc[len(report)] = [patient, dice.item(), hd.item(), time.time() - tic]
+
+    if verbose:
+        logger.info(tabulate(report, headers='keys', tablefmt='psql'))
+    return report
 
 
 if __name__ == '__main__':
     # Seeding for reproducible results
     stuff.seeding(42)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # Read configuration options
     config = configparser.ConfigParser()
     config.read('parser/vxm_train.ini')
-    root_dir = config.get('DATA', 'ROOT_DIR')
-    output_dir = config.get('DATA', 'OUTPUT_DIR')
-    img_sz = config.getint('PARAMETERS', 'IMG_SIZE')
-    workers = config.getint('PARAMETERS', 'WORKERS')
-    epochs = config.getint('PARAMETERS', 'NUM_EPOCHS')
-    batch_size = config.getint('PARAMETERS', 'BATCH_SIZE')
-    enc_nf = list(map(int, config.get('PARAMETERS', 'ENC_FEAT').split(',')))
-    dec_nf = list(map(int, config.get('PARAMETERS', 'DEC_FEAT').split(',')))
-    int_steps = config.getint('PARAMETERS', 'INT_STEPS')
-    int_downsize = config.getint('PARAMETERS', 'INT_DOWNSIZE')
-    bidir = config.getboolean('PARAMETERS', 'BIDIR')
-    img_loss = config.get('PARAMETERS', 'IMG_LOSS')
-    lambda_param = config.getfloat('PARAMETERS', 'LAMBDA')
-    lr = config.getfloat('PARAMETERS', 'LR')
-    cudnn_nondet = config.getboolean('PARAMETERS', 'CUDNN_NONDET')
+    data_cfg = config['DATA']
+    params_cfg = config['PARAMETERS']
 
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print('Device: ', device)
-    # enabling cudnn determinism appears to speed up training by a lot
-    torch.backends.cudnn.deterministic = not cudnn_nondet
-    print('cudnn.deterministic: ', (not cudnn_nondet))
-
-    save_dir = fpu.create_save_dir(output_dir, 'VXM')
+    fold, n = get_fold(data_cfg)
+    save_dir = fpu.create_save_dir(data_cfg['output_dir'], f'fold_{n}')
     fpu.save_config(config, save_dir)
     writer = SummaryWriter(log_dir=save_dir)
+    logger = stuff.create_logger(save_dir)
+    logger.info(f'Device: {device}')
+    logger.info(f'Fold: {n}')
 
     # Create dataloaders
     train_transforms = T.Compose([
-        T.CropForeground(p=1.0, tol=10),
-        T.Resize(p=1.0, size=(img_sz, img_sz, img_sz)),
-        T.RandomRotate(p=config.getfloat('DATA_AUGMENTATION', 'ROT_PROB'),
-                       range_z=tuple(map(float, config.get('DATA_AUGMENTATION', 'ROT_Z_RANGE').split(','))),
-                       range_y=tuple(map(float, config.get('DATA_AUGMENTATION', 'ROT_Y_RANGE').split(','))),
-                       range_x=tuple(map(float, config.get('DATA_AUGMENTATION', 'ROT_X_RANGE').split(','))),
-                       boundary=config.get('DATA_AUGMENTATION', 'ROT_BOUNDARY')),
-        T.RandomVerticalFlip(config.getfloat('DATA_AUGMENTATION', 'VERTICAL_FLIP_PROB')),
-        T.RandomHorizontalFlip(config.getfloat('DATA_AUGMENTATION', 'HORIZONTAL_FLIP_PROB')),
-        T.RandomDepthFlip(config.getfloat('DATA_AUGMENTATION', 'DEPTH_FLIP_PROB')),
-        T.ElasticDeformation(p=config.getfloat('DATA_AUGMENTATION', 'ED_PROB'),
-                             sigma_range=tuple(map(float, config.get('DATA_AUGMENTATION', 'ED_SIGMA_RANGE').split(','))),
-                             points=config.getint('DATA_AUGMENTATION', 'ED_GRID'),
-                             boundary=config.get('DATA_AUGMENTATION', 'ED_BOUNDARY'),
-                             prefilter=config.getboolean('DATA_AUGMENTATION', 'ED_USE_PREFILTER'),
-                             axis=config.get('DATA_AUGMENTATION', 'ED_AXIS'),
-                             order=config.getint('DATA_AUGMENTATION', 'ED_ORDER')),
-        T.GammaScaling(config.getfloat('DATA_AUGMENTATION', 'GAMMA_SCALING_PROB'),
-                       tuple(map(float, config.get('DATA_AUGMENTATION', 'GAMMA_SCALING_RANGE').split(',')))),
-        T.MinMaxNormalization(p=1.0),
-        T.Discretize(th=0.5),
-        T.ToTensor(add_ch_dim=False)
+        T.XYZT_To_TZYX(keys=['image', 'label']),
+        T.AddDimAt(axis=1, keys=['image', 'label']),
+        T.ToTensor(keys=['image', 'label'])
     ])
+
     val_transforms = T.Compose([
-        T.CropForeground(p=1.0, tol=10),
-        T.Resize(p=1.0, size=(img_sz, img_sz, img_sz)),
-        T.MinMaxNormalization(p=1.0),
-        T.Discretize(th=0.5),
-        T.ToTensor(add_ch_dim=False)
+        T.XYZT_To_TZYX(keys=['image', 'label']),
+        T.AddDimAt(axis=1, keys=['image', 'label']),
+        T.ToTensor(keys=['image', 'label'])
     ])
 
-    train_ds = FlowUNetDataset(root_dir, 'train', train_transforms)
-    val_ds = FlowUNetDataset(root_dir, 'val', val_transforms)
-    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=workers, collate_fn=SVDataset.collate_fn)
-    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=workers, collate_fn=SVDataset.collate_fn)
+    train_ds = FlowUNetDataset(data_cfg['root_dir'], 'train', train_transforms)
+    val_ds = FlowUNetDataset(data_cfg['root_dir'], 'train', val_transforms)
+    test_ds = FlowUNetDataset(data_cfg['root_dir'], 'test', val_transforms)
+    train_loader = DataLoader(train_ds, batch_size=1, shuffle=True, num_workers=params_cfg.getint('num_workers'))
+    val_loader = DataLoader(val_ds, batch_size=1, shuffle=False, num_workers=params_cfg.getint('num_workers'))
+    test_loader = DataLoader(test_ds, batch_size=1, shuffle=False, num_workers=params_cfg.getint('num_workers'))
 
-    model = vxm.networks.VxmDense(inshape=(img_sz, img_sz, img_sz),
-                                  nb_unet_features=[enc_nf, dec_nf],
-                                  bidir=bidir,
-                                  int_steps=int_steps,
-                                  int_downsize=int_downsize)
+    model = vxm.networks.VxmDense(
+        inshape=(params_cfg.getint('img_size'),) * 3,
+        nb_unet_features=[str_to_tuple(params_cfg['enc_feat'], int), str_to_tuple(params_cfg['dec_feat'], int)],
+        bidir=params_cfg.getboolean('bidir'),
+        int_steps=params_cfg.getint('int_steps'),
+        int_downsize=params_cfg.getint('int_downsize')
+    )
     model.to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    optimizer = torch.optim.Adam(model.parameters(), lr=params_cfg.getfloat('lr'))
 
-    if img_loss == 'ncc':
+    if params_cfg['img_loss'] == 'ncc':
         image_loss_func = vxm.losses.NCC().loss
-    elif img_loss == 'mse':
+    elif params_cfg['img_loss'] == 'mse':
         image_loss_func = vxm.losses.MSE().loss
         # image_loss_func = nn.MSELoss(reduction='sum')
     else:
-        raise ValueError('Image loss should be "mse" or "ncc", but found "%s"' % img_loss)
+        raise ValueError('Image loss should be "mse" or "ncc", but found "%s"' % params_cfg['img_loss'])
 
     losses = [image_loss_func, vxm.losses.Grad('l2', loss_mult=2).loss]
-    weights = [1.0, lambda_param]
+    weights = [1.0, params_cfg.getfloat('lambda')]
+    H = {'train_loss': [], 'train_dice': [], 'val_loss': [], 'val_dice': [], 'test_dice': []}
+    epochs_since_last_improvement = 0
+    best_dice = 0.0
+    patience = params_cfg.getint('patience')
+    tic = time.time()
 
-    for e in tqdm(range(1, epochs + 1)):
-        train_loss = train(train_loader, model, optimizer, losses, weights)
-        val_loss = validate(val_loader, model, losses, weights)
+    for e in tqdm(range(1, params_cfg.getint('num_epochs') + 1)):
+        epoch_tic = time.time()
+        report = train(train_loader, model, optimizer, losses, weights, device)
+        H['train_loss'].append(report['Loss'].mean())
+        H['train_dice'].append(report['Dice'].mean())
 
-        # Save model every 20 epochs
-        if e % 20 == 0:
-            model.save(os.path.join(save_dir, 'model.pth'))
+        report = validate(val_loader, model, losses, weights, device)
+        H['val_loss'].append(report['Loss'].mean())
+        H['val_dice'].append(report['Dice'].mean())
 
-        writer.add_scalars('loss', {'train': train_loss, 'val': val_loss}, e)
+        report = test(test_loader, model, device, logger, verbose=True)
+        H['test_dice'].append(report['Dice'].mean())
 
-        print(AsciiTable([
-            ['Split', 'Loss'],
-            ['Train', '{:.6f}'.format(train_loss)],
-            ['Val', '{:.6f}'.format(val_loss)]
+        logger.info(AsciiTable([
+            ['Split', 'Loss', 'Dice'],
+            ['Train', '{:.6f}'.format(H['train_loss'][-1]), '{:.3f}'.format(H['train_dice'][-1])],
+            ['Val', '{:.6f}'.format(H['val_loss'][-1]), '{:.3f}'.format(H['val_dice'][-1])],
+            ['Test', '-', '{:.3f}'.format(H['test_dice'][-1])],
+            ['Epoch', e, epochs_since_last_improvement]
         ]).table)
 
-    model.save(os.path.join(save_dir, 'model.pth'))
+        if H['val_dice'][-1] > best_dice:
+            best_dice = H['val_dice'][-1]
+            epochs_since_last_improvement = 0
+            create_checkpoint(model, e, optimizer, H, osp.join(save_dir, 'checkpoint_best.pth'))
+            logger.info(f'Checkpoint updated with dice: {best_dice:,.3f}')
+        else:
+            epochs_since_last_improvement += 1
+
+        writer.add_scalars('loss', {'train': H['train_loss'][-1], 'val': H['val_loss'][-1]}, e)
+        writer.add_scalars('dice', {'train': H['train_dice'][-1], 'val': H['val_dice'][-1], 'test': H['test_dice'][-1]}, e)
+        writer.add_scalar('epoch_time', time.time() - epoch_tic, e)
+        writer.add_scalar('lr', optimizer.param_groups[0]['lr'], e)
+
+        # early stop
+        if epochs_since_last_improvement > patience:
+            logger.info(f'Early stop at epoch: {e}')
+            break
+
+    create_checkpoint(model, e, optimizer, H, osp.join(save_dir, 'checkpoint_final.pth'))
+    logger.info('\nTraining time: {:.3f} hrs.'.format((time.time() - tic) / 3600.0))

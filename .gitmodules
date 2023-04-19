@@ -4,3 +4,15 @@
 [submodule "thirdparty/voxelmorph"]
 	path = thirdparty/voxelmorph
 	url = https://github.com/voxelmorph/voxelmorph.git
+[submodule "thirdparty/FullyConvolutionalTransformer"]
+	path = thirdparty/FullyConvolutionalTransformer
+	url = https://github.com/Thanos-DB/FullyConvolutionalTransformer.git
+[submodule "thirdparty/MERIT"]
+	path = thirdparty/MERIT
+	url = https://github.com/SLDGroup/MERIT.git
+[submodule "thirdparty/nnFormer"]
+	path = thirdparty/nnFormer
+	url = https://github.com/282857341/nnFormer.git
+[submodule "thirdparty/TransUNet"]
+	path = thirdparty/TransUNet
+	url = https://github.com/Beckschen/TransUNet.git
