@@ -3,7 +3,6 @@ import torch
 from torch.utils.data import Dataset
 import pandas as pd
 import numpy as np
-import nibabel as nib
 import json
 
 
@@ -14,16 +13,16 @@ def get_bounds(es, ed, masks, fwd, test=False):
         ti, tf = es, ed
         if masks is not None:
             if not test:
-                mi, mf = masks[0, ...], masks[1, ...]
+                mi, mf = masks[0], masks[1]
             else:
-                mi, mf = masks[ti, ...], masks[tf, ...]
+                mi, mf = masks[ti], masks[tf]
     else:
         ti, tf = ed, es
         if masks is not None:
             if not test:
-                mi, mf = masks[1, ...], masks[0, ...]
+                mi, mf = masks[1], masks[0]
             else:
-                mi, mf = masks[ti, ...], masks[tf, ...]
+                mi, mf = masks[ti], masks[tf]
     indices = torch.arange(ti, tf + 1, 1)
 
     if fwd:
@@ -71,29 +70,19 @@ class FlowUNetDataset(Dataset):
         es = df_row.loc[idx, 'Systole']
         ed = df_row.loc[idx, 'Diastole']
 
-        # Load nifty images and masks
-        nib_image = nib.load(osp.join(self.imgs_dir, patient_name + '.nii.gz'))
-        image_xyzt = nib_image.get_fdata()
+        # Load images and masks
+        image_xyzt = np.load(osp.join(self.imgs_dir, patient_name + '.npy'))
 
         if self.is_test:
-            # label_xyzt = np.empty(shape=image_xyzt.shape, dtype=image_xyzt.dtype)
-            # for t in range(label_xyzt.shape[3]):
-            #     nib_label = nib.load(osp.join(self.masks_dir, patient_name, f'{patient_name}_{t}_Labelmap.nii.gz'))
-            #     label_xyzt[..., t] = nib_label.get_fdata()
-            nib_label = nib.load(osp.join(self.masks_dir, patient_name, f'{patient_name}_Labelmap.nii.gz'))
-            label_xyzt = nib_label.get_fdata()
+            label_xyzt = np.load(osp.join(self.masks_dir, patient_name, f'{patient_name}_Labelmap.npy'))
         else:
-            nib_label = nib.load(osp.join(self.masks_dir, patient_name, patient_name + '_Systole_Labelmap.nii.gz'))
-            label_xyz_es = nib_label.get_fdata()
-            nib_label = nib.load(osp.join(self.masks_dir, patient_name, patient_name + '_Diastole_Labelmap.nii.gz'))
-            label_xyz_ed = nib_label.get_fdata()
+            label_xyz_es = np.load(osp.join(self.masks_dir, patient_name, patient_name + '_Systole_Labelmap.npy'))
+            label_xyz_ed = np.load(osp.join(self.masks_dir, patient_name, patient_name + '_Diastole_Labelmap.npy'))
             label_xyzt = np.stack((label_xyz_es, label_xyz_ed), axis=3)
 
         # Group data in a dictionary
         data = {'image': image_xyzt,
                 'label': label_xyzt,
-                'image_meta': {'affine': nib_image.affine},
-                'label_meta': {'affine': nib_label.affine},
                 'patient': patient_name,
                 'es': es, 'ed': ed}
 

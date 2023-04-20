@@ -14,6 +14,7 @@ import pandas as pd
 import time
 from monai.metrics.meandice import compute_dice
 from monai.metrics.hausdorff_distance import compute_hausdorff_distance
+import matplotlib.pyplot as plt
 
 # import voxelmorph with pytorch backend
 os.environ['NEURITE_BACKEND'] = 'pytorch'
@@ -40,7 +41,7 @@ def get_fold(data_cfg):
 
 
 @torch.no_grad()
-def propagate_label(model, img, label, es, ed, fwd, is_test=False):
+def propagate_label(model, warp, img, label, es, ed, fwd, is_test=False):
     *_, mi, mf, indices = get_bounds(es, ed, label, fwd=fwd, test=is_test)
     mi.unsqueeze_(0)
     mf.unsqueeze_(0)
@@ -59,25 +60,23 @@ def propagate_label(model, img, label, es, ed, fwd, is_test=False):
         _, flow = model(moving, fixed, registration=True)
 
         # Propagate masks
-        propagated_mask = model.transformer(propagated_mask, flow)
-        # propagated_mask = torch.where(propagated_mask > 0.5, 1.0, 0.0)
+        propagated_mask = warp(propagated_mask, flow)
+
         if is_test:
             est_masks.append(propagated_mask)
 
     if is_test:
         est_masks = torch.cat(est_masks)
-        est_masks = torch.where(est_masks > 0.5, 1.0, 0.0)
         true_masks = label[indices[1:]]
-        dice = compute_dice(est_masks, true_masks).mean()
-        hd = compute_hausdorff_distance(est_masks, true_masks).mean()
+        dice = compute_dice(est_masks, true_masks, include_background=False).mean()
+        hd = compute_hausdorff_distance(est_masks, true_masks, include_background=False).mean()
         return dice, hd
     else:
-        propagated_mask = torch.where(propagated_mask > 0.5, 1.0, 0.0)
-        dice = compute_dice(propagated_mask, mf).mean()
+        dice = compute_dice(propagated_mask, mf, include_background=False).mean()
         return dice
 
 
-def train(train_loader, model, optimizer, losses, weights, device):
+def train(train_loader, model, warp, optimizer, losses, weights, device):
     model.train()
     report = pd.DataFrame(columns=['Loss', 'Dice'])
 
@@ -105,13 +104,13 @@ def train(train_loader, model, optimizer, losses, weights, device):
         optimizer.step()
 
         with torch.no_grad():
-            dice = propagate_label(model, img, label, data['es'][0], data['ed'][0], fwd=True)
+            dice = propagate_label(model, warp, img, label, data['es'][0], data['ed'][0], fwd=True)
             report.loc[len(report)] = [loss.item(), dice.item()]
     return report
 
 
 @torch.no_grad()
-def validate(val_loader, model, losses, weights, device):
+def validate(val_loader, model, warp, losses, weights, device):
     model.eval()
     report = pd.DataFrame(columns=['Loss', 'Dice'])
 
@@ -133,13 +132,13 @@ def validate(val_loader, model, losses, weights, device):
             curr_loss = loss_function(y_true[n], y_pred[n]) * weights[n]
             loss += curr_loss
 
-        dice = propagate_label(model, img, label, data['es'][0], data['ed'][0], fwd=True)
+        dice = propagate_label(model, warp, img, label, data['es'][0], data['ed'][0], fwd=True)
         report.loc[len(report)] = [loss.item(), dice.item()]
     return report
 
 
 @torch.no_grad()
-def test(test_loader, model, device, logger=None, verbose=False):
+def test(test_loader, model, warp, device, logger=None, verbose=False):
     model.eval()
     report = pd.DataFrame(columns=['Patient', 'Dice', 'HD', 'Time'])
 
@@ -148,7 +147,7 @@ def test(test_loader, model, device, logger=None, verbose=False):
         label = data['label'].squeeze(0).to(device)
         patient = data['patient'][0]
         tic = time.time()
-        dice, hd = propagate_label(model, img, label, data['es'][0], data['ed'][0], fwd=True, is_test=True)
+        dice, hd = propagate_label(model, warp, img, label, data['es'][0], data['ed'][0], fwd=True, is_test=True)
         report.loc[len(report)] = [patient, dice.item(), hd.item(), time.time() - tic]
 
     if verbose:
@@ -179,12 +178,14 @@ if __name__ == '__main__':
     train_transforms = T.Compose([
         T.XYZT_To_TZYX(keys=['image', 'label']),
         T.AddDimAt(axis=1, keys=['image', 'label']),
+        T.OneHotEncoding(data_cfg.getint('num_classes'), keys=['label']),
         T.ToTensor(keys=['image', 'label'])
     ])
 
     val_transforms = T.Compose([
         T.XYZT_To_TZYX(keys=['image', 'label']),
         T.AddDimAt(axis=1, keys=['image', 'label']),
+        T.OneHotEncoding(data_cfg.getint('num_classes'), keys=['label']),
         T.ToTensor(keys=['image', 'label'])
     ])
 
@@ -203,6 +204,7 @@ if __name__ == '__main__':
         int_downsize=params_cfg.getint('int_downsize')
     )
     model.to(device)
+    warp = vxm.layers.SpatialTransformer(size=(params_cfg.getint('img_size'),) * 3, mode='nearest').to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=params_cfg.getfloat('lr'))
 
     if params_cfg['img_loss'] == 'ncc':
@@ -223,15 +225,15 @@ if __name__ == '__main__':
 
     for e in tqdm(range(1, params_cfg.getint('num_epochs') + 1)):
         epoch_tic = time.time()
-        report = train(train_loader, model, optimizer, losses, weights, device)
+        report = train(train_loader, model, warp, optimizer, losses, weights, device)
         H['train_loss'].append(report['Loss'].mean())
         H['train_dice'].append(report['Dice'].mean())
 
-        report = validate(val_loader, model, losses, weights, device)
+        report = validate(val_loader, model, warp, losses, weights, device)
         H['val_loss'].append(report['Loss'].mean())
         H['val_dice'].append(report['Dice'].mean())
 
-        report = test(test_loader, model, device, logger, verbose=True)
+        report = test(test_loader, model, warp, device, logger, verbose=True)
         H['test_dice'].append(report['Dice'].mean())
 
         logger.info(AsciiTable([
@@ -262,3 +264,24 @@ if __name__ == '__main__':
 
     create_checkpoint(model, e, optimizer, H, osp.join(save_dir, 'checkpoint_final.pth'))
     logger.info('\nTraining time: {:.3f} hrs.'.format((time.time() - tic) / 3600.0))
+
+    # Plot loss history
+    plt.figure()
+    plt.plot(H['train_loss'], label='train')
+    plt.plot(H['val_loss'], label='val')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.legend(loc='lower left')
+    plt.savefig(osp.join(save_dir, 'loss.png'))
+
+    # Plot dice history
+    plt.figure()
+    plt.plot(H['train_dice'], label='train')
+    plt.plot(H['val_dice'], label='val')
+    plt.plot(H['test_dice'], label='test')
+    plt.xlabel('Epoch')
+    plt.ylabel('Dice')
+    plt.legend(loc='lower right')
+    plt.savefig(osp.join(save_dir, 'dice.png'))
+
+    writer.close()

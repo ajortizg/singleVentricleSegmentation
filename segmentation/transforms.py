@@ -124,7 +124,7 @@ class ToTensor(BaseTransform):
 
 class AddDimAt(BaseTransform):
     def __init__(self, axis, keys=['image', 'label']):
-        super(AddDimAt, self).__init__(keys)
+        super().__init__(keys)
         self.axis = axis
 
     def __call__(self, data):
@@ -190,7 +190,7 @@ class OneHotEncoding(BaseTransform):
         Args:
             n: Number of classes
         """
-        super(OneHotEncoding, self).__init__(keys)
+        super().__init__(keys)
         self.tr = monai.transforms.AsDiscrete(to_onehot=n)
         self.n = n
 
@@ -200,9 +200,9 @@ class OneHotEncoding(BaseTransform):
     def _transform_impl(self, x, metadata=None):
         bs, ch, d1, d2, d3 = x.shape
         assert ch == 1, 'Labels must have a channel dimension of len 1'
-        x_onehot = np.zeros((bs, self.n, d1, d2, d3), dtype=np.float32)
+        x_onehot = np.empty((bs, self.n, d1, d2, d3), dtype=np.float32)
         for b in range(bs):
-            x_onehot[b] = self.tr(x[b]).numpy()
+            x_onehot[b] = self.tr(x[b])
         return x_onehot
 
 

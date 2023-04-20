@@ -22,44 +22,6 @@ ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 import utilities.file_paths_utils as fpu
 from TVL1OF.dataset import FlowUNetDataset
-import TVL1OF.transforms as T
-
-
-def bounds(data, device, test, fwd):
-    mask = data['mask'].permute(4, 0, 1, 2, 3)
-    es = data['es'].item()
-    ed = data['ed'].item()
-
-    if fwd:
-        if es < ed:
-            ti, tf = es, ed
-            if not test:
-                mi, mf = mask[0, ...], mask[1, ...]
-            else:
-                mi, mf = mask[ti, ...], mask[tf, ...]
-        else:
-            ti, tf = ed, es
-            if not test:
-                mi, mf = mask[1, ...], mask[0, ...]
-            else:
-                mi, mf = mask[ti, ...], mask[tf, ...]
-        indices = torch.arange(ti, tf + 1, 1)
-    else:
-        if ed > es:
-            ti, tf = ed, es
-            if not test:
-                mi, mf = mask[1, ...], mask[0, ...]
-            else:
-                mi, mf = mask[ti, ...], mask[tf, ...]
-        else:
-            ti, tf = es, ed
-            if not test:
-                mi, mf = mask[0, ...], mask[1, ...]
-            else:
-                mi, mf = mask[ti, ...], mask[tf, ...]
-        indices = torch.arange(ti, tf - 1, -1)
-
-    return indices, mi.unsqueeze(0).to(device), mf.unsqueeze(0).to(device)
 
 
 @torch.no_grad()
