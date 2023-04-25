@@ -22,6 +22,7 @@ import utilities.file_paths_utils as fpu
 from utilities import stuff
 from cnn.models.model_factory import create_model, save_model
 from datasets.segmentation_dataset import SegmentationDataset
+from datasets.flow_unet_dataset import get_bounds
 import segmentation.utils as utils
 import segmentation.transforms as T
 
@@ -94,16 +95,17 @@ def test(net, loader, device, logger):
         img = data['image'].to(device).squeeze(0)
         label = data['label'].to(device).squeeze(0)
         patient = data['patient'][0]
+        *_, indices = get_bounds(data['es'].item(), data['ed'].item(), None, fwd=True)
 
         logits, _ = net(img)
 
         n_classes = logits.shape[1]
-        y_pred = T.one_hot(logits, n_classes, argmax=True)
-        y_true = T.one_hot(label, n_classes)
+        y_pred = T.one_hot(logits[indices], n_classes, argmax=True)
+        y_true = T.one_hot(label[indices], n_classes)
         dice = compute_dice(y_pred, y_true, include_background=False).mean()
         hd = compute_hausdorff_distance(y_pred, y_true, include_background=False).mean()
         report.loc[len(report)] = [patient, dice.item(), hd.item()]
-    
+
     logger.info(tabulate(report.round(3), headers='keys', tablefmt='psql'))
     return report
 
