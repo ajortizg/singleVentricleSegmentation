@@ -524,8 +524,9 @@ class Resize(BaseTransform):
     def __init__(self, p, size, keys=['image', 'label'], label_key='label'):
         super(Resize, self).__init__(keys)
         self.p = p
-        self.size = size
+        self.size = list(size) if type(size) == tuple else size
         self.label_key = label_key
+        assert len(size) == 3, 'size must be 3d'
 
     def __call__(self, data):
         if np.random.uniform() < self.p:
@@ -534,6 +535,10 @@ class Resize(BaseTransform):
 
     def _transform_impl(self, x, metadata=None):
         mode = 'nearest' if self.cur_key == self.label_key else 'trilinear'
+        orig_shape = x.shape[2:]
+        for i in range(3):
+            if self.size[i] == -1:
+                self.size[i] = orig_shape[i]
         x = torch.from_numpy(x).float()
         x = F.interpolate(x, size=self.size, mode=mode)
         return x.numpy()
@@ -987,3 +992,54 @@ class FlowChannelToLastDim(BaseTransform):
 
     def _transform_impl(self, x, metadata=None):
         return np.transpose(x, (0, 2, 3, 4, 1))
+
+
+class Pad(BaseTransform):
+    def __init__(self, desired_dims=(40, 1, 80, 80, 80), keys=['image']):
+        super().__init__(keys)
+        self.desired_dims = np.array(desired_dims)
+
+    def __call__(self, data):
+        return super().apply_transform(data)
+
+    def _transform_impl(self, x, metadata=None):
+        shape = np.array(x.shape)
+        difs = self.desired_dims - shape
+        return np.pad(x, ((0, difs[0]), (0, difs[1]), (0, difs[2]), (0, difs[3]), (0, difs[4])))
+
+
+# For 2D data
+
+class RandomRotate2D(BaseTransform):
+    def __init__(self, p, angle_range=(-30, 30), keys=['image', 'label'], label_key='label'):
+        super().__init__(keys)
+        self.p = p
+        self.angle_range = angle_range
+        self.label_key = label_key
+
+    def __call__(self, data):
+        if np.random.rand() < self.p:
+            self.angle = np.random.randint(self.angle_range[0], self.angle_range[1])
+            data = super().apply_transform(data)
+        return data
+
+    def _transform_impl(self, x, metadata=None):
+        order = 0 if self.cur_key == self.label_key else 3
+        x_rot = ndimage.rotate(x, self.angle, axes=(4, 3), order=order, reshape=False)
+        return x_rot
+
+
+# Functions
+import torch
+import torch.nn.functional as F
+
+
+def one_hot(x: torch.Tensor, n: int, argmax=False, dim=1) -> torch.Tensor:
+    x = x.argmax(dim=dim) if argmax else x.squeeze(1).long()
+
+    if x.ndim == 3:
+        return F.one_hot(x, n).permute(0, 3, 1, 2).float()
+    elif x.ndim == 4:
+        return F.one_hot(x, n).permute(0, 4, 1, 2, 3).float()
+    else:
+        raise ValueError('Only 4D and 5D tensors supported in one_hot')

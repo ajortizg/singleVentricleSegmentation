@@ -4,6 +4,8 @@ from torch.utils.data import Dataset
 import pandas as pd
 import numpy as np
 import json
+from collections import defaultdict
+import torch.nn.functional as F
 
 
 def get_bounds(es, ed, masks, fwd, test=False):
@@ -69,15 +71,16 @@ class FlowUNetDataset(Dataset):
         patient_name = df_row.loc[idx, 'Name']
         es = df_row.loc[idx, 'Systole']
         ed = df_row.loc[idx, 'Diastole']
+        ext = self.file_ending()
 
         # Load images and masks
-        image_xyzt = np.load(osp.join(self.imgs_dir, patient_name + '.npy'))
+        image_xyzt = np.load(osp.join(self.imgs_dir, patient_name + ext))
 
         if self.is_test:
-            label_xyzt = np.load(osp.join(self.masks_dir, patient_name, f'{patient_name}_Labelmap.npy'))
+            label_xyzt = np.load(osp.join(self.masks_dir, patient_name, f'{patient_name}_Labelmap{ext}'))
         else:
-            label_xyz_es = np.load(osp.join(self.masks_dir, patient_name, patient_name + '_Systole_Labelmap.npy'))
-            label_xyz_ed = np.load(osp.join(self.masks_dir, patient_name, patient_name + '_Diastole_Labelmap.npy'))
+            label_xyz_es = np.load(osp.join(self.masks_dir, patient_name, patient_name + f'_Systole_Labelmap{ext}'))
+            label_xyz_ed = np.load(osp.join(self.masks_dir, patient_name, patient_name + f'_Diastole_Labelmap{ext}'))
             label_xyzt = np.stack((label_xyz_es, label_xyz_ed), axis=3)
 
         # Group data in a dictionary
@@ -118,3 +121,43 @@ class FlowUNetDataset(Dataset):
         data = json.load(f)
         f.close()
         return data
+
+    @staticmethod
+    def collate(data_list):
+        keys_to_collate = ['image', 'label', 'forward_flow', 'backward_flow']
+
+        tss_per_key = defaultdict(list)
+        collated_dict = defaultdict(list)
+        offsets_per_key = defaultdict(list)
+
+        # Get the maximum time in the batch
+        for data in data_list:
+            for k, v in data.items():
+                if k in keys_to_collate:
+                    tss_per_key[k].append(v.shape[0])
+                collated_dict[k].append(v)
+
+        max_ts_per_key = {}
+        for k, v in tss_per_key.items():
+            max_ts_per_key[k] = max(v)
+
+        keys_to_collate = max_ts_per_key.keys()
+
+        # Pad to fit the maximum time
+        for k, v in collated_dict.items():
+            if k in keys_to_collate:
+                list_of_padded_tensors = []
+                for tensor in v:
+                    dif = max_ts_per_key[k] - tensor.shape[0]
+                    offsets_per_key[k].append(dif)
+                    padded_tensor = F.pad(tensor, (0, 0,
+                                                   0, 0,
+                                                   0, 0,
+                                                   0, 0,
+                                                   0, dif))
+                    list_of_padded_tensors.append(padded_tensor)
+                collated_dict[k] = torch.permute(torch.stack(list_of_padded_tensors), (0, 2, 3, 4, 5, 1))
+        
+        collated_dict['offsets'] = offsets_per_key
+        return collated_dict
+

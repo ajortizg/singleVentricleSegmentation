@@ -41,7 +41,7 @@ def get_fold(data_cfg):
 
 
 @torch.no_grad()
-def propagate_label(model, warp, img, label, es, ed, fwd, is_test=False):
+def propagate_label(model, img, label, es, ed, fwd, is_test=False):
     *_, mi, mf, indices = get_bounds(es, ed, label, fwd=fwd, test=is_test)
     mi.unsqueeze_(0)
     mf.unsqueeze_(0)
@@ -60,23 +60,23 @@ def propagate_label(model, warp, img, label, es, ed, fwd, is_test=False):
         _, flow = model(moving, fixed, registration=True)
 
         # Propagate masks
-        propagated_mask = warp(propagated_mask, flow)
+        propagated_mask = model.transformer(propagated_mask, flow)
 
         if is_test:
             est_masks.append(propagated_mask)
 
     if is_test:
-        est_masks = torch.cat(est_masks)
+        est_masks = torch.cat(est_masks).round()
         true_masks = label[indices[1:]]
         dice = compute_dice(est_masks, true_masks, include_background=False).mean()
         hd = compute_hausdorff_distance(est_masks, true_masks, include_background=False).mean()
         return dice, hd
     else:
-        dice = compute_dice(propagated_mask, mf, include_background=False).mean()
+        dice = compute_dice(propagated_mask.round(), mf, include_background=False).mean()
         return dice
 
 
-def train(train_loader, model, warp, optimizer, losses, weights, device):
+def train(train_loader, model, optimizer, losses, weights, device):
     model.train()
     report = pd.DataFrame(columns=['Loss', 'Dice'])
 
@@ -104,13 +104,13 @@ def train(train_loader, model, warp, optimizer, losses, weights, device):
         optimizer.step()
 
         with torch.no_grad():
-            dice = propagate_label(model, warp, img, label, data['es'][0], data['ed'][0], fwd=True)
+            dice = propagate_label(model, img, label, data['es'][0], data['ed'][0], fwd=True)
             report.loc[len(report)] = [loss.item(), dice.item()]
     return report
 
 
 @torch.no_grad()
-def validate(val_loader, model, warp, losses, weights, device):
+def validate(val_loader, model, losses, weights, device):
     model.eval()
     report = pd.DataFrame(columns=['Loss', 'Dice'])
 
@@ -132,26 +132,36 @@ def validate(val_loader, model, warp, losses, weights, device):
             curr_loss = loss_function(y_true[n], y_pred[n]) * weights[n]
             loss += curr_loss
 
-        dice = propagate_label(model, warp, img, label, data['es'][0], data['ed'][0], fwd=True)
+        dice = propagate_label(model, img, label, data['es'][0], data['ed'][0], fwd=True)
         report.loc[len(report)] = [loss.item(), dice.item()]
     return report
 
 
 @torch.no_grad()
-def test(test_loader, model, warp, device, logger=None, verbose=False):
+def test(test_loader, model, device, logger=None, verbose=False):
     model.eval()
-    report = pd.DataFrame(columns=['Patient', 'Dice', 'HD', 'Time'])
+    report = pd.DataFrame(columns=['Patient', 'Dice', 'HD', 'Dice_Fwd', 'HD_Fwd', 'Dice_Bwd', 'HD_Bwd', 'Time'])
 
     for data in test_loader:
         img = data['image'].squeeze(0).to(device)
         label = data['label'].squeeze(0).to(device)
         patient = data['patient'][0]
         tic = time.time()
-        dice, hd = propagate_label(model, warp, img, label, data['es'][0], data['ed'][0], fwd=True, is_test=True)
-        report.loc[len(report)] = [patient, dice.item(), hd.item(), time.time() - tic]
+        dice_fwd, hd_fwd = propagate_label(model, img, label, data['es'][0], data['ed'][0], fwd=True, is_test=True)
+        dice_bwd, hd_bwd = propagate_label(model, img, label, data['es'][0], data['ed'][0], fwd=False, is_test=True)
+        report.loc[len(report)] = [
+            patient,
+            (dice_fwd.item() + dice_bwd.item()) / 2,
+            (hd_fwd.item() + hd_bwd.item()) / 2,
+            dice_fwd.item(),
+            hd_fwd.item(),
+            dice_bwd.item(),
+            hd_bwd.item(),
+            time.time() - tic
+        ]
 
     if verbose:
-        logger.info(tabulate(report, headers='keys', tablefmt='psql'))
+        logger.info(tabulate(report.round(3), headers='keys', tablefmt='psql'))
     return report
 
 
@@ -204,7 +214,6 @@ if __name__ == '__main__':
         int_downsize=params_cfg.getint('int_downsize')
     )
     model.to(device)
-    warp = vxm.layers.SpatialTransformer(size=(params_cfg.getint('img_size'),) * 3, mode='nearest').to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=params_cfg.getfloat('lr'))
 
     if params_cfg['img_loss'] == 'ncc':
@@ -225,15 +234,15 @@ if __name__ == '__main__':
 
     for e in tqdm(range(1, params_cfg.getint('num_epochs') + 1)):
         epoch_tic = time.time()
-        report = train(train_loader, model, warp, optimizer, losses, weights, device)
+        report = train(train_loader, model, optimizer, losses, weights, device)
         H['train_loss'].append(report['Loss'].mean())
         H['train_dice'].append(report['Dice'].mean())
 
-        report = validate(val_loader, model, warp, losses, weights, device)
+        report = validate(val_loader, model, losses, weights, device)
         H['val_loss'].append(report['Loss'].mean())
         H['val_dice'].append(report['Dice'].mean())
 
-        report = test(test_loader, model, warp, device, logger, verbose=True)
+        report = test(test_loader, model, device, logger, verbose=True)
         H['test_dice'].append(report['Dice'].mean())
 
         logger.info(AsciiTable([

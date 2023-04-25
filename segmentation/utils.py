@@ -8,7 +8,7 @@ import torch
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 from utilities.fold import create_5fold
-from segmentation.dataset import SegmentationDataset
+from datasets.segmentation_dataset import SegmentationDataset
 import segmentation.transforms as T
 from utilities.parser_conversions import str_to_tuple
 
@@ -25,7 +25,6 @@ def get_transforms(config):
     DA = config['DATA_AUGMENTATION']
     img_sz = params.getint('img_size')
     img_shape = (img_sz, img_sz, img_sz)
-    num_classes = params.getint('num_classes')
 
     norm_type = params['norm']
     if norm_type == 'qn':
@@ -146,11 +145,6 @@ def get_transforms(config):
             retain_stats=DA.getboolean('gamma_retain_stats'),
             keys=['image']
         ),
-
-        T.OneHotEncoding(
-            num_classes,
-            keys=['label']
-        ),
         T.RemoveNLeadingDims(
             n=1,
             keys=['image', 'label']
@@ -180,10 +174,6 @@ def get_transforms(config):
             1.0,
             img_shape,
             keys=['image', 'label']
-        ),
-        T.OneHotEncoding(
-            num_classes,
-            keys=['label']
         ),
         T.RemoveNLeadingDims(
             n=1,
@@ -215,10 +205,6 @@ def get_transforms(config):
             img_shape,
             keys=['image', 'label']
         ),
-        T.OneHotEncoding(
-            num_classes,
-            keys=['label']
-        ),
         T.ToTensor(
             keys=['image', 'label']
         )
@@ -232,11 +218,11 @@ def get_loss_fn(config):
     if loss_fn_type == 'ce':
         loss_fn = nn.CrossEntropyLoss()
     elif loss_fn_type == 'dice':
-        loss_fn = DiceLoss(softmax=True)
+        loss_fn = DiceLoss(softmax=True, to_onehot_y=True)
     elif loss_fn_type == 'dice_ce':
         lambda_dice = params.getfloat('lambda_dice')
         lambda_ce = params.getfloat('lambda_ce')
-        loss_fn = DiceCELoss(softmax=True, lambda_dice=lambda_dice, lambda_ce=lambda_ce)
+        loss_fn = DiceCELoss(softmax=True, to_onehot_y=True, lambda_dice=lambda_dice, lambda_ce=lambda_ce)
     else:
         loss_fn = None
         raise ValueError('Unsoported loss function.')

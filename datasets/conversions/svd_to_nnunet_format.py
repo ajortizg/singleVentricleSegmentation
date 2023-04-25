@@ -5,7 +5,6 @@ import shutil
 import json
 
 from tqdm import tqdm
-from natsort import natsorted
 import pandas as pd
 import nibabel as nib
 import numpy as np
@@ -102,3 +101,21 @@ if __name__ == '__main__':
 
     # shutil.copy(osp.join(root_dir, 'Segmentation_volumes.xlsx'), osp.join(save_dir, 'info.xlsx'))
     fpu.save_json(json_dict, osp.join(save_dir, 'test.json'))
+
+    for i in tqdm(range(len(df_test))):
+        df_row = df_test.iloc[[i]]
+        patient_name = df_row.loc[i, 'Name']
+        es = int(df_row.loc[i, 'Systole'])
+        ed = int(df_row.loc[i, 'Diastole'])
+
+        nib_img = nib.load(osp.join(imgs_dir, patient_name + '.nii.gz'))
+        img_xyzt = nib_img.get_fdata()
+
+        img_patient_dir =osp.join(save_dir, 'test_nnunet_imgs', patient_name)
+        os.makedirs(img_patient_dir, exist_ok=True)
+        label_patient_dir =osp.join(save_dir, 'test_nnunet_labels', patient_name)
+        os.makedirs(label_patient_dir, exist_ok=True)
+        for t in range(img_xyzt.shape[-1]):
+            save_np_to_nifty(img_xyzt[..., t], img_patient_dir, 'SVD_{:03d}_0001.nii.gz'.format(t + 1), nib_img.affine, nib_img.header, True)
+            nib_label = nib.load(osp.join(labels_dir, patient_name, patient_name + f'_{t}_Labelmap.nii'))
+            nib.save(nib_label, osp.join(label_patient_dir, 'SVD_{:03d}.nii.gz'.format(t + 1)))

@@ -23,10 +23,11 @@ import utilities.transforms.senary_transforms as T6
 from cnn.dataset import *
 from utilities.collate import *
 import utilities.file_paths_utils as fpu
+from utilities import stuff
 
 
 if __name__ == "__main__":
-    # plots.seeding(42)
+    stuff.seeding(42)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     config = configparser.ConfigParser()
@@ -60,7 +61,7 @@ if __name__ == "__main__":
     test_loader = DataLoader(test_ds, batch_size=1, shuffle=False, num_workers=3, collate_fn=collate_fn_batch)
 
     save_dir = fpu.create_save_dir(config.get('DATA', 'OUTPUT_PATH'), 'CNN')
-    logger = fpu.create_logger(save_dir)
+    logger = stuff.create_logger(save_dir)
     writer = SummaryWriter(log_dir=save_dir)
     logger.info(f'Using device {device}')
 

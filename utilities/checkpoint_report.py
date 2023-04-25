@@ -35,33 +35,18 @@ class Report:
 
         df = pd.DataFrame()
         for i, dir in enumerate(self.filtered_dirs):
-            config = configparser.ConfigParser()
-            config.read(osp.join(dir, 'config.ini'))
-
             *_, best_train_acc, best_val_acc, best_test_acc, best_e = self.read_checkpoint(dir, 'checkpoint_best.pth')
             *_, final_train_acc, final_val_acc, final_test_acc, final_e = self.read_checkpoint(dir, 'checkpoint_final.pth')
 
-            data_items = dict(config.items('DATA'))
-            param_items = dict(config.items('PARAMETERS'))
-            da_items = dict(config.items('DATA_AUGMENTATION'))
-
-            try:
-                warping_items = dict(config.items('WARPING'))
-            except:
-                warping_items = {}
-
-            df_data = pd.DataFrame(data_items, index=[i])
-            df_data.insert(0, 'experiment', dir.split(osp.sep)[-1])
-            df_param = pd.DataFrame(param_items, index=[i])
-            df_warping = pd.DataFrame(warping_items, index=[i])
-            df_da = pd.DataFrame(da_items, index=[i])
+            df_data = pd.DataFrame(index=[i])
+            df_data.insert(0, 'experiment', dir)
 
             metrics_row = pd.DataFrame(
                 {'best_epoch': best_e, 'best_train_acc': best_train_acc, 'best_val_acc': best_val_acc, 'best_test_acc': best_test_acc,
                  'final_epoch': final_e, 'final_train_acc': final_train_acc, 'final_val_acc': final_val_acc, 'final_test_acc': final_test_acc},
                 index=[i]).round(3)
 
-            df_row = df_data.join([df_param, df_warping, df_da, metrics_row])
+            df_row = df_data.join([metrics_row])
             df = pd.concat([df_row, df])
         df.to_excel(filepath, index=False)
 
@@ -86,8 +71,8 @@ class Report:
 
 
 if __name__ == "__main__":
-    search_dir = 'results/segmentation/Dataset012_SVDraw/fold_*'
-    from_dt = datetime.strptime(fmt_date(y='2023', m='04', d='18', hr='00', min='00', seg='00'), str_fmt)
+    search_dir = 'results/FCT_results/Dataset_SVD_crop_2d/fold_0*'
+    from_dt = datetime.strptime(fmt_date(y='2023', m='04', d='19', hr='00', min='00', seg='00'), str_fmt)
     to_dt = datetime.strptime(fmt_date(y='2023', m='05', d='19', hr='00', min='00', seg='00'), str_fmt)
 
     report_dir = fpu.create_sub_dir('results', 'reports')
@@ -96,7 +81,7 @@ if __name__ == "__main__":
     report = Report(from_dt, to_dt)
     n = report.filter(search_dir)
     print(f'Found {n} dirs')
-    
-    filepath = osp.join(report_dir, f'report_{time.strftime(str_fmt)}.xlsx')
+
+    filepath = osp.join(report_dir, f'chkpt_report_{time.strftime(str_fmt)}.xlsx')
     report.create(filepath)
     print(f'Created report: {filepath}')

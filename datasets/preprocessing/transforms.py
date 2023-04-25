@@ -25,7 +25,7 @@ def get_transforms(cfg):
     if crop_fg:
         transforms_list.append(T.CropForeground(tol=10, keys=['image', 'label'], label_key='label'))
     if norm:
-        transforms_list.append(T.QuadraticNormalization(q2=q2, keys=['image'], label_key='label'),)
+        transforms_list.append(T.QuadraticNormalization(q2=q2, keys=['image'], label_key='label'))
     if resize:
         transforms_list.append(T.Resize(p=1.0, size=size, keys=['image', 'label'], label_key='label'))
     transforms_list.append(T.RemoveDimAt(axis=1, keys=['image', 'label']))

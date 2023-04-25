@@ -38,7 +38,7 @@ on windows:
 ## 1. Preprocessing 
 *   First preprocess the raw data to store it in a specific format:
     ```
-    python preprocessing/preprocess_{dataset_name}.py
+    python datasets/preprocessing/preprocess_{dataset_name}.py
     ```
     This will create a new folder *{dataset_name}_{date-time}* inside *{output_dir}*. 
 *   Use *parser/preprocessing.ini* to modify the configuration parameters.

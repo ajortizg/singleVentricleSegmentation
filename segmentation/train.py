@@ -13,14 +13,17 @@ import matplotlib.pyplot as plt
 from terminaltables import AsciiTable
 import pandas as pd
 from tqdm import tqdm
+import torch.nn.functional as F
+from tabulate import tabulate
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 import utilities.file_paths_utils as fpu
 from utilities import stuff
 from cnn.models.model_factory import create_model, save_model
-from segmentation.dataset import SegmentationDataset
+from datasets.segmentation_dataset import SegmentationDataset
 import segmentation.utils as utils
+import segmentation.transforms as T
 
 
 def create_dataloaders(config, fold):
@@ -54,14 +57,10 @@ def train(net, loss_fn, opt, loader, device):
         opt.step()
 
         with torch.no_grad():
-            pred = torch.softmax(logits, dim=1)
-            # # Get the indices for the max prob along chan dim
-            # indices = torch.argmax(pred, dim=1, keepdim=True)
-            # # The max prob is set to 1.0
-            # pred.scatter_(1, indices, 1.0)
-            # pred = torch.where(pred == 1.0, 1.0, 0.0)
-            pred = torch.where(pred > 0.5, 1.0, 0.0)
-            dice = compute_dice(pred, label, include_background=False).mean()
+            n_classes = logits.shape[1]
+            dice = compute_dice(T.one_hot(logits, n_classes, argmax=True),
+                                T.one_hot(label, n_classes),
+                                include_background=False).mean()
             report.loc[len(report)] = [loss.item(), dice.item()]
     return report
 
@@ -78,33 +77,34 @@ def validate(net, loss_fn, loader, device):
         logits, _ = net(img)
         loss = loss_fn(logits, label)
 
-        pred = torch.softmax(logits, dim=1)
-        # indices = torch.argmax(pred, dim=1, keepdim=True)
-        # pred.scatter_(1, indices, 1.0)
-        # pred = torch.where(pred == 1.0, 1.0, 0.0)
-        pred = torch.where(pred > 0.5, 1.0, 0.0)
-        dice = compute_dice(pred, label, include_background=False).mean()
+        n_classes = logits.shape[1]
+        dice = compute_dice(T.one_hot(logits, n_classes, argmax=True),
+                            T.one_hot(label, n_classes),
+                            include_background=False).mean()
         report.loc[len(report)] = [loss.item(), dice.item()]
     return report
 
 
 @torch.no_grad()
-def test(net, loader, device):
+def test(net, loader, device, logger):
     net.eval()
-    report = pd.DataFrame(columns=['Dice'])
+    report = pd.DataFrame(columns=['Patient', 'Dice', 'HD'])
 
     for data in loader:
         img = data['image'].to(device).squeeze(0)
         label = data['label'].to(device).squeeze(0)
+        patient = data['patient'][0]
 
         logits, _ = net(img)
-        pred = torch.softmax(logits, dim=1)
-        pred = torch.where(pred > 0.5, 1.0, 0.0)
-        # indices = torch.argmax(pred, dim=1, keepdim=True)
-        # pred.scatter_(1, indices, 1.0)
-        # pred = torch.where(pred == 1.0, 1.0, 0.0)
-        dice = compute_dice(pred, label, include_background=False).mean()
-        report.loc[len(report)] = [dice.item()]
+
+        n_classes = logits.shape[1]
+        y_pred = T.one_hot(logits, n_classes, argmax=True)
+        y_true = T.one_hot(label, n_classes)
+        dice = compute_dice(y_pred, y_true, include_background=False).mean()
+        hd = compute_hausdorff_distance(y_pred, y_true, include_background=False).mean()
+        report.loc[len(report)] = [patient, dice.item(), hd.item()]
+    
+    logger.info(tabulate(report.round(3), headers='keys', tablefmt='psql'))
     return report
 
 
@@ -134,6 +134,12 @@ if __name__ == '__main__':
     save_model(net, save_dir, 'net.txt')
     loss_fn = utils.get_loss_fn(config)
     optimizer = optim.Adam(net.parameters(), lr=params_cfg.getfloat('lr'), weight_decay=params_cfg.getfloat('weight_decay'))
+    # optimizer = optim.SGD(
+    #     net.parameters(),
+    #     lr=params_cfg.getfloat('lr'),
+    #     weight_decay=params_cfg.getfloat('weight_decay'), momentum=0.99,
+    #     nesterov=True,
+    # )
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=params_cfg.getint('step_size'), gamma=params_cfg.getfloat('gamma'))
 
     H = {'train_loss': [], 'train_dice': [], 'val_loss': [], 'val_dice': [], 'test_dice': []}
@@ -153,7 +159,7 @@ if __name__ == '__main__':
         H['val_loss'].append(report['Loss'].mean())
         H['val_dice'].append(report['Dice'].mean())
 
-        report = test(net, test_loader, device)
+        report = test(net, test_loader, device, logger)
         H['test_dice'].append(report['Dice'].mean())
 
         writer.add_scalar('lr', optimizer.param_groups[0]['lr'], e)

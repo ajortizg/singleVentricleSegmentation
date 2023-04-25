@@ -7,6 +7,8 @@ import nibabel as nib
 import numpy as np
 import pandas as pd
 
+from .utils.image_reader import ImageReader
+
 
 class SegmentationDataset(Dataset):
     def __init__(self, root_dir, mode='train', transforms=None, fold_idxs=None):
@@ -18,6 +20,7 @@ class SegmentationDataset(Dataset):
         self.transforms = transforms
         self.json_ds = self.read_json(osp.join(root_dir, 'dataset.json'))
         self.test_json = None
+        self.reader = ImageReader(self.file_ending())
 
         if mode == 'train':
             self.img_paths = sorted(glob(osp.join(root_dir, 'imagesTr', f'*{self.file_ending()}')))
@@ -39,21 +42,30 @@ class SegmentationDataset(Dataset):
 
     def __getitem__(self, idx):
         # Read image in xyz or xyzt order for train and test respectively
-        nib_image = nib.load(self.img_paths[idx])
-        image = nib_image.get_fdata()
+        # nib_image = nib.load(self.img_paths[idx])
+        # image = nib_image.get_fdata()
+        data = self.reader(self.img_paths[idx])
+        img = data['data']
+        img_meta = data['meta']
 
         # Read mask in xyz or xyzt order for train and test respectively
-        nib_label = nib.load(self.label_paths[idx])
-        label = nib_label.get_fdata()
+        # nib_label = nib.load(self.label_paths[idx])
+        # label = nib_label.get_fdata()
+        data = self.reader(self.label_paths[idx])
+        label = data['data']
+        label_meta = data['meta']
 
-        # Read metadata
-        image_meta = {'affine': nib_image.affine}
-        label_meta = {'affine': nib_label.affine}
+        # # Read metadata
+        # image_meta = {'affine': nib_image.affine}
+        # label_meta = {'affine': nib_label.affine}
 
-        data = {'image': image,
-                'label': label,
-                'image_meta': image_meta,
-                'label_meta': label_meta}
+        data = {'image': img,
+                'label': label}
+
+        if img_meta is not None:
+            data['image_meta'] = img_meta
+        if label_meta is not None:
+            data['label_meta'] = label_meta
 
         # Read some metada for the test split
         if self.test_json is not None:
