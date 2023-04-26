@@ -2,6 +2,7 @@ import os.path as osp
 import configparser
 import time
 import sys
+import os
 
 import torch
 from torch.utils.data import DataLoader
@@ -9,26 +10,80 @@ import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 from monai.metrics.meandice import compute_dice
 from monai.metrics.hausdorff_distance import compute_hausdorff_distance
+from monai.losses import DiceCELoss
 import matplotlib.pyplot as plt
 from terminaltables import AsciiTable
 import pandas as pd
 from tqdm import tqdm
 import torch.nn.functional as F
 from tabulate import tabulate
+import numpy as np
+
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
-import utilities.file_paths_utils as fpu
+import utilities.path_utils as path_utils
 from utilities import stuff
-from cnn.models.model_factory import create_model, save_model
 from datasets.segmentation_dataset import SegmentationDataset
 from datasets.flow_unet_dataset import get_bounds
 import segmentation.utils as utils
 import segmentation.transforms as T
+from segmentation.tridimensional.models.factory import Factory
+from utilities.parser_conversions import str_to_tuple
 
 
 def create_dataloaders(config, fold):
-    train_transforms, val_transforms, test_transforms = utils.get_transforms(config)
+    DA = config['DATA_AUGMENTATION']
+    img_sz = params_cfg.getint('img_size')
+    # norm = utils.norm_fn(params_cfg['norm'])
+    img_key, label_key = 'image', 'label'
+    keys = [img_key, label_key]
+
+    train_transforms = T.Compose([
+        T.AddNLeadingDims(n=2, keys=keys),
+        T.BCXYZ_To_BCZYX(keys=keys),
+        T.ToRAS(keys=keys),
+        T.CropForeground(keys=keys, label_key=label_key),
+        T.QuadraticNormalization(q2=95, use_label=True, keys=[img_key], label_key=label_key),
+        T.Resize(1.0, (img_sz, img_sz, img_sz), keys=keys, label_key=label_key),
+        T.RandomRotate(DA.getfloat('rot_prob'), str_to_tuple(DA['rot_x_range'], float), str_to_tuple(DA['rot_y_range'], float), str_to_tuple(DA['rot_z_range'], float),
+                       DA['rot_boundary'], keys=keys, label_key=label_key),
+        T.RandomScale(DA.getfloat('scaling_prob'), str_to_tuple(DA['scaling_range'], float),
+                      DA['scaling_boundary'], keys=keys, label_key=label_key),
+        T.RandomFlip(DA.getfloat('depth_flip_prob'), 2, keys=keys),
+        T.RandomFlip(DA.getfloat('vertical_flip_prob'), 3, keys=keys),
+        T.RandomFlip(DA.getfloat('horizontal_flip_prob'), 4, keys=keys),
+        T.ElasticDeformation(DA.getfloat('ed_prob'), str_to_tuple(DA['ed_sigma_range'], float), DA.getint('ed_grid'), DA['ed_boundary'], DA['ed_axis'], keys=keys, label_key=label_key),
+        T.SimulateLowResolution(DA.getfloat('lowres_prob'), str_to_tuple(DA['lowres_zoom_range'], float), keys=keys, label_key=label_key),
+        T.AdditiveGaussianNoise(DA.getfloat('noise_prob'), str_to_tuple(DA['noise_std_range'], float), DA.getfloat('noise_mu'), keys=[img_key]),
+        T.GaussialBlur(DA.getfloat('blur_prob'), str_to_tuple(DA['blur_sigma_range'], float), keys=[img_key]),
+        T.MultiplicativeScaling(DA.getfloat('mult_scaling_prob'), str_to_tuple(DA['mult_scaling_range']), keys=[img_key]),
+        T.ContrastAugmentation(DA.getfloat('contrast_prob'), str_to_tuple(DA['contrast_range']), DA.getboolean('contrast_preserve_range'), keys=[img_key]),
+        T.GammaCorrection(DA.getfloat('gamma_scaling_prob'), str_to_tuple(DA['gamma_scaling_range'], float), invert_image=False, retain_stats=DA.getboolean('gamma_retain_stats'), keys=[img_key]),
+        T.GammaCorrection(DA.getfloat('gamma_scaling_prob') / 2.0, str_to_tuple(DA['gamma_scaling_range'], float), invert_image=True,
+                          retain_stats=DA.getboolean('gamma_retain_stats'), keys=[img_key]),
+        T.RemoveNLeadingDims(n=1, keys=keys),
+        T.ToTensor(keys=keys)
+    ])
+    val_transforms = T.Compose([
+        T.AddNLeadingDims(n=2, keys=keys),
+        T.BCXYZ_To_BCZYX(keys=keys),
+        T.ToRAS(keys=keys),
+        T.CropForeground(keys=keys, label_key=label_key),
+        T.QuadraticNormalization(q2=95, use_label=True, keys=[img_key], label_key=label_key),
+        T.Resize(1.0, (img_sz, img_sz, img_sz), keys=keys),
+        T.RemoveNLeadingDims(n=1, keys=keys),
+        T.ToTensor(keys=keys)
+    ])
+    test_transforms = T.Compose([
+        T.XYZT_To_TZYX(keys=keys),
+        T.AddDimAt(axis=1, keys=keys),
+        T.ToRAS(keys=keys),
+        T.CropForeground(keys=keys, label_key=label_key),
+        T.QuadraticNormalization(q2=95, use_label=True, keys=[img_key], label_key=label_key),
+        T.Resize(1.0, (img_sz, img_sz, img_sz), keys=keys),
+        T.ToTensor(keys=keys)
+    ])
 
     root_dir = config.get('DATA', 'root_dir')
     batch_size = config.getint('PARAMETERS', 'batch_size')
@@ -50,8 +105,9 @@ def train(net, loss_fn, opt, loader, device):
     for data in loader:
         img = data['image'].to(device)
         label = data['label'].to(device)
+        print(img.shape, label.shape)
 
-        logits, _ = net(img)
+        logits = net(img)
         loss = loss_fn(logits, label)
         opt.zero_grad()
         loss.backward()
@@ -75,7 +131,7 @@ def validate(net, loss_fn, loader, device):
         img = data['image'].to(device)
         label = data['label'].to(device)
 
-        logits, _ = net(img)
+        logits = net(img)
         loss = loss_fn(logits, label)
 
         n_classes = logits.shape[1]
@@ -92,19 +148,18 @@ def test(net, loader, device, logger):
     report = pd.DataFrame(columns=['Patient', 'Dice', 'HD'])
 
     for data in loader:
-        img = data['image'].to(device).squeeze(0)
-        label = data['label'].to(device).squeeze(0)
-        patient = data['patient'][0]
         *_, indices = get_bounds(data['es'].item(), data['ed'].item(), None, fwd=True)
+        img = data['image'].squeeze(0)[indices].to(device)
+        label = data['label'].squeeze(0)[indices].to(device)
 
-        logits, _ = net(img)
+        logits = net(img)
 
         n_classes = logits.shape[1]
-        y_pred = T.one_hot(logits[indices], n_classes, argmax=True)
-        y_true = T.one_hot(label[indices], n_classes)
+        y_pred = T.one_hot(logits, n_classes, argmax=True)
+        y_true = T.one_hot(label, n_classes)
         dice = compute_dice(y_pred, y_true, include_background=False).mean()
         hd = compute_hausdorff_distance(y_pred, y_true, include_background=False).mean()
-        report.loc[len(report)] = [patient, dice.item(), hd.item()]
+        report.loc[len(report)] = [data['patient'][0], dice.item(), hd.item()]
 
     logger.info(tabulate(report.round(3), headers='keys', tablefmt='psql'))
     return report
@@ -122,26 +177,23 @@ if __name__ == '__main__':
     fold, n = utils.get_fold(data_cfg)
     train_loader, val_loader, test_loader = create_dataloaders(config, fold)
 
-    save_dir = fpu.create_save_dir(data_cfg['output_dir'], f'fold_{n}')
-    fpu.save_config(config, save_dir)
+    save_dir = path_utils.create_save_dir(data_cfg['output_dir'], f'fold_{n}')
+    stuff.save_config(config, save_dir)
     writer = SummaryWriter(log_dir=save_dir)
     logger = stuff.create_logger(save_dir)
-    fpu.save_transforms_to_json(train_loader.dataset.transforms, osp.join(save_dir, 'train_transforms.json'))
-    fpu.save_json([fold], osp.join(save_dir, 'fold.json'), default=int)
+    stuff.save_transforms_to_json(train_loader.dataset.transforms, osp.join(save_dir, 'train_transforms.json'))
+    stuff.save_json([fold], osp.join(save_dir, 'fold.json'), default=int)
     logger.info('Save dir: {}'.format(save_dir))
     logger.info('Device: {}'.format(device))
     logger.info('Fold: {}'.format(n))
 
-    net = create_model(config, logger).to(device)
-    save_model(net, save_dir, 'net.txt')
-    loss_fn = utils.get_loss_fn(config)
+    net = Factory.create(config).to(device)
+    gpus = len(os.environ['CUDA_VISIBLE_DEVICES'].split(','))
+    net = torch.nn.DataParallel(net, device_ids=np.arange(gpus).tolist())
+    stuff.save_model(net, save_dir, 'net.txt')
+
+    loss_fn = loss_fn = DiceCELoss(softmax=True, to_onehot_y=True, lambda_dice=1.0, lambda_ce=1.0)
     optimizer = optim.Adam(net.parameters(), lr=params_cfg.getfloat('lr'), weight_decay=params_cfg.getfloat('weight_decay'))
-    # optimizer = optim.SGD(
-    #     net.parameters(),
-    #     lr=params_cfg.getfloat('lr'),
-    #     weight_decay=params_cfg.getfloat('weight_decay'), momentum=0.99,
-    #     nesterov=True,
-    # )
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=params_cfg.getint('step_size'), gamma=params_cfg.getfloat('gamma'))
 
     H = {'train_loss': [], 'train_dice': [], 'val_loss': [], 'val_dice': [], 'test_dice': []}

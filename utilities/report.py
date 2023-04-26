@@ -2,10 +2,11 @@ import configparser
 import os.path as osp
 from datetime import datetime
 from glob import glob
-import file_paths_utils as fpu
 import time
 import pandas as pd
 import torch
+
+import path_utils 
 
 str_fmt = '%Y%m%d-%H%M%S'
 
@@ -86,11 +87,11 @@ class Report:
 
 
 if __name__ == "__main__":
-    search_dir = 'results/segmentation/Dataset012_SVDraw/fold_*'
+    search_dir = 'results/FCT_results/Dataset_SVD_crop_2d/fold_*'
     from_dt = datetime.strptime(fmt_date(y='2023', m='04', d='18', hr='00', min='00', seg='00'), str_fmt)
     to_dt = datetime.strptime(fmt_date(y='2023', m='05', d='19', hr='00', min='00', seg='00'), str_fmt)
 
-    report_dir = fpu.create_sub_dir('results', 'reports')
+    report_dir = path_utils.create_sub_dir('results', 'reports')
     print('Creating report from: ', from_dt, ' to: ', to_dt)
 
     report = Report(from_dt, to_dt)

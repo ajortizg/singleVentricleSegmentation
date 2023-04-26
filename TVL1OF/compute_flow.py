@@ -13,7 +13,7 @@ from TVL1OF3D import *
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
-from utilities import file_paths_utils as fpu
+from utilities import path_utils as fpu
 from utilities import stuff
 from TVL1OF.dataset import FlowUNetDataset, get_bounds
 import segmentation.transforms as T

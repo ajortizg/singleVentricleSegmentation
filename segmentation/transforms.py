@@ -1042,4 +1042,4 @@ def one_hot(x: torch.Tensor, n: int, argmax=False, dim=1) -> torch.Tensor:
     elif x.ndim == 4:
         return F.one_hot(x, n).permute(0, 4, 1, 2, 3).float()
     else:
-        raise ValueError('Only 4D and 5D tensors supported in one_hot')
+        raise ValueError('Only 4D and 5D tensors are supported in one_hot')

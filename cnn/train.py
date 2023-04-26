@@ -22,7 +22,7 @@ from utilities import param_reader
 import utilities.transforms.senary_transforms as T6
 from cnn.dataset import *
 from utilities.collate import *
-import utilities.file_paths_utils as fpu
+import utilities.path_utils as path_utils
 from utilities import stuff
 
 
@@ -60,7 +60,7 @@ if __name__ == "__main__":
     val_loader = DataLoader(val_ds, batch_size=P['batch_size'], shuffle=False, num_workers=P['workers'], collate_fn=collate_fn_batch)
     test_loader = DataLoader(test_ds, batch_size=1, shuffle=False, num_workers=3, collate_fn=collate_fn_batch)
 
-    save_dir = fpu.create_save_dir(config.get('DATA', 'OUTPUT_PATH'), 'CNN')
+    save_dir = path_utils.create_save_dir(config.get('DATA', 'OUTPUT_PATH'), 'CNN')
     logger = stuff.create_logger(save_dir)
     writer = SummaryWriter(log_dir=save_dir)
     logger.info(f'Using device {device}')

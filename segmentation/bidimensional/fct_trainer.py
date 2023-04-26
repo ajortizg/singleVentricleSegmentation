@@ -1,22 +1,22 @@
-from base_trainer import BaseTrainer
 import torch
 from torch.nn import Module
 from torch.optim import Optimizer
 from torch.nn.modules.loss import _Loss
-from torch.utils.data import DataLoader
 from monai.metrics.meandice import compute_dice
+from monai.metrics.hausdorff_distance import compute_hausdorff_distance
 import torch.nn.functional as F
 import os.path as osp
 import sys
 
-ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
+ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../../'))
 sys.path.append(ROOT_DIR)
 import segmentation.transforms as T
+from segmentation.base_trainer import BaseTrainer
 
 
-class FCTTrainer(BaseTrainer):
-    def __init__(self, img_size: int, n_classes: int, model: Module, loss_fn: _Loss, optimizer: Optimizer, device=None):
-        super().__init__(n_classes, model, loss_fn, optimizer, device)
+class FctTrainer(BaseTrainer):
+    def __init__(self, img_size: int, n_classes: int, model: Module, loss_fn: _Loss, optimizer: Optimizer, device, logger=None):
+        super().__init__(n_classes, model, loss_fn, optimizer, device, logger)
         self.img_size = img_size
 
     def _train_minibatch_impl(self, data):
@@ -36,11 +36,9 @@ class FCTTrainer(BaseTrainer):
         self.optimizer.step()
 
         with torch.no_grad():
-            # probas = torch.softmax(logits[2], dim=1)
             dice = compute_dice(T.one_hot(logits[2], self.n_classes, argmax=True),
                                 T.one_hot(label, self.n_classes),
                                 include_background=False).mean()
-
         return loss.item(), dice.item()
 
     def _validate_minibatch_impl(self, data):
@@ -68,8 +66,8 @@ class FCTTrainer(BaseTrainer):
 
             logits = self.model(image)
 
-            # probas = torch.softmax(logits[2], dim=1)
-            dice = compute_dice(T.one_hot(logits[2], self.n_classes, argmax=True),
-                                T.one_hot(label, self.n_classes),
-                                include_background=False).mean()
-        return dice.item()
+            y_pred = T.one_hot(logits[2], self.n_classes, argmax=True)
+            y_true = T.one_hot(label, self.n_classes)
+            dice = compute_dice(y_pred, y_true, include_background=False).mean()
+            hd = compute_hausdorff_distance(y_pred, y_true, include_background=False).mean()
+        return dice.item(), hd.item()

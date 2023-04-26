@@ -20,7 +20,7 @@ import voxelmorph.voxelmorph as vxm   # nopep8
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
-import utilities.file_paths_utils as fpu
+import utilities.path_utils as path_utils
 from TVL1OF.dataset import FlowUNetDataset
 
 

@@ -9,7 +9,7 @@ from natsort import natsorted
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../../'))
 sys.path.append(ROOT_DIR)
-from utilities import file_paths_utils as fpu
+from utilities import path_utils as fpu
 from thirdparty.nnUNet.nnunetv2.dataset_conversion.generate_dataset_json import generate_dataset_json
 
 

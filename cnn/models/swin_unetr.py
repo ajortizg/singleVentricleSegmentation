@@ -18,9 +18,9 @@ class SwinUNetr(nn.Module):
         self.net = SwinUNETR(img_size=(img_size, img_size, img_size),
                              in_channels=input_channels,
                              out_channels=num_classes,
-                             depths=(2, 1, 2, 2),
+                             depths=(2, 2, 2, 2),
                              num_heads=(3, 6, 12, 24),
-                             feature_size=12,
+                             feature_size=24,
                              norm_name='instance',
                              spatial_dims=3)
 

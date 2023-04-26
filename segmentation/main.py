@@ -12,7 +12,7 @@ import numpy as np
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
-import utilities.file_paths_utils as fpu
+import utilities.path_utils as path_utils
 # from utilities import stuff
 from utilities import plots
 from segmentation.dataset import SegmentationDataset
@@ -67,7 +67,7 @@ if __name__ == '__main__':
 
     ds = SegmentationDataset('data/nnUNet_raw/Dataset012_SVDraw', 'train', transforms)
 
-    save_dir = fpu.create_save_dir('results', 'SEG-TESTS')
+    save_dir = path_utils.create_save_dir('results', 'SEG-TESTS')
     # fpu.save_transforms_to_json(transforms, osp.join(save_dir, 'transforms.json'))
 
     pbar = tqdm(total=len(ds))
