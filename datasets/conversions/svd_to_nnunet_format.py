@@ -1,3 +1,8 @@
+'''
+Save the SV dataset in nnUNet format
+The dasatet must be previously preprocessed with datasets/preprocessing/preprocess_svd.py
+'''
+
 import os
 import os.path as osp
 import sys
@@ -14,6 +19,8 @@ ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../../'))
 sys.path.append(ROOT_DIR)
 from utilities import path_utils as fpu
 from thirdparty.nnUNet.nnunetv2.dataset_conversion.generate_dataset_json import generate_dataset_json
+import segmentation.transforms as T
+from utilities import stuff
 
 
 def save_np_to_nifty(x, save_dir, filename, affine, hdr_old, remove_last_zoom):
@@ -31,12 +38,12 @@ def save_np_to_nifty(x, save_dir, filename, affine, hdr_old, remove_last_zoom):
 
 if __name__ == '__main__':
     # Source paths
-    root_dir = 'data/singleVentricleData'
-    imgs_dir = osp.join(root_dir, 'NIFTI_4D_Datasets')
-    labels_dir = osp.join(root_dir, 'NIFTI_Single_Ventricle_Segmentations')
+    root_dir = 'results/preprocessed/singleVentricleData_affineIdentity_hdr'
+    imgs_dir = osp.join(root_dir, 'images')
+    labels_dir = osp.join(root_dir, 'labels')
 
     # Split in training and testing
-    df = pd.read_excel(osp.join(root_dir, 'Segmentation_volumes.xlsx'))
+    df = pd.read_excel(osp.join(root_dir, 'info.xlsx'))
     df_train = df[(df['Split'] == 'train')]
     df_train.reset_index(inplace=True, drop=True)
     df_test = df[df['Split'] == 'test']
@@ -58,7 +65,7 @@ if __name__ == '__main__':
         ed = df_row.loc[i, 'Diastole']
 
         times = [ed, es]
-        endings = ['_Diastole_Labelmap.nii', '_Systole_Labelmap.nii']
+        endings = ['_Diastole_Labelmap.nii.gz', '_Systole_Labelmap.nii.gz']
         nib_img = nib.load(osp.join(imgs_dir, patient_name + '.nii.gz'))
 
         for t, ending in zip(times, endings):
@@ -79,7 +86,7 @@ if __name__ == '__main__':
 
     # Save test data
     k = 1
-    json_dict = {}
+    test_json_dict = {}
     for i in tqdm(range(len(df_test))):
         df_row = df_test.iloc[[i]]
         patient_name = df_row.loc[i, 'Name']
@@ -88,34 +95,14 @@ if __name__ == '__main__':
 
         nib_img = nib.load(osp.join(imgs_dir, patient_name + '.nii.gz'))
         img_xyzt = nib_img.get_fdata()
-        nib.save(nib_img, osp.join(test_imgs_dir, 'SVD_{:03d}_0001.nii.gz'.format(k)))
 
-        labels = np.zeros(img_xyzt.shape, dtype=img_xyzt.dtype)
+        nib_label = nib.load(osp.join(labels_dir, patient_name, patient_name + f'_Labelmap.nii.gz'))
+        label_xyzt = nib_label.get_fdata()
         for t in range(img_xyzt.shape[-1]):
-            nib_label = nib.load(osp.join(labels_dir, patient_name, patient_name + f'_{t}_Labelmap.nii'))
-            labels[..., t] = nib_label.get_fdata()
-
-        save_np_to_nifty(labels, test_labels_dir, 'SVD_{:03d}.nii.gz'.format(k), nib_label.affine, nib_label.header, remove_last_zoom=False)
-        json_dict['SVD_{:03d}_0001.nii.gz'.format(k)] = {'patient': patient_name, 'es': es, 'ed': ed}
-        k += 1
+            save_np_to_nifty( img_xyzt[..., t], test_imgs_dir, 'SVD_{:03d}_0001.nii.gz'.format(k),nib_img.affine, nib_img.header, remove_last_zoom=True)
+            save_np_to_nifty(label_xyzt[..., t], test_labels_dir, 'SVD_{:03d}.nii.gz'.format(k), nib_label.affine, nib_label.header, remove_last_zoom=True)
+            test_json_dict['SVD_{:03d}_0001.nii.gz'.format(k)] = {'patient': patient_name, 'es': es, 'ed': ed}
+            k += 1
 
     # shutil.copy(osp.join(root_dir, 'Segmentation_volumes.xlsx'), osp.join(save_dir, 'info.xlsx'))
-    fpu.save_json(json_dict, osp.join(save_dir, 'test.json'))
-
-    for i in tqdm(range(len(df_test))):
-        df_row = df_test.iloc[[i]]
-        patient_name = df_row.loc[i, 'Name']
-        es = int(df_row.loc[i, 'Systole'])
-        ed = int(df_row.loc[i, 'Diastole'])
-
-        nib_img = nib.load(osp.join(imgs_dir, patient_name + '.nii.gz'))
-        img_xyzt = nib_img.get_fdata()
-
-        img_patient_dir =osp.join(save_dir, 'test_nnunet_imgs', patient_name)
-        os.makedirs(img_patient_dir, exist_ok=True)
-        label_patient_dir =osp.join(save_dir, 'test_nnunet_labels', patient_name)
-        os.makedirs(label_patient_dir, exist_ok=True)
-        for t in range(img_xyzt.shape[-1]):
-            save_np_to_nifty(img_xyzt[..., t], img_patient_dir, 'SVD_{:03d}_0001.nii.gz'.format(t + 1), nib_img.affine, nib_img.header, True)
-            nib_label = nib.load(osp.join(labels_dir, patient_name, patient_name + f'_{t}_Labelmap.nii'))
-            nib.save(nib_label, osp.join(label_patient_dir, 'SVD_{:03d}.nii.gz'.format(t + 1)))
+    stuff.save_json(test_json_dict, osp.join(save_dir, 'test.json'))

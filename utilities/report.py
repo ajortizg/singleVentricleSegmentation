@@ -87,7 +87,7 @@ class Report:
 
 
 if __name__ == "__main__":
-    search_dir = 'results/FCT_results/Dataset_SVD_crop_2d/fold_*'
+    search_dir = 'results/voxelmorph/singleVentricleData/fold*'
     from_dt = datetime.strptime(fmt_date(y='2023', m='04', d='18', hr='00', min='00', seg='00'), str_fmt)
     to_dt = datetime.strptime(fmt_date(y='2023', m='05', d='19', hr='00', min='00', seg='00'), str_fmt)
 

@@ -118,9 +118,13 @@ class BaseTrainer(object, metaclass=ABCMeta):
             self.H['train_loss'].append(report['Loss'].mean())
             self.H['train_dice'].append(report['Dice'].mean())
 
-            report = self.validate(val_loader)
-            self.H['val_loss'].append(report['Loss'].mean())
-            self.H['val_dice'].append(report['Dice'].mean())
+            if val_loader is not None:
+                report = self.validate(val_loader)
+                self.H['val_loss'].append(report['Loss'].mean())
+                self.H['val_dice'].append(report['Dice'].mean())
+            else:
+                self.H['val_loss'].append(0)
+                self.H['val_dice'].append(0)
 
             if test_loader is not None:
                 report = self.test(test_loader)

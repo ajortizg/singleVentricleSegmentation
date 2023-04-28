@@ -15,7 +15,7 @@ from tabulate import tabulate
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 from utilities import path_utils as fpu
-from TVL1OF.dataset import FlowUNetDataset, get_bounds
+from datasets.flow_unet_dataset import FlowUNetDataset, get_bounds
 import segmentation.transforms as T
 from cnn.warp import WarpCNN
 
@@ -60,44 +60,45 @@ if __name__ == '__main__':
         T.XYZT_To_TZYX(keys=['image', 'label']),
         T.AddDimAt(axis=1, keys=['image', 'label']),
         T.Flow_T3XYZ_To_T3ZYX(keys=['forward_flow', 'backward_flow']),
+        T.RandomFlip(p=1.0, axis=2, keys=['image', 'label', 'forward_flow', 'backward_flow']),
+        T.RandomFlip(p=1.0, axis=3, keys=['image', 'label', 'forward_flow', 'backward_flow']),
+        T.RandomFlip(p=1.0, axis=4, keys=['image', 'label', 'forward_flow', 'backward_flow']),
+        # T.Resize(1.0, (128, 64, 108), keys=['image', 'label', 'forward_flow', 'backward_flow'], label_key='label'),
+        T.RandomRotate(1.0, (0, 360), (0, 360), (0, 360), 'zeros', keys=['image', 'label', 'forward_flow', 'backward_flow'], label_key='label'),
+        T.RandomScale(1.0, (0.5, 1.5), 'zeros', keys=['image', 'label', 'forward_flow', 'backward_flow'], label_key='label'),
+        T.ElasticDeformation(1.0, (0.5, 1.5), 8, 'constant', 'yx', keys=['image', 'label', 'forward_flow', 'backward_flow'], label_key='label'),
+        T.SimulateLowResolution(1.0, (0.5, 1.0), keys=['image', 'label', 'forward_flow', 'backward_flow'], label_key='label'),
         T.FlowChannelToLastDim(keys=['forward_flow', 'backward_flow']),
         T.OneHotEncoding(n=2, keys=['label']),
         T.ToTensor(keys=['image', 'label', 'forward_flow', 'backward_flow'])
     ])
 
     full_ds = FlowUNetDataset(data_cfg['root_dir'], 'full', transforms, load_flow=True)
-    full_loader = DataLoader(full_ds, batch_size=8, shuffle=False, num_workers=1, collate_fn=FlowUNetDataset.collate)
+    test_ds = FlowUNetDataset(data_cfg['root_dir'], 'test', transforms, load_flow=True)
+    full_loader = DataLoader(full_ds, batch_size=1, shuffle=False, num_workers=8)
+    test_loader = DataLoader(test_ds, batch_size=1, shuffle=False, num_workers=3)
 
-    for data in full_loader:
-        print('-'*5)
+    # Saving directory for debug outputs
+    # save_dir = plots.createSaveDirectory(data_cfg.get('output_path'), 'Warp')
+    # plots.save_config(cfg, save_dir)
+    # logger = plots.create_logger(save_dir)
 
-    ###############################################################################################
-    # full_ds = FlowUNetDataset(data_cfg['root_dir'], 'full', transforms, load_flow=True)
-    # test_ds = FlowUNetDataset(data_cfg['root_dir'], 'test', transforms, load_flow=True)
-    # full_loader = DataLoader(full_ds, batch_size=1, shuffle=False, num_workers=8)
-    # test_loader = DataLoader(test_ds, batch_size=1, shuffle=False, num_workers=3)
+    loaders = [full_loader, test_loader]
+    test_flags = [False, True]
 
-    # # Saving directory for debug outputs
-    # # save_dir = plots.createSaveDirectory(data_cfg.get('output_path'), 'Warp')
-    # # plots.save_config(cfg, save_dir)
-    # # logger = plots.create_logger(save_dir)
+    for loader, is_test in zip(loaders, test_flags):
+        report = pd.DataFrame(columns=['Patient', 'Dice_Fwd', 'Dice_Bwd', 'HD_Fwd', 'HD_Bwd'])
 
-    # loaders = [full_loader, test_loader]
-    # test_flags = [False, True]
+        for data in tqdm(loader):
+            labels = data['label'].to(device).squeeze(0)
+            ff = data['forward_flow'].to(device).squeeze(0)
+            bf = data['backward_flow'].to(device).squeeze(0)
+            nz, ny, nx = labels.shape[2:]
+            warp = WarpCNN(cfg, nz, ny, nx)
 
-    # for loader, is_test in zip(loaders, test_flags):
-    #     report = pd.DataFrame(columns=['Patient', 'Dice_Fwd', 'Dice_Bwd', 'HD_Fwd', 'HD_Bwd'])
+            dice_fwd, hd_fwd = propagate(warp, data['es'].item(), data['ed'].item(), labels, ff, fwd=True, is_test=is_test)
+            dice_bwd, hd_bwd = propagate(warp, data['es'].item(), data['ed'].item(), labels, bf, fwd=False, is_test=is_test)
+            report.loc[len(report)] = [data['patient'][0], dice_fwd, dice_bwd, hd_fwd, hd_bwd]
 
-    #     for data in tqdm(loader):
-    #         labels = data['label'].to(device).squeeze(0)
-    #         ff = data['forward_flow'].to(device).squeeze(0)
-    #         bf = data['backward_flow'].to(device).squeeze(0)
-    #         nz, ny, nx = labels.shape[2:]
-    #         warp = WarpCNN(cfg, nz, ny, nx)
-
-    #         dice_fwd, hd_fwd = propagate(warp, data['es'].item(), data['ed'].item(), labels, ff, fwd=True, is_test=is_test)
-    #         dice_bwd, hd_bwd = propagate(warp, data['es'].item(), data['ed'].item(), labels, bf, fwd=False, is_test=is_test)
-    #         report.loc[len(report)] = [data['patient'][0], dice_fwd, dice_bwd, hd_fwd, hd_bwd]
-
-    #     report.loc[len(report)] = ['Mean', report['Dice_Fwd'].mean(), report['Dice_Bwd'].mean(), report['HD_Fwd'].mean(), report['HD_Bwd'].mean()]
-    #     print(tabulate(report, headers='keys', tablefmt='psql'))
+        report.loc[len(report)] = ['Mean', report['Dice_Fwd'].mean(), report['Dice_Bwd'].mean(), report['HD_Fwd'].mean(), report['HD_Bwd'].mean()]
+        print(tabulate(report, headers='keys', tablefmt='psql'))

@@ -74,7 +74,7 @@ if __name__ == '__main__':
         T.ToRAS(keys=['image', 'label']),
         T.CropForeground(tol=10, keys=['image', 'label'], label_key='label'),
         T.QuadraticNormalization(95, True, ['image'], 'label'),
-        T.Resize(p=1, size=(-1, 96, 96), keys=['image', 'label'], label_key='label'),
+        T.Resize(p=1, new_shape=(-1, 96, 96), keys=['image', 'label'], label_key='label'),
         T.RemoveDimAt(axis=1, keys=['image', 'label']),
         T.TZYX_To_XYZT(keys=['image', 'label'])
     ])

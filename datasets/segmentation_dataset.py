@@ -78,6 +78,21 @@ class SegmentationDataset(Dataset):
             data = self.transforms(data)
         return data
 
+    def filter_patient(self, patient_to_keep):
+        found = False
+        for i in range(len(self.img_paths)):
+            img_file = osp.basename(self.img_paths[i])
+            patient = self.test_json[img_file]['patient']
+            if patient == patient_to_keep:
+                found = True
+                idx = i
+                break
+        if not found:
+            raise ValueError(f'Patient: {patient_to_keep} not found in test split')
+        else:
+            self.img_paths = [self.img_paths[idx]]
+            self.label_paths = [self.label_paths[idx]]
+
     def read_json(self, filepath):
         f = open(filepath, mode='r')
         data = json.load(f)

@@ -1,7 +1,7 @@
 import os.path as osp
 import sys
 
-ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
+ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../../'))
 sys.path.append(ROOT_DIR)
 import segmentation.transforms as T
 
@@ -27,7 +27,7 @@ def get_transforms(cfg):
     if norm:
         transforms_list.append(T.QuadraticNormalization(q2=q2, keys=['image'], label_key='label'))
     if resize:
-        transforms_list.append(T.Resize(p=1.0, size=size, keys=['image', 'label'], label_key='label'))
+        transforms_list.append(T.Resize(p=1.0, new_shape=size, keys=['image', 'label'], label_key='label'))
     transforms_list.append(T.RemoveDimAt(axis=1, keys=['image', 'label']))
     transforms_list.append(T.TZYX_To_XYZT(keys=['image', 'label']))
     return T.Compose(transforms_list)
@@ -40,7 +40,7 @@ def get_viz_transforms(cfg):
     transforms_list = [T.XYZT_To_TZYX(keys=['image', 'label']),
                        T.AddDimAt(axis=1, keys=['image', 'label'])]
     if resize:
-        transforms_list.append(T.Resize(p=1.0, size=size, keys=['image', 'label'], label_key='label'))
+        transforms_list.append(T.Resize(p=1.0, new_shape=size, keys=['image', 'label'], label_key='label'))
     transforms_list.append(T.RemoveDimAt(axis=1, keys=['image', 'label']))
     transforms_list.append(T.ToTensor())
     return T.Compose(transforms_list)

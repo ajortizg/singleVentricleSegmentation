@@ -18,10 +18,15 @@ sys.path.append(ROOT_DIR)
 from utilities.transforms.basic_transforms import rotx, roty, rotz, rot_x_rad, rot_y_rad, rot_z_rad
 
 metadata_subfix = '_meta'
+flow_subfix = 'flow'
 
-# Modify this oporetations to make them compatible with optical flow + UNet
-# All the operatios must expect a tensor with shape (bs, ch, nz, ny, nx),
-# where bs = nt
+# All transforms assume images and labels with shape (T, C, Z, Y, X)
+# and flow with shape (T, 3, Z, Y, X)
+
+# Note: The data is saved as:
+# imgs: xyzt
+# mask: xyzt
+# flow: t3xyz
 
 
 class BaseTransform(object, metaclass=ABCMeta):
@@ -496,7 +501,25 @@ class RandomFlip(BaseTransform):
 
     def _transform_impl(self, x, metadata=None):
         x_flip = np.flip(x, axis=self.axis).copy()
+
+        if flow_subfix in self.cur_key:
+            x_flip = self.flow_transform(x_flip)
         return x_flip
+
+    def flow_transform(self, flow):
+        '''
+        Args:
+            flow: Numpy array with shape (T, 3, Z, Y, X)
+        '''
+        if self.axis == 2:
+            flow[:, 2] *= -1
+        elif self.axis == 3:
+            flow[:, 1] *= -1
+        elif self.axis == 4:
+            flow[:, 0] *= -1
+        else:
+            raise ValueError('Axis should be 2, 3 or 4')
+        return flow
 
 
 class ToRAS(BaseTransform):
@@ -521,12 +544,12 @@ class ToRAS(BaseTransform):
 
 
 class Resize(BaseTransform):
-    def __init__(self, p, size, keys=['image', 'label'], label_key='label'):
-        super(Resize, self).__init__(keys)
+    def __init__(self, p, new_shape, keys=['image', 'label'], label_key='label'):
+        super().__init__(keys)
         self.p = p
-        self.size = list(size) if type(size) == tuple else size
+        self.new_shape = list(new_shape) if type(new_shape) == tuple else new_shape
         self.label_key = label_key
-        assert len(size) == 3, 'size must be 3d'
+        assert len(new_shape) == 3, 'size must be 3d'
 
     def __call__(self, data):
         if np.random.uniform() < self.p:
@@ -535,13 +558,27 @@ class Resize(BaseTransform):
 
     def _transform_impl(self, x, metadata=None):
         mode = 'nearest' if self.cur_key == self.label_key else 'trilinear'
-        orig_shape = x.shape[2:]
+        self.orig_shape = x.shape[2:]
         for i in range(3):
-            if self.size[i] == -1:
-                self.size[i] = orig_shape[i]
+            if self.new_shape[i] == -1:
+                self.new_shape[i] = self.orig_shape[i]
         x = torch.from_numpy(x).float()
-        x = F.interpolate(x, size=self.size, mode=mode)
+        x = F.interpolate(x, size=self.new_shape, mode=mode)
+
+        if flow_subfix in self.cur_key:
+            x = self.flow_transform(x)
+
         return x.numpy()
+
+    def flow_transform(self, flow):
+        '''
+        Args:
+            flow: Numpy array with shape (T, 3, Z, Y, X)
+        '''
+        flow[:, 0] /= (float(self.orig_shape[2]) / float(self.new_shape[2]))
+        flow[:, 1] /= (float(self.orig_shape[1]) / float(self.new_shape[1]))
+        flow[:, 2] /= (float(self.orig_shape[0]) / float(self.new_shape[0]))
+        return flow
 
 
 class CropForeground(BaseTransform):
@@ -619,9 +656,9 @@ class RandomRotate(BaseTransform):
 
     def __call__(self, data):
         if np.random.rand() < self.p:
-            *_, NZ, NY, NX = data[self.label_key].shape
-            R, offset = self.create_rot(NZ, NY, NX)
-            self.coords = _normalize_coords(self.rotate_coords(R, offset, NZ, NY, NX))
+            NZ, NY, NX = data[self.label_key].shape[2:]
+            self.R, offset = self.create_rot(NZ, NY, NX)
+            self.coords = _normalize_coords(self.rotate_coords(self.R, offset, NZ, NY, NX))
             data = super().apply_transform(data)
         return data
 
@@ -629,6 +666,9 @@ class RandomRotate(BaseTransform):
         mode = 'nearest' if self.cur_key == self.label_key else 'bilinear'
         x = torch.from_numpy(x).float()
         x_new = F.grid_sample(x, self.coords.repeat(x.shape[0], 1, 1, 1, 1), mode=mode, padding_mode=self.boundary, align_corners=False)
+
+        if flow_subfix in self.cur_key:
+            x_new = self.flow_transform(x_new)
         return x_new.numpy()
 
     def rotate_coords(self, rot, offset, NZ, NY, NX):
@@ -659,6 +699,16 @@ class RandomRotate(BaseTransform):
         offset = torch.from_numpy(offset).float()
         return R, offset
 
+    def flow_transform(self, flow):
+        R = self.R.T
+        x = flow[:, 0].clone()
+        y = flow[:, 1].clone()
+        z = flow[:, 2].clone()
+        flow[:, 0] = (x * R[0, 0] + y * R[0, 1] + z * R[0, 2])
+        flow[:, 1] = (x * R[1, 0] + y * R[1, 1] + z * R[1, 2])
+        flow[:, 2] = (x * R[2, 0] + y * R[2, 1] + z * R[2, 2])
+        return flow
+
 
 class RandomScale(BaseTransform):
     def __init__(self, p, scale_range, boundary='zeros', keys=['image', 'label'], label_key='label'):
@@ -680,15 +730,22 @@ class RandomScale(BaseTransform):
         mode = 'nearest' if self.cur_key == self.label_key else 'bilinear'
         x = torch.from_numpy(x).float()
         x_new = F.grid_sample(x, self.coords.repeat(x.shape[0], 1, 1, 1, 1), mode=mode, padding_mode=self.boundary, align_corners=False)
+
+        if flow_subfix in self.cur_key:
+            x_new = self.flow_transform(x_new)
         return x_new.numpy()
 
     def scale_coords(self, coords):
         if np.random.random() < 0.5 and self.scale_range[0] < 1:
-            sc = np.random.uniform(self.scale_range[0], 1)
+            self.sc = np.random.uniform(self.scale_range[0], 1)
         else:
-            sc = np.random.uniform(max(self.scale_range[0], 1), self.scale_range[1])
-        coords *= sc
+            self.sc = np.random.uniform(max(self.scale_range[0], 1), self.scale_range[1])
+        coords *= self.sc
         return coords
+
+    def flow_transform(self, flow):
+        flow /= self.sc
+        return flow
 
 
 class ElasticDeformation(BaseTransform):
@@ -900,50 +957,6 @@ class SimulateLowResolution(BaseTransform):
                 down = resize(x[b, c].astype(float), target_shape, order=order, mode='edge', anti_aliasing=False)
                 x[b, c] = resize(down, shp, order=0, mode='edge', anti_aliasing=False)
         return x
-
-# class Spacing:
-#     def __init__(self, pixdim):
-#         self.tr = monai.transforms.Spacing(pixdim=pixdim)
-
-#     def __call__(self, data):
-#         img_zyxt = data['img']
-#         img_affine = data['img_meta']['affine']
-#         mask_zyxt = data['mask']
-#         mask_affine = data['mask_meta']['affine']
-
-#         # 1.025, 5.75
-#         ts = img_zyxt.shape[-1]
-#         for t in range(ts):
-#             img = img_zyxt[..., t]
-#             img = np.expand_dims(img, axis=0)
-#             img = self.tr(monai.data.MetaTensor(img, affine=img_affine), mode='bilinear')
-#             img_zyxt[..., t] = img.squeeze(0).cpu().detach().numpy()
-
-#         ts = mask_zyxt.shape[-1]
-#         for t in range(ts):
-#             mask = mask_zyxt[..., t]
-#             mask = np.expand_dims(mask, axis=0)
-#             mask = self.tr(monai.data.MetaTensor(mask, affine=mask_affine), mode='nearest')
-#             mask_zyxt[..., t] = mask.squeeze(0).cpu().detach().numpy()
-
-#         data['img'] = img_zyxt
-#         data['mask'] = mask_zyxt
-#         return data
-
-#     def __repr__(self) -> str:
-#         return f"{self.__class__.__name__}()"
-
-
-# -----------------------------------------------------------
-#              Optical flow + UNet transformations
-# -----------------------------------------------------------
-# All transforms assume images and labels with shape (T, C, Z, Y, X)
-# and flow with shape (T, 3, Z, Y, X)
-
-# Note: The data is saved as:
-# imgs: xyzt
-# mask: xyzt
-# flow: t3xyz
 
 
 class XYZT_To_TZYX(BaseTransform):

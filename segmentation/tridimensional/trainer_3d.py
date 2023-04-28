@@ -40,3 +40,21 @@ class Trainer3d(BaseTrainer):
 
     def _test_minibatch_impl(self, data):
         return super()._test_minibatch_impl(data)
+
+
+class FineTuner3d(Trainer3d):
+    def __init__(self, n_classes: int, model: Module, loss_fn: _Loss, optimizer: Optimizer, device, logger=None):
+        super().__init__(n_classes, model, loss_fn, optimizer, device, logger)
+    
+    def train(self, loader):
+        self.model.train()
+        report = pd.DataFrame(columns=['Loss', 'Dice'])
+
+        for data in loader:
+            t = [data['es'].item(), data['ed'].item()]
+            data['image'] = data['image'].squeeze(0)[t]
+            data['label'] = data['label'].squeeze(0)[t]
+            loss, acc = self._train_minibatch_impl(data)
+            report.loc[len(report)] = [loss, acc]
+        return report
+

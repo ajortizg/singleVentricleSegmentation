@@ -91,20 +91,24 @@ if __name__ == '__main__':
 
     # Create trainer
     if params['net'] == 'FCT':
-        trainer = FctTrainer(params.getint('img_size'),
-                             params.getint('num_classes'),
-                             net,
-                             loss_fn,
-                             optimizer,
-                             device,
-                             logger)
+        trainer = FctTrainer(
+            params.getint('img_size'),
+            params.getint('num_classes'),
+            net,
+            loss_fn,
+            optimizer,
+            device,
+            logger
+        )
     elif params['net'] == 'TransUNet':
-        trainer = TransUNetTrainer(params.getint('num_classes'),
-                                   net,
-                                   loss_fn,
-                                   optimizer,
-                                   device,
-                                   logger)
+        trainer = TransUNetTrainer(
+            params.getint('num_classes'),
+            net,
+            loss_fn,
+            optimizer,
+            device,
+            logger
+        )
     else:
         raise ValueError('{} not supported!'.format(params['net']))
 
@@ -121,58 +125,3 @@ if __name__ == '__main__':
     trainer.plot_loss_history(osp.join(save_dir, 'loss.png'))
     trainer.plot_accuracy_history(osp.join(save_dir, 'dice.png'))
     writer.close()
-
-    # H = {'train_loss': [], 'train_dice': [], 'val_loss': [], 'val_dice': [], 'test_dice': []}
-    # epochs_since_last_improvement = 0
-    # best_dice = 0.0
-
-    # # trainer = FCTTrainer(img_size, num_classes, model, loss_fn, optimizer, device)
-    # trainer = TransUNetTrainer(num_classes, model, loss_fn, optimizer, device)
-
-    # tic = time.time()
-    # for e in tqdm(range(1, epochs + 1)):
-    #     epoch_tic = time.time()
-    #     report = trainer.train(train_loader)
-    #     H['train_loss'].append(report['Loss'].mean())
-    #     H['train_dice'].append(report['Dice'].mean())
-
-    #     report = trainer.validate(val_loader)
-    #     H['val_loss'].append(report['Loss'].mean())
-    #     H['val_dice'].append(report['Dice'].mean())
-
-    #     if do_test:
-    #         report = trainer.test(test_loader)
-    #         H['test_dice'].append(report['Dice'].mean())
-    #     else:
-    #         H['test_dice'].append(0)
-
-    #     writer.add_scalar('lr', optimizer.param_groups[0]['lr'], e)
-    #     scheduler.step(H['val_loss'][-1])
-
-    #     logger.info(AsciiTable([
-    #         ['Split', 'Loss', 'Dice'],
-    #         ['Train', '{:.3f}'.format(H['train_loss'][-1]), '{:.3f}'.format(H['train_dice'][-1])],
-    #         ['Val', '{:.3f}'.format(H['val_loss'][-1]), '{:.3f}'.format(H['val_dice'][-1])],
-    #         ['Test', '-', '{:.3f}'.format(H['test_dice'][-1])],
-    #         ['Epoch', e, epochs_since_last_improvement]
-    #     ]).table)
-
-    #     if H['val_dice'][-1] > best_dice:
-    #         best_dice = H['val_dice'][-1]
-    #         epochs_since_last_improvement = 0
-    #         utils.create_checkpoint(model, e, optimizer, H, osp.join(save_dir, 'checkpoint_best.pth'))
-    #         logger.info(f'Checkpoint updated with dice: {best_dice:,.3f}')
-    #     else:
-    #         epochs_since_last_improvement += 1
-
-    #     writer.add_scalars('loss', {'train': H['train_loss'][-1], 'val': H['val_loss'][-1]}, e)
-    #     writer.add_scalars('dice', {'train': H['train_dice'][-1], 'val': H['val_dice'][-1], 'test': H['test_dice'][-1]}, e)
-    #     writer.add_scalar('epoch_time', time.time() - epoch_tic, e)
-
-    #     # early stop
-    #     if epochs_since_last_improvement > patience:
-    #         logger.info(f'Early stop at epoch: {e}')
-    #         break
-
-    # utils.create_checkpoint(model, e, optimizer, H, osp.join(save_dir, 'checkpoint_final.pth'))
-    # logger.info('\nTraining time: {:.3f} hrs.'.format((time.time() - tic) / 3600.0))

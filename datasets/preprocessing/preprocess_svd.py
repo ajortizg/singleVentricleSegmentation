@@ -8,12 +8,13 @@ from tqdm import tqdm
 import nibabel as nib
 import numpy as np
 
-ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
+ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../../'))
 sys.path.append(ROOT_DIR)
 import utilities.path_utils as path_utils
-from preprocessing.transforms import get_transforms
-import preprocessing.viz as viz
-import preprocessing.nib_utils as nib_utils
+from utilities import stuff
+from datasets.preprocessing.transforms import get_transforms
+import datasets.preprocessing.viz as viz
+import datasets.preprocessing.nib_utils as nib_utils
 from thirdparty.nnUNet.nnunetv2.dataset_conversion.generate_dataset_json import generate_dataset_json
 
 
@@ -24,8 +25,6 @@ def preprocess_train_split(data, transforms, src_labels_dir, dst_imgs_dir, dst_l
     nib_label_es = nib.load(osp.join(src_labels_dir, patient_name, patient_name + '_Systole_Labelmap.nii'))
     nib_label_ed = nib.load(osp.join(src_labels_dir, patient_name, patient_name + '_Diastole_Labelmap.nii'))
     label_xyzt = np.stack((nib_label_es.get_fdata(), nib_label_ed.get_fdata()), axis=3)
-    data['label_es_nib'] = nib_label_es
-    data['label_ed_nib'] = nib_label_ed
     data['label'] = label_xyzt
     data['label_meta'] = {'affine': nib_label_ed.affine}
 
@@ -36,9 +35,9 @@ def preprocess_train_split(data, transforms, src_labels_dir, dst_imgs_dir, dst_l
     np.save(osp.join(dst_labels_patient_dir, f'{patient_name}_Systole_Labelmap.npy'), data['label'][..., 0])
     np.save(osp.join(dst_labels_patient_dir, f'{patient_name}_Diastole_Labelmap.npy'), data['label'][..., 1])
 
-    nib_utils.save_np_to_nifty(data['image'], dst_imgs_dir, f'{patient_name}.nii.gz')
-    nib_utils.save_np_to_nifty(data['label'][..., 0], dst_labels_patient_dir, f'{patient_name}_Systole_Labelmap.nii.gz')
-    nib_utils.save_np_to_nifty(data['label'][..., 1], dst_labels_patient_dir, f'{patient_name}_Diastole_Labelmap.nii.gz')
+    nib_utils.save_np_to_nifty(data['image'], dst_imgs_dir, f'{patient_name}.nii.gz', data['image_nib'].header)
+    nib_utils.save_np_to_nifty(data['label'][..., 0], dst_labels_patient_dir, f'{patient_name}_Systole_Labelmap.nii.gz', nib_label_es.header)
+    nib_utils.save_np_to_nifty(data['label'][..., 1], dst_labels_patient_dir, f'{patient_name}_Diastole_Labelmap.nii.gz', nib_label_ed.header)
     return data
 
 
@@ -51,8 +50,6 @@ def preprocess_test_split(data, transforms, src_labels_dir, dst_imgs_dir, dst_la
     for t in range(label_xyzt.shape[3]):
         nib_label = nib.load(osp.join(src_labels_dir, patient_name, f'{patient_name}_{t}_Labelmap.nii'))
         label_xyzt[..., t] = nib_label.get_fdata()
-
-    data['label_nib'] = nib_label
     data['label'] = label_xyzt
     data['label_meta'] = {'affine': nib_label.affine}
 
@@ -64,14 +61,15 @@ def preprocess_test_split(data, transforms, src_labels_dir, dst_imgs_dir, dst_la
     np.save(osp.join(dst_labels_patient_dir, f'{patient_name}_Systole_Labelmap.npy'), data['label'][..., data['es']])
     np.save(osp.join(dst_labels_patient_dir, f'{patient_name}_Diastole_Labelmap.npy'), data['label'][..., data['ed']])
 
-    nib_utils.save_np_to_nifty(data['image'], dst_imgs_dir, f'{patient_name}.nii.gz')
+    nib_utils.save_np_to_nifty(data['image'], dst_imgs_dir, f'{patient_name}.nii.gz', data['image_nib'].header)
     # for t in range(data['label'].shape[3]):
     #     nib_utils.save_np_to_nifty(data['label'][..., t], dst_labels_patient_dir,
     #                                f'{patient_name}_{t}_Labelmap.nii.gz', data['label_nib'].affine, data['label_nib'].header)
 
-    nib_utils.save_np_to_nifty(data['label'], dst_labels_patient_dir, f'{patient_name}_Labelmap.nii.gz')
-    nib_utils.save_np_to_nifty(data['label'][..., data['es']], dst_labels_patient_dir, f'{patient_name}_Systole_Labelmap.nii.gz')
-    nib_utils.save_np_to_nifty(data['label'][..., data['ed']], dst_labels_patient_dir, f'{patient_name}_Diastole_Labelmap.nii.gz')
+    nib_utils.save_np_to_nifty(data['label'], dst_labels_patient_dir,
+                               f'{patient_name}_Labelmap.nii.gz', nib_label.header, zooms=nib_label.header.get_zooms() + (1.0,))
+    nib_utils.save_np_to_nifty(data['label'][..., data['es']], dst_labels_patient_dir, f'{patient_name}_Systole_Labelmap.nii.gz', nib_label.header)
+    nib_utils.save_np_to_nifty(data['label'][..., data['ed']], dst_labels_patient_dir, f'{patient_name}_Diastole_Labelmap.nii.gz', nib_label.header)
     return data
 
 
@@ -91,13 +89,13 @@ if __name__ == '__main__':
 
     # Output paths
     save_dir = path_utils.create_save_dir(data_cfg['output_dir'], f'{osp.basename(root_dir)}')
-    path_utils.save_config(cfg, save_dir)
+    stuff.save_config(cfg, save_dir)
     dst_imgs_dir = path_utils.create_sub_dir(save_dir, data_cfg['dst_images_folder'])
     dst_labels_dir = path_utils.create_sub_dir(save_dir, data_cfg['dst_labels_folder'])
 
     # Preprocessing transforms
     transforms = get_transforms(transforms_cfg)
-    path_utils.save_transforms_to_json(transforms, osp.join(save_dir, 'transforms.json'))
+    stuff.save_transforms_to_json(transforms, osp.join(save_dir, 'transforms.json'))
 
     pbar = tqdm(total=len(df))
     num_training_casses = 0
