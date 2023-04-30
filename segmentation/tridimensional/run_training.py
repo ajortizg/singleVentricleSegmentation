@@ -1,6 +1,5 @@
 import os.path as osp
 import configparser
-import time
 import sys
 import os
 
@@ -9,9 +8,6 @@ from torch.utils.data import DataLoader
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 from monai.losses import DiceCELoss
-import matplotlib.pyplot as plt
-from terminaltables import AsciiTable
-from tqdm import tqdm
 import numpy as np
 
 

@@ -35,7 +35,7 @@ class BasicUNet3d(nn.Module):
 
     def forward(self, x):
         if self.residual:
-            identity = x[:, 1:2, :, :, :].clone()
+            identity = x[:, 1:, :, :, :].clone()
 
         x1 = self.inc(x)
 

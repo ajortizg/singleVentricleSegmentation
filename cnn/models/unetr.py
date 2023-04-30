@@ -30,7 +30,7 @@ class TransformerUNet(nn.Module):
 
     def forward(self, x):
         if self.residual:
-            identity = x[:, 1:2, :, :, :].clone()
+            identity = x[:, 1:, :, :, :].clone()
 
         output = self.net(x)
 

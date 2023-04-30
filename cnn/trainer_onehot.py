@@ -4,7 +4,7 @@ import torch
 from torch import nn
 from monai.metrics.meandice import compute_dice
 from monai.metrics.hausdorff_distance import compute_hausdorff_distance
-from monai.transforms import RemoveSmallObjects,KeepLargestConnectedComponent
+from monai.transforms import RemoveSmallObjects, KeepLargestConnectedComponent
 import numpy as np
 import os
 import math
@@ -14,13 +14,11 @@ ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 from cnn.warp import WarpCNN
 import utilities.path_utils as path_utils
+from segmentation.transforms import one_hot
 
 
-__all__ = ['Trainer']
-
-
-class Trainer:
-    def __init__(self, net, opt, pbar, config, device, writer, logger, display_prob=0.2):
+class TrainerOneHot:
+    def __init__(self, net, opt, pbar, config, device, writer, logger):
         self.net = net
         self.opt = opt
         self.pbar = pbar
@@ -28,12 +26,12 @@ class Trainer:
         self.device = device
         self.writer = writer
         self.logger = logger
-        self.display_prob = display_prob
         self.loss_lambda = config.getfloat('PARAMETERS', 'LOSS_LAMBDA')
         loss_fn_type = config.get('PARAMETERS', 'LOSS_FN')
         self.penalization = config.getboolean('PARAMETERS', 'LOSS_PENALIZATION')
         self.loss_gamma = config.getfloat('PARAMETERS', 'LOSS_PENALIZATION_GAMMA')
         self.reduction = config.get('PARAMETERS', 'LOSS_REDUCTION')
+        self.num_classes = config.getint('PARAMETERS', 'num_classes')
         self.loss_fn = None
 
         # statistics
@@ -71,15 +69,15 @@ class Trainer:
 
     def train_epoch(self, train_loader):
         self.net.train()
-        total_loss = (0.0, 0.0, 0.0, 0.0, 0.0)
-        total_acc = (0.0, 0.0, 0.0)
+        total_loss = (0.0, ) * 5
+        total_acc = (0.0, ) * 3
         steps = len(train_loader)
 
         for i, (_, img4d, m0, mk, _, times_fwd, times_bwd, ff, bf, offsets) in enumerate(train_loader):
             self.pbar.set_postfix_str(f'Train: {i+1}/{steps}')
             img4d = img4d.to(self.device)
-            m0 = m0.to(self.device)
-            mk = mk.to(self.device)
+            m0 = one_hot(m0, self.num_classes).to(self.device)
+            mk = one_hot(mk, self.num_classes).to(self.device)
             ff = ff.to(self.device)
             bf = bf.to(self.device)
             offsets = offsets.to(torch.long)
@@ -96,8 +94,6 @@ class Trainer:
                 total_loss = tuple(tl + l.item() for tl, l in zip(total_loss, loss))
                 acc0, acck = self.compute_dice_acc(mts, mtts, offsets, batch_indices)
                 total_acc = tuple(ta + a for ta, a in zip(total_acc, (0.5 * (acc0 + acck), acc0, acck)))
-                if np.random.rand() < self.display_prob:
-                    self.plot_imgs(mts, mtts, offsets, batch_indices, 'train')
 
         avg_loss = tuple(x / steps for x in total_loss)
         avg_acc = tuple(x / steps for x in total_acc)
@@ -108,15 +104,15 @@ class Trainer:
     @torch.no_grad()
     def val_epoch(self, val_loader, cnn=True):
         self.net.eval()
-        total_loss = (0.0, 0.0, 0.0, 0.0, 0.0)
-        total_acc = (0.0, 0.0, 0.0)
+        total_loss = (0.0, ) * 5
+        total_acc = (0.0, ) * 3
         steps = len(val_loader)
 
         for i, (_, img4d, m0, mk, _, times_fwd, times_bwd, ff, bf, offsets) in enumerate(val_loader):
             self.pbar.set_postfix_str(f'Val: {i+1}/{steps}')
             img4d = img4d.to(self.device)
-            m0 = m0.to(self.device)
-            mk = mk.to(self.device)
+            m0 = one_hot(m0, self.num_classes).to(self.device)
+            mk = one_hot(mk, self.num_classes).to(self.device)
             ff = ff.to(self.device)
             bf = bf.to(self.device)
             offsets = offsets.to(torch.long)
@@ -128,8 +124,6 @@ class Trainer:
             total_loss = tuple(tl + l.item() for tl, l in zip(total_loss, loss))
             acc0, acck = self.compute_dice_acc(mts, mtts, offsets, batch_indices)
             total_acc = tuple(ta + a for ta, a in zip(total_acc, (0.5 * (acc0 + acck), acc0, acck)))
-            if np.random.rand() < self.display_prob:
-                self.plot_imgs(mts, mtts, offsets, batch_indices, 'val')
 
         avg_loss = tuple(x / steps for x in total_loss)
         avg_acc = tuple(x / steps for x in total_acc)
@@ -140,7 +134,7 @@ class Trainer:
     @torch.no_grad()
     def test_epoch(self, test_loader, test_ds):
         self.net.eval()
-        total_acc = (0.0, 0.0, 0.0)
+        total_acc = (0.0, ) * 3
         steps = len(test_loader)
         if steps == 0:
             self.mean_epoch_stat['test_acc'].append(total_acc)
@@ -150,43 +144,43 @@ class Trainer:
             self.pbar.set_postfix_str(f'Test: {i+1}/{steps}')
             times_fwd, times_bwd = test_ds.create_timeline(times_fwd[0], times_bwd[0], masks.shape[-1])
             img4d = img4d.to(self.device)
-            masks = masks.to(self.device)
+            masks = masks.squeeze(0).permute(4, 0, 1, 2, 3)
+            masks = one_hot(masks, self.num_classes).to(self.device)
             ff = ff.to(self.device)
             bf = bf.to(self.device)
 
             BS, NZ, NY, NX, _, timesteps = ff.shape
             warp = WarpCNN(self.config, NZ, NY, NX)
             mts = torch.empty_like(masks)
-            mts[..., times_fwd[0]] = masks[..., times_fwd[0]]
+            mts[times_fwd[0]] = masks[times_fwd[0]]
             mtts = torch.empty_like(masks)
-            mtts[..., times_bwd[0]] = masks[..., times_bwd[0]]
+            mtts[times_bwd[0]] = masks[times_bwd[0]]
 
             for t in range(timesteps - 1):
                 # Forward mask propagation
-                mt = warp(mts[..., times_fwd[t]], ff[..., t])
+                mt = warp(mts[times_fwd[t]].unsqueeze(0), ff[..., t])
                 x = torch.cat((img4d[..., times_fwd[t + 1]], mt), dim=1)
-                mts[..., times_fwd[t + 1]], _ = self.net(x)
+                mts[times_fwd[t + 1]], _ = self.net(x)
 
                 # Backward mask propagation
-                mtt = warp(mtts[..., times_bwd[t]], bf[..., t])
+                mtt = warp(mtts[times_bwd[t]].unsqueeze(0), bf[..., t])
                 x = torch.cat((img4d[..., times_bwd[t + 1]], mtt), dim=1)
-                mtts[..., times_bwd[t + 1]], _ = self.net(x)
+                mtts[times_bwd[t + 1]], _ = self.net(x)
+
+            ti, tf = times_fwd[0], times_bwd[0]
+            mts = mts[ti:tf + 1]
+            mtts = mtts[ti:tf + 1]
+            masks = masks[ti:tf + 1]
 
             # Compute forward accuracy
-            mts = mts.swapaxes(0, -1).squeeze(-1)
-            masks = masks.swapaxes(0, -1).squeeze(-1)
-            mts = torch.where(mts > 0.5, 1.0, 0.0)
-            acc_fwd = compute_dice(mts, masks).mean().item()
+            mts = one_hot(mts, self.num_classes, argmax=True)
+            acc_fwd = compute_dice(mts, masks, include_background=False).mean().item()
 
             # Compute backward accuracy
-            mtts = mtts.swapaxes(0, -1).squeeze(-1)
-            mtts = torch.where(mtts > 0.5, 1.0, 0.0)
-            acc_bwd = compute_dice(mtts, masks).mean().item()
+            mtts = one_hot(mtts, self.num_classes, argmax=True)
+            acc_bwd = compute_dice(mtts, masks, include_background=False).mean().item()
 
             total_acc = tuple(ta + a for ta, a in zip(total_acc, (0.5 * (acc_fwd + acc_bwd), acc_bwd, acc_fwd)))
-
-            if np.random.rand() < self.display_prob:
-                self.plot_test_imgs(mts, masks, 'test')
 
         avg_acc = tuple(x / steps for x in total_acc)
         self.mean_epoch_stat['test_acc'].append(avg_acc)
@@ -232,13 +226,13 @@ class Trainer:
         BS, NZ, NY, NX, CH, timesteps = ff.shape
         dtype = m0.dtype
         warp = WarpCNN(self.config, NZ, NY, NX)
-        mts = torch.empty(size=(timesteps + 1, BS, 1, NZ, NY, NX), dtype=dtype, device=self.device)
+        mts = torch.empty(size=(timesteps + 1, BS, self.num_classes, NZ, NY, NX), dtype=dtype, device=self.device)
         mts[0] = m0
         mtts = torch.empty_like(mts)
         mtts[-1] = mk
 
         if self.penalization:
-            mhs = torch.empty(size=(timesteps, BS, 1, NZ, NY, NX), dtype=dtype, device=self.device)
+            mhs = torch.empty(size=(timesteps, BS, self.num_classes, NZ, NY, NX), dtype=dtype, device=self.device)
             mhhs = torch.empty_like(mhs)
         else:
             mhs = mhhs = None
@@ -326,14 +320,16 @@ class Trainer:
     def compute_dice_acc(self, mts, mtts, offsets, batch_indices):
         m0 = mts[0, batch_indices]
         m0tt = mtts[offsets[batch_indices], batch_indices]
-        m0tt = torch.where(m0tt > 0.5, 1.0, 0.0)
+        # m0tt = torch.where(m0tt > 0.5, 1.0, 0.0)
+        m0tt = one_hot(m0tt, self.num_classes, argmax=True)
 
         mk = mtts[-1, batch_indices]
         mkt = mts[-offsets[batch_indices] - 1, batch_indices]
-        mkt = torch.where(mkt > 0.5, 1.0, 0.0)
+        mkt = one_hot(mkt, self.num_classes, argmax=True)
+        # mkt = torch.where(mkt > 0.5, 1.0, 0.0)
 
-        acc0 = compute_dice(m0tt, m0).mean()
-        acck = compute_dice(mkt, mk).mean()
+        acc0 = compute_dice(m0tt, m0, include_background=False).mean()
+        acck = compute_dice(mkt, mk, include_background=False).mean()
         # dc = 0.5 * (acc0 + acck)
         return acc0.item(), acck.item()
 
@@ -350,58 +346,20 @@ class Trainer:
         hdk = compute_hausdorff_distance(mkt, mk).mean().item()
         return hd0, hdk
 
-    def plot_test_imgs(self, mts, gts, tag):
-        b = np.random.randint(mts.shape[0])
-        mt = mts[b]
-        gt = gts[b]
-        mt = mt.swapaxes(0, 1)
-        gt = gt.swapaxes(0, 1)
-        error = torch.abs(gt - mt)
-        self.writer.add_images(f'{tag}/gt', gt)
-        self.writer.add_images(f'{tag}/est', mt)
-        self.writer.add_images(f'{tag}/error', error)
-
-    def plot_imgs(self, mts, mtts, offsets, batch_indices, tag):
-        m0 = mts[0, batch_indices]
-        m0tt = mtts[offsets[batch_indices], batch_indices]
-        m0tt = torch.where(m0tt > 0.5, 1.0, 0.0)
-
-        mk = mtts[-1, batch_indices]
-        mkt = mts[-offsets[batch_indices] - 1, batch_indices]
-        mkt = torch.where(mkt > 0.5, 1.0, 0.0)
-
-        # take batch randomly
-        b = np.random.randint(len(offsets))
-        m0_b = m0[b]
-        m0tt_b = m0tt[b]
-        m0_b.swapaxes_(0, 1)
-        m0tt_b.swapaxes_(0, 1)
-        m0_e = torch.abs(m0_b - m0tt_b)
-        self.writer.add_images(f'{tag}/m0_b{b}/gt', m0_b)
-        self.writer.add_images(f'{tag}/m0_b{b}/est', m0tt_b)
-        self.writer.add_images(f'{tag}/m0_b{b}/error', m0_e)
-
-        mk_b = mk[b]
-        mkt_b = mkt[b]
-        mk_b.swapaxes_(0, 1)
-        mkt_b.swapaxes_(0, 1)
-        mk_e = torch.abs(mk_b - mkt_b)
-        self.writer.add_images(f'{tag}/mk_b{b}/gt', mk_b)
-        self.writer.add_images(f'{tag}/mk_b{b}/est', mkt_b)
-        self.writer.add_images(f'{tag}/mk_b{b}/error', mk_e)
-
     def compute_loss(self, mts, mtts, offsets, batch_indices, mhs=None, mhhs=None):
         BS = mts.shape[1]
 
         # compute l1
         m0 = mts[0, batch_indices]
         m0tt = mtts[offsets[batch_indices], batch_indices]
-        l1 = self.loss_fn(m0tt, m0)
+        # l1 = self.loss_fn(m0tt, m0)
+        l1 = (m0 - m0tt).pow(2).sum()
 
         # compute l2
         mk = mtts[-1, batch_indices]
         mkt = mts[-offsets[batch_indices] - 1, batch_indices]
-        l2 = self.loss_fn(mkt, mk)
+        # l2 = self.loss_fn(mkt, mk)
+        l2 = (mk - mkt).pow(2).sum()
 
         kl = mts.shape[0] - offsets
 
@@ -415,16 +373,18 @@ class Trainer:
             mt = mts[1:ts_tildes - offsets[b] - 1, b]
             mtt = mtts[1 + offsets[b]:-1, b]
             if self.reduction == 'sum':
-                l3 += self.loss_fn(mt, mtt) / kl[b]
+                # l3 += self.loss_fn(mt, mtt) / kl[b]
+                l3 += (mt - mtt).pow(2).sum() / kl[b]
             else:
-                l3 += self.loss_fn(mt, mtt)
+                # l3 += self.loss_fn(mt, mtt)
+                l3 += (mt - mtt).pow(2).sum()
 
             # compute l4
             if self.penalization:
                 mh = mhs[0:ts_hats - offsets[b], b]
                 mhh = mhhs[0:ts_hats - offsets[b], b]
-                # l4 += (torch.norm(mh) + torch.norm(mhh)) / kl[b]    # l1
-                l4 += (mh.pow(2).sum() + mhh.pow(2).sum()) / kl[b]    # l2
+                l4 += (mh.norm().sum() + mhh.norm().sum()) / kl[b]    # l1
+                # l4 += (mh.pow(2).sum() + mhh.pow(2).sum()) / kl[b]    # l2
 
         if self.reduction == 'sum':
             l1 = l1 / BS
@@ -451,8 +411,6 @@ class Trainer:
 
         with torch.no_grad():
             acc0, acck = self.compute_dice_acc(mts, mtts, offsets, batch_indices)
-            if np.random.rand() < self.display_prob:
-                self.plot_imgs(mts, mtts, offsets, batch_indices, 'train')
 
         avg_loss = tuple(x.item() for x in loss)
         avg_acc = (0.5 * (acc0 + acck), acc0, acck)
@@ -576,48 +534,3 @@ class Trainer:
         plt.ylabel('Loss')
         plt.legend(loc='lower left')
         plt.savefig(os.path.join(save_dir, 'loss.pdf'))
-
-    def find_lr(self, train_loader, init_value=1e-8, final_value=10.0):
-        number_in_epoch = len(train_loader) - 1
-        update_step = (final_value / init_value)**(1 / number_in_epoch)
-        lr = init_value
-
-        self.opt.param_groups[0]['lr'] = lr
-        best_loss = 0.0
-        losses = []
-        log_lrs = []
-
-        for i, data in enumerate(train_loader):
-            _, img4d, m0, mk, _, times_fwd, times_bwd, ff, bf = data
-
-            img4d = img4d.to(self.device)
-            m0 = m0.to(self.device)
-            mk = mk.to(self.device)
-            ff = ff.to(self.device)
-            bf = bf.to(self.device)
-
-            mts, mtts, mhs, mhhs = self.time_popagation(img4d, m0, mk, times_fwd, times_bwd, ff, bf, cnn=True)
-            loss = self.compute_loss(mts, mtts, mhs, mhhs)[0]
-
-            # check if loss explodes
-            if i > 1 and loss.item() > 10 * best_loss:
-                return log_lrs[10:-5], losses[10:-5]
-
-            # reacord the best loss
-            if loss.item() < best_loss or i == 1:
-                best_loss = loss.item()
-
-            # store the values
-            losses.append(loss.item())
-            log_lrs.append(math.log10(lr))
-
-            # backward pass and optimize
-            self.opt.zero_grad()
-            loss.backward()
-            self.opt.step()
-
-            # update lr for the next step and store
-            lr *= update_step
-            self.opt.param_groups[0]['lr'] = lr
-
-        return log_lrs, losses

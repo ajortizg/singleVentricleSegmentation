@@ -70,8 +70,8 @@ class Report:
 
 
 if __name__ == "__main__":
-    search_dir = 'results/FCT_results/Dataset_SVD_crop_2d/fold_*'
-    from_dt = datetime.strptime(fmt_date(y='2023', m='04', d='19', hr='00', min='00', seg='00'), str_fmt)
+    search_dir = 'results_george/CNN_*'
+    from_dt = datetime.strptime(fmt_date(y='2021', m='04', d='19', hr='00', min='00', seg='00'), str_fmt)
     to_dt = datetime.strptime(fmt_date(y='2023', m='05', d='19', hr='00', min='00', seg='00'), str_fmt)
 
     report_dir = path_utils.create_sub_dir('results', 'reports')

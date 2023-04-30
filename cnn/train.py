@@ -14,6 +14,7 @@ from torchsummary import summary
 from models.model_factory import create_model, save_model
 # from trainer_single_batch import Trainer
 from trainer_multi_batch import Trainer
+from trainer_onehot import TrainerOneHot
 
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
@@ -88,7 +89,7 @@ if __name__ == "__main__":
     logger.info('Trainig CNN')
 
     pbar = tqdm(total=P['epochs'])
-    trainer = Trainer(net, opt, pbar, config, device, writer, logger)
+    trainer = TrainerOneHot(net, opt, pbar, config, device, writer, logger)
     patience = P['patience']
     tic = time.time()
 

@@ -72,7 +72,7 @@ class UNet3d(nn.Module):
 
     def forward(self, x):
         if self.residual:
-            identity = x[:, 1:2, :, :, :].clone()
+            identity = x[:, 1:, :, :, :].clone()
 
         xi = [self.layers[0](x)]
         # Down path
@@ -224,7 +224,7 @@ class ResUNet3d(nn.Module):
 
     def forward(self, x):
         if self.residual:
-            identity = x[:, 1:2, :, :, :].clone()
+            identity = x[:, 1:, :, :, :].clone()
 
         output = self.unet(x)
 

@@ -10,6 +10,7 @@ ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 import utilities.path_utils as path_utils
 from utilities import param_reader
+from utilities import stuff
 
 
 if __name__ == "__main__":
@@ -21,7 +22,7 @@ if __name__ == "__main__":
 
     save_dir = path_utils.create_save_dir(P['out_path'], 'EVAL')
     param_reader.save_config(config, save_dir, 'config.ini')
-    logger = path_utils.create_logger(save_dir)
+    logger = stuff.create_logger(save_dir)
     logger.info('save_dir: '+ save_dir)
 
     eval = Evalautor(config, P, device, logger, save_dir, verbose=True)

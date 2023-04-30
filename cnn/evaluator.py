@@ -19,6 +19,7 @@ from utilities.collate import collate_fn_batch
 from cnn.models.model_factory import create_model
 from cnn.trainer_multi_batch import Trainer
 from utilities import plots
+from utilities import path_utils
 
 __all__ = ['Evalautor']
 
@@ -230,9 +231,9 @@ class Evalautor:
             return
 
         # Create save dirs
-        patient_dir = plots.createSubDirectory(self.save_dir, self.cur_patient)
-        fwd_dir = plots.createSubDirectory(patient_dir, 'fwd')
-        bwd_dir = plots.createSubDirectory(patient_dir, 'bwd')
+        patient_dir = path_utils.create_sub_dir(self.save_dir, self.cur_patient)
+        fwd_dir = path_utils.create_sub_dir(patient_dir, 'fwd')
+        bwd_dir = path_utils.create_sub_dir(patient_dir, 'bwd')
 
         # Get results
         cnn_fms = self.estimated_masks(cnn=True, fwd=True)
@@ -306,9 +307,9 @@ class Evalautor:
             return
 
         # Create save dirs
-        patient_dir = plots.createSubDirectory(self.save_dir, self.cur_patient)
-        fwd_dir = plots.createSubDirectory(patient_dir, 'fwd')
-        bwd_dir = plots.createSubDirectory(patient_dir, 'bwd')
+        patient_dir = path_utils.create_sub_dir(self.save_dir, self.cur_patient)
+        fwd_dir = path_utils.create_sub_dir(patient_dir, 'fwd')
+        bwd_dir = path_utils.create_sub_dir(patient_dir, 'bwd')
 
         # Get results
         cnn_fms = self.estimated_masks(cnn=True, fwd=True)
@@ -351,9 +352,9 @@ class Evalautor:
         orig_mtts[..., z_min:z_max + 1, y_min:y_max + 1, x_min:x_max + 1] = mtts
 
         # Create save dirs
-        patient_dir = plots.createSubDirectory(self.save_dir, self.cur_patient)
-        fwd_dir = plots.createSubDirectory(patient_dir, 'ccc/fwd')
-        bwd_dir = plots.createSubDirectory(patient_dir, 'ccc/bwd')
+        patient_dir = path_utils.create_sub_dir(self.save_dir, self.cur_patient)
+        fwd_dir = path_utils.create_sub_dir(patient_dir, 'ccc/fwd')
+        bwd_dir = path_utils.create_sub_dir(patient_dir, 'ccc/bwd')
 
         ts = mts.shape[0]
         mts = mts.squeeze()
