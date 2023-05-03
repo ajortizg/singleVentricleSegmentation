@@ -17,9 +17,9 @@ def train_params(config):
     rot_range_y = tuple(map(float, config.get('DATA_AUGMENTATION', 'ROT_Y_RANGE').split(',')))
     rot_range_z = tuple(map(float, config.get('DATA_AUGMENTATION', 'ROT_Z_RANGE').split(',')))
     mult_scaling_range = tuple(map(float, config.get('DATA_AUGMENTATION', 'MULT_SCALING_RANGE').split(',')))
-    clip_interval = tuple(map(float, config.get('DATA_AUGMENTATION', 'CLIP_INTERVAL').split(',')))
     gamma_scaling_range = tuple(map(float, config.get('DATA_AUGMENTATION', 'GAMMA_SCALING_RANGE').split(',')))
     ed_sigma_range = tuple(map(float, config.get('DATA_AUGMENTATION', 'ED_SIGMA_RANGE').split(',')))
+    noise_std_range = tuple(map(float, config.get('DATA_AUGMENTATION', 'NOISE_STD_RANGE').split(',')))
 
     params = {
         'batch_size': config.getint('PARAMETERS', 'BATCH_SIZE'),
@@ -67,7 +67,7 @@ def train_params(config):
         # Gaussian noise
         'noise_prob': config.getfloat('DATA_AUGMENTATION', 'NOISE_PROB'),
         'noise_mu': config.getfloat('DATA_AUGMENTATION', 'NOISE_MU'),
-        'noise_std': config.getfloat('DATA_AUGMENTATION', 'NOISE_STD'),
+        'noise_std_range': noise_std_range,
 
         # Elastic deformation
         'ed_prob': config.getfloat('DATA_AUGMENTATION', 'ED_PROB'),
@@ -76,10 +76,7 @@ def train_params(config):
         'ed_boundary': config.get('DATA_AUGMENTATION', 'ED_BOUNDARY'),
         'ed_prefilter': config.getboolean('DATA_AUGMENTATION', 'ED_USE_PREFILTER'),
         'ed_axis': config.get('DATA_AUGMENTATION', 'ED_AXIS'),
-        'ed_order': config.getint('DATA_AUGMENTATION', 'ED_ORDER'),
-
-        # Clip
-        'clip_interval': clip_interval
+        'ed_order': config.getint('DATA_AUGMENTATION', 'ED_ORDER')
     }
     return params
 

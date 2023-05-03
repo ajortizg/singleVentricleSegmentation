@@ -25,9 +25,9 @@ ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 from utilities import path_utils as fpu
 from utilities import stuff
-from TVL1OF.dataset import FlowUNetDataset, get_bounds
+from datasets.flow_unet_dataset import FlowUNetDataset, get_bounds
 import segmentation.transforms as T
-from segmentation.utils import create_checkpoint
+# from segmentation.utils import create_checkpoint
 from utilities.parser_conversions import str_to_tuple
 from utilities.fold import create_5fold
 from utilities import stuff
@@ -76,7 +76,7 @@ def propagate_label(model, img, label, es, ed, fwd, is_test=False):
         return dice
 
 
-def train(train_loader, model, optimizer, losses, weights, device):
+def train(train_loader, model, optimizer, losses, weights, device, test=False):
     model.train()
     report = pd.DataFrame(columns=['Loss', 'Dice'])
 
@@ -104,7 +104,7 @@ def train(train_loader, model, optimizer, losses, weights, device):
         optimizer.step()
 
         with torch.no_grad():
-            dice = propagate_label(model, img, label, data['es'][0], data['ed'][0], fwd=True)
+            dice = propagate_label(model, img, label, data['es'][0], data['ed'][0], fwd=True, is_test=test)
             report.loc[len(report)] = [loss.item(), dice.item()]
     return report
 
@@ -178,7 +178,7 @@ if __name__ == '__main__':
 
     fold, n = get_fold(data_cfg)
     save_dir = fpu.create_save_dir(data_cfg['output_dir'], f'fold_{n}')
-    fpu.save_config(config, save_dir)
+    stuff.save_config(config, save_dir)
     writer = SummaryWriter(log_dir=save_dir)
     logger = stuff.create_logger(save_dir)
     logger.info(f'Device: {device}')

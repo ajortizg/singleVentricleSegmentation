@@ -22,25 +22,22 @@ from cnn.warp import WarpCNN
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
-def propagate(warp, es, ed, labels, flow, fwd, is_test):
-    *_, mi, mf, indices = get_bounds(es, ed, labels, fwd=fwd, test=is_test)
-    mi = mi.unsqueeze(0)
-    mf = mf.unsqueeze(0)
-
+def propagate(warp, mi, mf, times, flow, labels, is_test):
     propagated_mask = mi.clone()
     if is_test:
         est_masks = []
 
-    for i in range(len(indices) - 1):
+    for i in range(len(times) - 1):
         propagated_mask = warp(propagated_mask, flow[i].unsqueeze(0))
         if is_test:
             est_masks.append(propagated_mask)
 
     if is_test:
-        y_pred = torch.cat(est_masks).round()
-        y_true = labels[indices[1:]]
+        y_pred = T.one_hot(torch.cat(est_masks), mi.shape[1], argmax=True)
+        y_true = labels[times[1:]]
     else:
-        y_pred = propagated_mask.round()
+        # y_pred = propagated_mask.round()
+        y_pred = T.one_hot(propagated_mask, mi.shape[1], argmax=True)
         y_true = mf
 
     dice = compute_dice(y_pred, y_true, include_background=False).mean().item()
@@ -60,23 +57,25 @@ if __name__ == '__main__':
         T.XYZT_To_TZYX(keys=['image', 'label']),
         T.AddDimAt(axis=1, keys=['image', 'label']),
         T.Flow_T3XYZ_To_T3ZYX(keys=['forward_flow', 'backward_flow']),
-        T.RandomFlip(p=1.0, axis=2, keys=['image', 'label', 'forward_flow', 'backward_flow']),
-        T.RandomFlip(p=1.0, axis=3, keys=['image', 'label', 'forward_flow', 'backward_flow']),
-        T.RandomFlip(p=1.0, axis=4, keys=['image', 'label', 'forward_flow', 'backward_flow']),
-        # T.Resize(1.0, (128, 64, 108), keys=['image', 'label', 'forward_flow', 'backward_flow'], label_key='label'),
-        T.RandomRotate(1.0, (0, 360), (0, 360), (0, 360), 'zeros', keys=['image', 'label', 'forward_flow', 'backward_flow'], label_key='label'),
-        T.RandomScale(1.0, (0.5, 1.5), 'zeros', keys=['image', 'label', 'forward_flow', 'backward_flow'], label_key='label'),
-        T.ElasticDeformation(1.0, (0.5, 1.5), 8, 'constant', 'yx', keys=['image', 'label', 'forward_flow', 'backward_flow'], label_key='label'),
-        T.SimulateLowResolution(1.0, (0.5, 1.0), keys=['image', 'label', 'forward_flow', 'backward_flow'], label_key='label'),
+        # T.RandomFlip(p=1.0, axis=2, keys=['image', 'label', 'forward_flow', 'backward_flow']),
+        # T.RandomFlip(p=1.0, axis=3, keys=['image', 'label', 'forward_flow', 'backward_flow']),
+        # T.RandomFlip(p=1.0, axis=4, keys=['image', 'label', 'forward_flow', 'backward_flow']),
+        # # T.Resize(1.0, (128, 64, 108), keys=['image', 'label', 'forward_flow', 'backward_flow'], label_key='label'),
+        # T.RandomRotate(1.0, (0, 360), (0, 360), (0, 360), 'zeros', keys=['image', 'label', 'forward_flow', 'backward_flow'], label_key='label'),
+        # T.RandomScale(1.0, (0.5, 1.5), 'zeros', keys=['image', 'label', 'forward_flow', 'backward_flow'], label_key='label'),
+        # T.ElasticDeformation(1.0, (0.5, 1.5), 8, 'constant', 'yx', keys=['image', 'label', 'forward_flow', 'backward_flow'], label_key='label'),
+        # T.SimulateLowResolution(1.0, (0.5, 1.0), keys=['image', 'label', 'forward_flow', 'backward_flow'], label_key='label'),
         T.FlowChannelToLastDim(keys=['forward_flow', 'backward_flow']),
-        T.OneHotEncoding(n=2, keys=['label']),
-        T.ToTensor(keys=['image', 'label', 'forward_flow', 'backward_flow'])
+        # T.OneHotEncoding(n=param_cfg.getint('num_classes'), keys=['label']),
+        T.ExtremaPoints(['label']),
+        T.ToTensor(keys=['image', 'label', 'forward_flow', 'backward_flow', 'mi', 'mf'])
     ])
 
     full_ds = FlowUNetDataset(data_cfg['root_dir'], 'full', transforms, load_flow=True)
     test_ds = FlowUNetDataset(data_cfg['root_dir'], 'test', transforms, load_flow=True)
-    full_loader = DataLoader(full_ds, batch_size=1, shuffle=False, num_workers=8)
-    test_loader = DataLoader(test_ds, batch_size=1, shuffle=False, num_workers=3)
+    full_loader = DataLoader(full_ds, batch_size=1, shuffle=False, num_workers=8, collate_fn=FlowUNetDataset.collate)
+    test_loader = DataLoader(test_ds, batch_size=1, shuffle=False, num_workers=3, collate_fn=FlowUNetDataset.collate)
+    n_classes = full_ds.num_classes()
 
     # Saving directory for debug outputs
     # save_dir = plots.createSaveDirectory(data_cfg.get('output_path'), 'Warp')
@@ -90,14 +89,18 @@ if __name__ == '__main__':
         report = pd.DataFrame(columns=['Patient', 'Dice_Fwd', 'Dice_Bwd', 'HD_Fwd', 'HD_Bwd'])
 
         for data in tqdm(loader):
-            labels = data['label'].to(device).squeeze(0)
-            ff = data['forward_flow'].to(device).squeeze(0)
-            bf = data['backward_flow'].to(device).squeeze(0)
+            labels = T.one_hot(data['label'].squeeze(0).to(device), n_classes)
+            mi = T.one_hot(data['mi'].squeeze(0).to(device), n_classes)
+            mf = T.one_hot(data['mf'].squeeze(0).to(device), n_classes)
+            ff = data['forward_flow'].squeeze(0).to(device)
+            bf = data['backward_flow'].squeeze(0).to(device)
+            fwdt = data['times_fwd'].squeeze(0).to(device)
+            bwdt = data['times_bwd'].squeeze(0).to(device)
             nz, ny, nx = labels.shape[2:]
             warp = WarpCNN(cfg, nz, ny, nx)
 
-            dice_fwd, hd_fwd = propagate(warp, data['es'].item(), data['ed'].item(), labels, ff, fwd=True, is_test=is_test)
-            dice_bwd, hd_bwd = propagate(warp, data['es'].item(), data['ed'].item(), labels, bf, fwd=False, is_test=is_test)
+            dice_fwd, hd_fwd = propagate(warp, mi, mf, fwdt, ff, labels, is_test)
+            dice_bwd, hd_bwd = propagate(warp, mf, mi, bwdt, bf, labels, is_test)
             report.loc[len(report)] = [data['patient'][0], dice_fwd, dice_bwd, hd_fwd, hd_bwd]
 
         report.loc[len(report)] = ['Mean', report['Dice_Fwd'].mean(), report['Dice_Bwd'].mean(), report['HD_Fwd'].mean(), report['HD_Bwd'].mean()]

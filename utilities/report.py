@@ -6,7 +6,7 @@ import time
 import pandas as pd
 import torch
 
-import path_utils 
+import path_utils
 
 str_fmt = '%Y%m%d-%H%M%S'
 
@@ -87,7 +87,7 @@ class Report:
 
 
 if __name__ == "__main__":
-    search_dir = 'results/voxelmorph/singleVentricleData/fold*'
+    search_dir = 'results/segmentation/Dataset_SVD_crop_2d/fold_*'
     from_dt = datetime.strptime(fmt_date(y='2023', m='04', d='18', hr='00', min='00', seg='00'), str_fmt)
     to_dt = datetime.strptime(fmt_date(y='2023', m='05', d='19', hr='00', min='00', seg='00'), str_fmt)
 
@@ -97,7 +97,7 @@ if __name__ == "__main__":
     report = Report(from_dt, to_dt)
     n = report.filter(search_dir)
     print(f'Found {n} dirs')
-    
+
     filepath = osp.join(report_dir, f'report_{time.strftime(str_fmt)}.xlsx')
     report.create(filepath)
     print(f'Created report: {filepath}')

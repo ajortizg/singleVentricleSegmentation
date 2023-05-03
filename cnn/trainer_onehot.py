@@ -9,12 +9,14 @@ import numpy as np
 import os
 import math
 import matplotlib.pyplot as plt
+import torch.nn.functional as F
 
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 from cnn.warp import WarpCNN
 import utilities.path_utils as path_utils
 from segmentation.transforms import one_hot
+from cnn.loss import CustomLoss
 
 
 class TrainerOneHot:
@@ -26,31 +28,24 @@ class TrainerOneHot:
         self.device = device
         self.writer = writer
         self.logger = logger
-        self.loss_lambda = config.getfloat('PARAMETERS', 'LOSS_LAMBDA')
-        loss_fn_type = config.get('PARAMETERS', 'LOSS_FN')
-        self.penalization = config.getboolean('PARAMETERS', 'LOSS_PENALIZATION')
-        self.loss_gamma = config.getfloat('PARAMETERS', 'LOSS_PENALIZATION_GAMMA')
-        self.reduction = config.get('PARAMETERS', 'LOSS_REDUCTION')
+        params = config['PARAMETERS']
         self.num_classes = config.getint('PARAMETERS', 'num_classes')
-        self.loss_fn = None
+        self.penalization = params.getboolean('loss_penalization')
 
         # statistics
-        self.mean_epoch_stat = {'train_loss': [(0, 0, 0, 0, 0)],
-                                'train_acc': [(0, 0, 0)],
-                                'val_loss': [(0, 0, 0, 0, 0)],
-                                'val_acc': [(0, 0, 0)],
-                                'test_acc': [(0, 0, 0)]}
+        self.mean_epoch_stat = {'train_loss': [(0,) * 4],
+                                'train_acc': [(0,) * 3],
+                                'val_loss': [(0,) * 4],
+                                'val_acc': [(0,) * 3],
+                                'test_acc': [(0,) * 3]}
         self.best_acc = 0.0
         self.epochs_since_last_improvement = 0
 
-        if loss_fn_type == 'mse':
-            self.loss_fn = nn.MSELoss(reduction=self.reduction)
-        elif loss_fn_type == 'huber':
-            huber_delta = config.getfloat('PARAMETERS', 'HUBER_DELTA')
-            self.loss_fn = nn.HuberLoss(reduction=self.reduction, delta=huber_delta)
-        else:
-            print('Unknown loss function: ' + loss_fn_type)
-            sys.exit()
+        self.loss_fn = CustomLoss(
+            params.getfloat('loss_lambda'),
+            self.penalization,
+            params.getfloat('loss_penalization_gamma')
+        )
 
     def last_train_accuracy(self):
         return self.mean_epoch_stat['train_acc'][-1][0]
@@ -69,7 +64,7 @@ class TrainerOneHot:
 
     def train_epoch(self, train_loader):
         self.net.train()
-        total_loss = (0.0, ) * 5
+        total_loss = (0.0, ) * 4
         total_acc = (0.0, ) * 3
         steps = len(train_loader)
 
@@ -84,7 +79,7 @@ class TrainerOneHot:
             batch_indices = torch.arange(offsets.shape[0])
 
             mts, mtts, mhs, mhhs = self.time_popagation(img4d, m0, mk, times_fwd, times_bwd, ff, bf, batch_indices, True)
-            loss = self.compute_loss(mts, mtts, offsets, batch_indices, mhs, mhhs)
+            loss = self.loss_fn(mts, mtts, mhs, mhhs, offsets, batch_indices)
 
             self.opt.zero_grad()
             loss[0].backward()
@@ -104,7 +99,7 @@ class TrainerOneHot:
     @torch.no_grad()
     def val_epoch(self, val_loader, cnn=True):
         self.net.eval()
-        total_loss = (0.0, ) * 5
+        total_loss = (0.0, ) * 4
         total_acc = (0.0, ) * 3
         steps = len(val_loader)
 
@@ -119,7 +114,7 @@ class TrainerOneHot:
             batch_indices = torch.arange(offsets.shape[0])
 
             mts, mtts, mhs, mhhs = self.time_popagation(img4d, m0, mk, times_fwd, times_bwd, ff, bf, batch_indices, cnn)
-            loss = self.compute_loss(mts, mtts, offsets, batch_indices, mhs, mhhs)
+            loss = self.loss_fn(mts, mtts, mhs, mhhs, offsets, batch_indices)
 
             total_loss = tuple(tl + l.item() for tl, l in zip(total_loss, loss))
             acc0, acck = self.compute_dice_acc(mts, mtts, offsets, batch_indices)
@@ -221,6 +216,12 @@ class TrainerOneHot:
                 mtts[..., times_bwd[t + 1]], _ = self.net(x)
 
         return mts, mtts
+
+    def normalize(self, x):
+        # need to normalize grid values to [-1, 1] for resampler
+        for i in range(3):
+            x[..., i] = 2 * (x[..., i] / (80 - 1) - 0.5)
+        return x
 
     def time_popagation(self, img4d, m0, mk, times_fwd, times_bwd, ff, bf, batch_indices, cnn=True):
         BS, NZ, NY, NX, CH, timesteps = ff.shape
@@ -346,56 +347,6 @@ class TrainerOneHot:
         hdk = compute_hausdorff_distance(mkt, mk).mean().item()
         return hd0, hdk
 
-    def compute_loss(self, mts, mtts, offsets, batch_indices, mhs=None, mhhs=None):
-        BS = mts.shape[1]
-
-        # compute l1
-        m0 = mts[0, batch_indices]
-        m0tt = mtts[offsets[batch_indices], batch_indices]
-        # l1 = self.loss_fn(m0tt, m0)
-        l1 = (m0 - m0tt).pow(2).sum()
-
-        # compute l2
-        mk = mtts[-1, batch_indices]
-        mkt = mts[-offsets[batch_indices] - 1, batch_indices]
-        # l2 = self.loss_fn(mkt, mk)
-        l2 = (mk - mkt).pow(2).sum()
-
-        kl = mts.shape[0] - offsets
-
-        ts_tildes = mts.shape[0]
-        l3 = 0  # l3
-        l4 = torch.tensor([0.0], dtype=l1.dtype, device=l1.device)  # l4 - penalization term
-        ts_hats = mhs.shape[0] if self.penalization else 0
-
-        for b in range(BS):
-            # compute l3
-            mt = mts[1:ts_tildes - offsets[b] - 1, b]
-            mtt = mtts[1 + offsets[b]:-1, b]
-            if self.reduction == 'sum':
-                # l3 += self.loss_fn(mt, mtt) / kl[b]
-                l3 += (mt - mtt).pow(2).sum() / kl[b]
-            else:
-                # l3 += self.loss_fn(mt, mtt)
-                l3 += (mt - mtt).pow(2).sum()
-
-            # compute l4
-            if self.penalization:
-                mh = mhs[0:ts_hats - offsets[b], b]
-                mhh = mhhs[0:ts_hats - offsets[b], b]
-                l4 += (mh.norm().sum() + mhh.norm().sum()) / kl[b]    # l1
-                # l4 += (mh.pow(2).sum() + mhh.pow(2).sum()) / kl[b]    # l2
-
-        if self.reduction == 'sum':
-            l1 = l1 / BS
-            l2 = l2 / BS
-            l3 = l3 / BS
-            l4 = l4 / BS
-        l3 = self.loss_lambda * l3
-        l4 = self.loss_gamma * l4
-        total_loss = l1 + l2 + l3 + l4
-        return (total_loss, l1, l2, l3, l4)
-
     def train_patient(self, img4d, m0, mk, timesfwd, timesbwd, ff, bf):
         BS = 1
         offsets = torch.zeros(BS, dtype=torch.long)
@@ -403,7 +354,7 @@ class TrainerOneHot:
 
         self.net.train()
         mts, mtts, mhs, mhhs = self.time_popagation(img4d, m0, mk, timesfwd, timesbwd, ff, bf, batch_indices)
-        loss = self.compute_loss(mts, mtts, offsets, batch_indices, mhs, mhhs)
+        loss = self.loss_fn(mts, mtts, mhs, mhhs, offsets, batch_indices)
 
         self.opt.zero_grad()
         loss[0].backward()

@@ -68,7 +68,7 @@ if __name__ == '__main__':
     save_dir = fpu.create_save_dir(data_cfg.get('output_path'), f'TVL1OF3D{mode}')
     logger = stuff.create_logger(save_dir)
     logger.info(f'Compute TV-L1 optical flow ({mode})')
-    fpu.save_config(cfg, save_dir)
+    stuff.save_config(cfg, save_dir)
 
     # Create dataset
     img_sz = param_cfg.getint('img_sz')
@@ -76,7 +76,7 @@ if __name__ == '__main__':
         T.XYZT_To_TZYX(keys=['image', 'label']),
         T.ToTensor()
     ])
-    fpu.save_transforms_to_json(transforms, osp.join(save_dir, 'transforms.json'))
+    stuff.save_transforms_to_json(transforms, osp.join(save_dir, 'transforms.json'))
 
     dataset = FlowUNetDataset(data_cfg['root_dir'], 'full', transforms)
     loader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=4)

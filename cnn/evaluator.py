@@ -17,7 +17,8 @@ import utilities.transforms.senary_transforms as T6
 import utilities.transforms.unary_transforms as T1
 from utilities.collate import collate_fn_batch
 from cnn.models.model_factory import create_model
-from cnn.trainer_multi_batch import Trainer
+# from cnn.trainer_multi_batch import Trainer
+from cnn.trainer_onehot import TrainerOneHot
 from utilities import plots
 from utilities import path_utils
 
@@ -66,17 +67,17 @@ class Evalautor:
         dsettype = self.P['dataset']
         self.is_testset = False
         if dsettype == 'train':
-            self.dset = SingleVentricleDataset(config, DatasetMode.TRAIN,
+            self.dset = SingleVentricleDataset(config, 'train',
                                                LoadFlowMode.ED_ES, full_transforms=transforms)
-        elif dsettype == 'val':
-            self.dset = SingleVentricleDataset(config, DatasetMode.VAL,
-                                               LoadFlowMode.ED_ES, full_transforms=transforms)
+        # elif dsettype == 'val':
+        #     self.dset = SingleVentricleDataset(config, DatasetMode.VAL,
+        #                                        LoadFlowMode.ED_ES, full_transforms=transforms)
         elif dsettype == 'test':
             self.is_testset = True
-            self.dset = SingleVentricleDataset(config, DatasetMode.TEST,
+            self.dset = SingleVentricleDataset(config, 'test',
                                                LoadFlowMode.WHOLE_CYCLE, full_transforms=transforms)
         elif dsettype == 'full':
-            self.dset = SingleVentricleDataset(config, DatasetMode.FULL,
+            self.dset = SingleVentricleDataset(config, 'full',
                                                LoadFlowMode.ED_ES, full_transforms=transforms)
         else:
             self.dset = None
@@ -100,8 +101,8 @@ class Evalautor:
 
         # Create trainer for prediction
         self.pbar = tqdm(total=1) if self.finetuning else tqdm(total=len(self.dset))
-        self.trainer = Trainer(self.net, None, self.pbar, self.config_train,
-                               self.device, None, self.logger, display_prob=0)
+        self.trainer = TrainerOneHot(self.net, None, self.pbar, self.config_train,
+                               self.device, None, self.logger)
 
     def evaluate(self):
         self.report = pd.DataFrame()

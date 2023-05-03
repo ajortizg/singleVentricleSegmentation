@@ -102,7 +102,7 @@ class FlowUNetDataset(Dataset):
         return data
 
     def class_names(self):
-        self.class_names = self.json_ds['labels']
+        return self.json_ds['labels']
 
     def num_classes(self):
         return len(self.class_names())
@@ -122,9 +122,19 @@ class FlowUNetDataset(Dataset):
         f.close()
         return data
 
+    def filter_patient(self, patient_to_keep):
+        row_patient = self.df_split[self.df_split['Name'] == patient_to_keep]
+        # index_patient = row_patient.index[0]
+        self.df_split = row_patient
+        self.df_split.reset_index(inplace=True, drop=True)
+
     @staticmethod
     def collate(data_list):
-        keys_to_collate = ['image', 'label', 'forward_flow', 'backward_flow']
+        """
+        Returns tensors with shape (bs, nt, ch, d1, d2, d3), except for optical flow
+        where ch dim is the last one
+        """
+        keys_to_collate = ['image', 'label', 'mi', 'mf', 'forward_flow', 'backward_flow']
 
         tss_per_key = defaultdict(list)
         collated_dict = defaultdict(list)
@@ -156,8 +166,30 @@ class FlowUNetDataset(Dataset):
                                                    0, 0,
                                                    0, dif))
                     list_of_padded_tensors.append(padded_tensor)
-                collated_dict[k] = torch.permute(torch.stack(list_of_padded_tensors), (0, 2, 3, 4, 5, 1))
-        
+                # collated_dict[k] = torch.permute(torch.stack(list_of_padded_tensors), (0, 2, 3, 4, 5, 1))
+                collated_dict[k] = torch.stack(list_of_padded_tensors)
         collated_dict['offsets'] = offsets_per_key
-        return collated_dict
 
+        # Create time sequence forward and backward
+        ti = torch.tensor(collated_dict['ti'])
+        tf = torch.tensor(collated_dict['tf'])
+        max_time_gap = (tf - ti).max().item()
+        times_fwd = [ti]
+        times_bwd = [tf]
+        for _ in range(max_time_gap):
+            next_time = times_fwd[-1] + 1
+            times_fwd.append(torch.where(next_time > tf, tf, next_time))
+            prev_time = times_bwd[-1] - 1
+            times_bwd.append(torch.where(prev_time < ti, ti, prev_time))
+        times_fwd = torch.stack(times_fwd, dim=1)
+        times_bwd = torch.stack(times_bwd, dim=1)
+        collated_dict['times_fwd'] = times_fwd
+        collated_dict['times_bwd'] = times_bwd
+
+        # Convert numeric lists to tensors
+        for k, v in collated_dict.items():
+            if type(v) == list:
+                if type(v[0]) is not str:
+                    collated_dict[k] = torch.tensor(v)
+
+        return collated_dict

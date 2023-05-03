@@ -18,15 +18,10 @@ import voxelmorph.voxelmorph as vxm  # nopep8
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 from utilities import plots
-from segmentation.dataset import SVDataset
+from utilities import path_utils
+from utilities import stuff
+from datasets.flow_unet_dataset import FlowUNetDataset
 import segmentation.transforms as T
-
-
-def search_patient(loader, patient):
-    for data in loader:
-        if data['patient'][0] == patient:
-            return data
-    return None
 
 
 def train(data, model, optimizer, losses, weights):
@@ -58,7 +53,7 @@ def train(data, model, optimizer, losses, weights):
 
 if __name__ == '__main__':
     # Seeding for reproducible results
-    plots.seeding(42)
+    stuff.seeding(42)
 
     # Read configuration options
     config = configparser.ConfigParser()
@@ -83,24 +78,26 @@ if __name__ == '__main__':
     print('cudnn.deterministic: ', (not cudnn_nondet))
     print('Weights: ', model_weights)
 
-    save_dir = plots.createSaveDirectory(output_dir, 'VXM_IT')
-    plots.save_config(config, save_dir)
+    save_dir = path_utils.create_save_dir(output_dir, 'VXM_IT')
+    stuff.save_config(config, save_dir)
     writer = SummaryWriter(log_dir=save_dir)
 
     # Create dataloaders
     val_transforms = T.Compose([
-        T.CropForeground(p=1.0, tol=10),
-        T.Resize(p=1.0, new_shape=(img_sz, img_sz, img_sz)),
-        T.MinMaxNormalization(p=1.0),
-        T.Discretize(th=0.5),
-        T.ToTensor(add_ch_dim=False)
+        T.XYZT_To_TZYX(keys=['image', 'label']),
+        T.AddDimAt(axis=1, keys=['image', 'label']),
+        T.OneHotEncoding(config.getint('DATA', 'num_classes'), keys=['label']),
+        T.ToTensor(keys=['image', 'label'])
     ])
 
-    test_ds = SVDataset(root_dir, 'test', val_transforms, vxm=True)
-    test_loader = DataLoader(test_ds, batch_size=1, shuffle=False, num_workers=workers, collate_fn=SVDataset.collate_fn)
+    test_ds = FlowUNetDataset(root_dir, 'test', val_transforms)
+    test_ds.filter_patient(patient)
+    
+    test_loader = DataLoader(test_ds, batch_size=1, shuffle=False, num_workers=workers)
 
     # load and set up model
-    model = vxm.networks.VxmDense.load(model_weights, device)
+    checkpoint = torch.load(model_weights)
+    model = vxm.networks.VxmDense.load(checkpoint['model_state_dict'], device)
     model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
@@ -115,10 +112,8 @@ if __name__ == '__main__':
     losses = [image_loss_func, vxm.losses.Grad('l2', loss_mult=2).loss]
     weights = [1.0, lambda_param]
 
-    data = search_patient(test_loader, patient)
-    if data is None:
-        print('Patient: {} not found!'.format(patient))
-        sys.exit()
+    sys.exit()
+
 
     for e in tqdm(range(1, epochs + 1)):
         train_loss = train(data, model, optimizer, losses, weights)
@@ -126,7 +121,7 @@ if __name__ == '__main__':
         # Save model every 20 epochs
         if e % 10 == 0:
             model.save(os.path.join(save_dir, 'model.pth'))
-        
+
         writer.add_scalar('loss', train_loss, e)
 
         print(AsciiTable([

@@ -540,6 +540,7 @@ class ToRAS(BaseTransform):
             except ValueError:
                 # TODO: I don't know why this happens with svd :(
                 x[b] = xc_new.permute(0, 2, 3, 1).numpy()
+                print('ToRAS ValueError')
         return x
 
 
@@ -1021,7 +1022,44 @@ class Pad(BaseTransform):
         return np.pad(x, ((0, difs[0]), (0, difs[1]), (0, difs[2]), (0, difs[3]), (0, difs[4])))
 
 
+class ExtremaPoints(BaseTransform):
+    """
+    This transform will add 4 keys to the data dict correspondig with the initial and
+    final masks (mi, mf) and times (ti, tf). This functions expect 5d labels with shape (nt, ch, d1, d2, d3)
+    """
+    def __init__(self, keys=['label']):
+        super().__init__(keys)
+
+    def __call__(self, data):
+        label_key = self.keys[0]
+        es = data['es']
+        ed = data['ed']
+        ts = data[label_key].shape[0]
+        test = ts > 2
+
+        ti = min(es, ed)
+        tf = max(es, ed)
+        if not test:
+            if ti == es:
+                mi, mf = data[label_key][0], data[label_key][1]
+            else:
+                mi, mf = data[label_key][1], data[label_key][0]
+        else:
+            if ti == es:
+                mi, mf = data[label_key][es], data[label_key][ed]
+            else:
+                mi, mf = data[label_key][ed], data[label_key][es]
+        data['mi'] = np.expand_dims(mi, 0)
+        data['mf'] = np.expand_dims(mf, 0)
+        data['ti'] = ti
+        data['tf'] = tf
+        return data
+
+    def _transform_impl(self, x, metadata=None):
+        return x
+
 # For 2D data
+
 
 class RandomRotate2D(BaseTransform):
     def __init__(self, p, angle_range=(-30, 30), keys=['image', 'label'], label_key='label'):

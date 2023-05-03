@@ -5,14 +5,14 @@ import numpy as np
 import pandas
 from enum import Enum
 
-__all__ = ['DatasetMode', 'LoadFlowMode', 'SingleVentricleDataset']
+__all__ = ['LoadFlowMode', 'SingleVentricleDataset']
 
 
-class DatasetMode(Enum):
-    TRAIN = 1
-    VAL = 2
-    FULL = 3
-    TEST = 4
+# class DatasetMode(Enum):
+#     TRAIN = 1
+#     VAL = 2
+#     FULL = 3
+#     TEST = 4
 
 
 class LoadFlowMode(Enum):
@@ -27,7 +27,8 @@ class SingleVentricleDataset(Dataset):
                  mask_transforms=None,
                  flow_transforms=None,
                  full_transforms=None,
-                 test_masks_transforms=None):
+                 test_masks_transforms=None,
+                 fold_indices=None):
         self.config = config
         self.mode = mode
         self.flow_mode = flow_mode
@@ -38,12 +39,12 @@ class SingleVentricleDataset(Dataset):
         self.test_masks_transforms = test_masks_transforms
 
         self.base_path = config.get('DATA', 'BASE_PATH_3D')
-        if mode == DatasetMode.TRAIN:
-            self.base_path = osp.join(self.base_path, 'train')
-        elif mode == DatasetMode.VAL:
-            self.base_path = osp.join(self.base_path, 'val')
-        elif mode == DatasetMode.TEST:
-            self.base_path = osp.join(self.base_path, 'test')
+        # if mode == 'train':
+        #     self.base_path = osp.join(self.base_path, 'train')
+        # elif mode == 'val':
+        #     self.base_path = osp.join(self.base_path, 'val')
+        # elif mode == 'test':
+        #     self.base_path = osp.join(self.base_path, 'test')
 
         self.segmentations_subdir_path = config.get('DATA', 'SEGMENTATIONS_SUBDIR_PATH')
         self.segmentations_path = osp.join(self.base_path, self.segmentations_subdir_path)
@@ -53,7 +54,17 @@ class SingleVentricleDataset(Dataset):
 
         self.segmetations_filename = config.get('DATA', 'SEGMENTATIONS_FILE_NAME')
         self.segmetations_file = osp.join(self.base_path, self.segmetations_filename)
-        self.df = pandas.read_excel(self.segmetations_file)
+        df = pandas.read_excel(self.segmetations_file)
+
+        if mode == 'full':
+            self.df = df
+        else:
+            self.df = df[df['Split'] == mode]
+            self.df.reset_index(inplace=True, drop=True)
+
+            if fold_indices is not None and mode != 'test':
+                self.df = self.df.iloc[fold_indices]
+                self.df.reset_index(inplace=True, drop=True)
 
         # Optical flow parameters
         self.fwdof_dir = None
