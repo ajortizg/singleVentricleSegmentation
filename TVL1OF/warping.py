@@ -36,7 +36,6 @@ def propagate(warp, mi, mf, times, flow, labels, is_test):
         y_pred = T.one_hot(torch.cat(est_masks), mi.shape[1], argmax=True)
         y_true = labels[times[1:]]
     else:
-        # y_pred = propagated_mask.round()
         y_pred = T.one_hot(propagated_mask, mi.shape[1], argmax=True)
         y_true = mf
 
@@ -66,7 +65,6 @@ if __name__ == '__main__':
         # T.ElasticDeformation(1.0, (0.5, 1.5), 8, 'constant', 'yx', keys=['image', 'label', 'forward_flow', 'backward_flow'], label_key='label'),
         # T.SimulateLowResolution(1.0, (0.5, 1.0), keys=['image', 'label', 'forward_flow', 'backward_flow'], label_key='label'),
         T.FlowChannelToLastDim(keys=['forward_flow', 'backward_flow']),
-        # T.OneHotEncoding(n=param_cfg.getint('num_classes'), keys=['label']),
         T.ExtremaPoints(['label']),
         T.ToTensor(keys=['image', 'label', 'forward_flow', 'backward_flow', 'mi', 'mf'])
     ])
