@@ -13,8 +13,8 @@ _supported_models = {
 class Factory(ABC):
 
     @staticmethod
-    def create(cfg: ConfigParser) -> Module:
+    def create(n_classes: int, cfg: ConfigParser) -> Module:
         model = cfg['PARAMETERS']['net']
         if model not in _supported_models:
             raise ValueError(f'Model {model} not found!')
-        return _supported_models[model](cfg)
+        return _supported_models[model](n_classes, cfg)

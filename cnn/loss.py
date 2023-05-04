@@ -12,11 +12,11 @@ class CustomLoss(nn.Module):
         bs = mts.shape[1]
 
         # Supervised term
-        m0 = mts[0, batch_idxs]
-        m0tt = mtts[offsets[batch_idxs], batch_idxs]
-        mk = mtts[-1, batch_idxs]
-        mkt = mts[-offsets[batch_idxs] - 1, batch_idxs]
-        LS = ((m0 - m0tt).pow(2).sum() + (mk - mkt).pow(2).sum()) * (self.lambda_v / bs)
+        mi_true = mts[0, batch_idxs]
+        mi_pred = mtts[offsets[batch_idxs], batch_idxs]
+        mf_true = mtts[-1, batch_idxs]
+        mf_pred = mts[-offsets[batch_idxs] - 1, batch_idxs]
+        LS = ((mi_true - mi_pred).pow(2).sum() + (mf_true - mf_pred).pow(2).sum()) / bs
 
         # Self-supervised and penalization term
         LU = 0

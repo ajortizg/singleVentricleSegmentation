@@ -15,11 +15,12 @@ from utilities.parser_conversions import str_to_tuple
 
 
 class UNet(nn.Module):
-    def __init__(self, cfg: ConfigParser):
+    def __init__(self, n_classes: int, cfg: ConfigParser):
         params = cfg['PARAMETERS']
         n_layers = params.getint('num_layers')
-        n_classes = params.getint('num_classes')
-        in_channels = params.getint('input_channels')
+        # Add background class for multiclass approach
+        n_classes = n_classes + 1 if n_classes > 1 else n_classes
+        in_channels = n_classes + 1
         feats_start = params.getint('features_start')
         trilinear = params.getboolean('trilinear')
         padding = params.getint('padding')

@@ -11,7 +11,7 @@ from tabulate import tabulate
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../../'))
 sys.path.append(ROOT_DIR)
 from segmentation.base_trainer import BaseTrainer
-from datasets.flow_unet_dataset import get_bounds
+from datasets.flowunet_dataset import get_bounds
 
 
 class Trainer3d(BaseTrainer):

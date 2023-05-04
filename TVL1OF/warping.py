@@ -15,7 +15,7 @@ from tabulate import tabulate
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 from utilities import path_utils as fpu
-from datasets.flow_unet_dataset import FlowUNetDataset, get_bounds
+from datasets.flowunet_dataset import FlowUNetDataset, get_bounds
 import segmentation.transforms as T
 from cnn.warp import WarpCNN
 

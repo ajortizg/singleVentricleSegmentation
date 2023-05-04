@@ -25,7 +25,7 @@ sys.path.append(ROOT_DIR)
 import utilities.path_utils as path_utils
 from utilities import stuff
 from datasets.segmentation_dataset import SegmentationDataset
-from datasets.flow_unet_dataset import get_bounds
+from datasets.flowunet_dataset import get_bounds
 import segmentation.utils as utils
 import segmentation.transforms as T
 from segmentation.tridimensional.models.factory import Factory

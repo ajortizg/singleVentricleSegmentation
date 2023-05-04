@@ -105,7 +105,8 @@ class FlowUNetDataset(Dataset):
         return self.json_ds['labels']
 
     def num_classes(self):
-        return len(self.class_names())
+        # remove background class
+        return len(self.class_names()) - 1
 
     def dataset_name(self):
         return self.json_ds['name']

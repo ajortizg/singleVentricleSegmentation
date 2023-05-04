@@ -16,10 +16,10 @@ from utilities import stuff
 from utilities import path_utils
 from utilities.parser_conversions import str_to_tuple
 import segmentation.transforms as T
-from datasets.flow_unet_dataset import FlowUNetDataset
+from datasets.flowunet_dataset import FlowUNetDataset
 from ofunet import utils
 from ofunet.models.factory import Factory
-from ofunet.trainer import Trainer
+from ofunet.trainer import FlowUNetTrainer
 
 if __name__ == '__main__':
     stuff.seeding(42)
@@ -100,7 +100,7 @@ if __name__ == '__main__':
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=params.getint('step_size'), gamma=params.getfloat('gamma'))
 
     # Training loop
-    trainer = Trainer(config, net, loss_fn, optimizer, device, logger)
+    trainer = FlowUNetTrainer(config, net, loss_fn, optimizer, device, logger)
     trainer.training_loop(params.getint('num_epochs'),
                           params.getint('patience'),
                           scheduler,

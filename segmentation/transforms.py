@@ -105,6 +105,17 @@ class OneOf:
 # -----------------------------------------------------------
 
 
+class DoNothing(BaseTransform):
+    def __init__(self, keys=[]):
+        super().__init__(keys)
+
+    def __call__(self, data):
+        return data
+
+    def _transform_impl(self, x, metadata=None):
+        return x
+
+
 class ToArray(BaseTransform):
     def __init__(self, keys=['image', 'label']):
         super(ToArray, self).__init__(keys)
@@ -1027,6 +1038,7 @@ class ExtremaPoints(BaseTransform):
     This transform will add 4 keys to the data dict correspondig with the initial and
     final masks (mi, mf) and times (ti, tf). This functions expect 5d labels with shape (nt, ch, d1, d2, d3)
     """
+
     def __init__(self, keys=['label']):
         super().__init__(keys)
 

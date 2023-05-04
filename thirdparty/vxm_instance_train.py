@@ -20,7 +20,7 @@ sys.path.append(ROOT_DIR)
 from utilities import plots
 from utilities import path_utils
 from utilities import stuff
-from datasets.flow_unet_dataset import FlowUNetDataset
+from datasets.flowunet_dataset import FlowUNetDataset
 import segmentation.transforms as T
 
 

@@ -3,7 +3,7 @@ import sys
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
-from datasets.flow_unet_dataset import FlowUNetDataset
+from datasets.flowunet_dataset import FlowUNetDataset
 
 if __name__ == '__main__':
     ds = FlowUNetDataset('results/preprocessed/singleVentricleData', 'full', None, load_flow=True)

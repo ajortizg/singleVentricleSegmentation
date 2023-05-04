@@ -15,7 +15,7 @@ ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 from utilities import path_utils as fpu
 from utilities import stuff
-from datasets.flow_unet_dataset import FlowUNetDataset, get_bounds
+from datasets.flowunet_dataset import FlowUNetDataset, get_bounds
 import segmentation.transforms as T
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
