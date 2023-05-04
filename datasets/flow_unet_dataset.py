@@ -131,7 +131,7 @@ class FlowUNetDataset(Dataset):
     @staticmethod
     def collate(data_list):
         """
-        Returns tensors with shape (bs, nt, ch, d1, d2, d3), except for optical flow
+        Returns tensors with shape (nt, bs, ch, d1, d2, d3), except for optical flow
         where ch dim is the last one
         """
         keys_to_collate = ['image', 'label', 'mi', 'mf', 'forward_flow', 'backward_flow']
@@ -167,7 +167,7 @@ class FlowUNetDataset(Dataset):
                                                    0, dif))
                     list_of_padded_tensors.append(padded_tensor)
                 # collated_dict[k] = torch.permute(torch.stack(list_of_padded_tensors), (0, 2, 3, 4, 5, 1))
-                collated_dict[k] = torch.stack(list_of_padded_tensors)
+                collated_dict[k] = torch.stack(list_of_padded_tensors, dim=1)
         collated_dict['offsets'] = offsets_per_key
 
         # Create time sequence forward and backward
@@ -181,8 +181,8 @@ class FlowUNetDataset(Dataset):
             times_fwd.append(torch.where(next_time > tf, tf, next_time))
             prev_time = times_bwd[-1] - 1
             times_bwd.append(torch.where(prev_time < ti, ti, prev_time))
-        times_fwd = torch.stack(times_fwd, dim=1)
-        times_bwd = torch.stack(times_bwd, dim=1)
+        times_fwd = torch.stack(times_fwd, dim=0)
+        times_bwd = torch.stack(times_bwd, dim=0)
         collated_dict['times_fwd'] = times_fwd
         collated_dict['times_bwd'] = times_bwd
 

@@ -68,11 +68,13 @@ def propagate_label(model, img, label, es, ed, fwd, is_test=False):
     if is_test:
         est_masks = torch.cat(est_masks).round()
         true_masks = label[indices[1:]]
+        est_masks = T.one_hot(est_masks, true_masks.shape[1], argmax=True)
         dice = compute_dice(est_masks, true_masks, include_background=False).mean()
         hd = compute_hausdorff_distance(est_masks, true_masks, include_background=False).mean()
         return dice, hd
     else:
-        dice = compute_dice(propagated_mask.round(), mf, include_background=False).mean()
+        dice = compute_dice(T.one_hot(propagated_mask, mf.shape[1], argmax=True),
+                            mf, include_background=False).mean()
         return dice
 
 
@@ -165,6 +167,19 @@ def test(test_loader, model, device, logger=None, verbose=False):
     return report
 
 
+def create_checkpoint(model, optimizer, H, e, file):
+    torch.save({
+        'epoch': e,
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'train_loss': H['train_loss'][-1],
+        'train_acc': H['train_dice'][-1],
+        'val_loss': H['val_loss'][-1],
+        'val_acc': H['val_dice'][-1],
+        'test_acc': H['test_dice'][-1]
+    }, file)
+
+
 if __name__ == '__main__':
     # Seeding for reproducible results
     stuff.seeding(42)
@@ -199,8 +214,8 @@ if __name__ == '__main__':
         T.ToTensor(keys=['image', 'label'])
     ])
 
-    train_ds = FlowUNetDataset(data_cfg['root_dir'], 'train', train_transforms)
-    val_ds = FlowUNetDataset(data_cfg['root_dir'], 'train', val_transforms)
+    train_ds = FlowUNetDataset(data_cfg['root_dir'], 'train', train_transforms, fold_indices=fold['train'])
+    val_ds = FlowUNetDataset(data_cfg['root_dir'], 'train', val_transforms, fold_indices=fold['val'])
     test_ds = FlowUNetDataset(data_cfg['root_dir'], 'test', val_transforms)
     train_loader = DataLoader(train_ds, batch_size=1, shuffle=True, num_workers=params_cfg.getint('num_workers'))
     val_loader = DataLoader(val_ds, batch_size=1, shuffle=False, num_workers=params_cfg.getint('num_workers'))
@@ -256,8 +271,10 @@ if __name__ == '__main__':
         if H['val_dice'][-1] > best_dice:
             best_dice = H['val_dice'][-1]
             epochs_since_last_improvement = 0
-            create_checkpoint(model, e, optimizer, H, osp.join(save_dir, 'checkpoint_best.pth'))
+            create_checkpoint(model, optimizer, H, e, osp.join(save_dir, 'checkpoint_best.pth'))
+            model.save(osp.join(save_dir, 'model_best.pt'))
             logger.info(f'Checkpoint updated with dice: {best_dice:,.3f}')
+            
         else:
             epochs_since_last_improvement += 1
 
@@ -272,6 +289,7 @@ if __name__ == '__main__':
             break
 
     create_checkpoint(model, e, optimizer, H, osp.join(save_dir, 'checkpoint_final.pth'))
+    model.save(osp.join(save_dir, 'model_final.pt'))
     logger.info('\nTraining time: {:.3f} hrs.'.format((time.time() - tic) / 3600.0))
 
     # Plot loss history

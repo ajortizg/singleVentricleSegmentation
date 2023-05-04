@@ -2,6 +2,7 @@ import os.path as osp
 import configparser
 import sys
 import os
+from typing import Any
 
 import torch
 from torch.utils.data import DataLoader
@@ -20,7 +21,6 @@ import segmentation.utils as utils
 import segmentation.transforms as T
 from segmentation.tridimensional.models.factory import Factory
 from segmentation.tridimensional.trainer_3d import FineTuner3d
-
 
 
 if __name__ == '__main__':
@@ -62,11 +62,11 @@ if __name__ == '__main__':
     stuff.save_transforms_to_json(train_ds.transforms, osp.join(save_dir, 'train_transforms.json'))
     logger.info('Save dir: {}'.format(save_dir))
     logger.info('Device: {}'.format(device))
-    
+
     # Create model
     net = Factory.create(config).to(device)
-    gpus = len(os.environ['CUDA_VISIBLE_DEVICES'].split(','))
-    net = torch.nn.DataParallel(net, device_ids=np.arange(gpus).tolist())
+    # gpus = len(os.environ['CUDA_VISIBLE_DEVICES'].split(','))
+    # net = torch.nn.DataParallel(net, device_ids=np.arange(gpus).tolist())
     checkpoint = torch.load(data['pretrained_weights'])
     net.load_state_dict(checkpoint['model_state_dict'], strict=True)
     stuff.save_model(net, save_dir, 'net.txt')
@@ -79,14 +79,17 @@ if __name__ == '__main__':
     # Training loop
     trainer = FineTuner3d(params.getint('num_classes'), net, loss_fn, optimizer, device, logger)
     trainer.training_loop(params.getint('num_epochs'),
-                              params.getint('patience'),
-                              scheduler,
-                              train_loader,
-                              None,
-                              test_loader,
-                              writer,
-                              save_dir)
-    
+                          scheduler,
+                          train_loader,
+                          None,
+                          test_loader,
+                          writer,
+                          save_dir,
+                          params.getint('patience'),
+                          metric_early_stopping='train_dice',
+                          initial_best_metric_value=0,
+                          comparisson_fn=lambda metric, best_metric: metric > best_metric)
+
     trainer.plot_loss_history(osp.join(save_dir, 'loss.png'))
     trainer.plot_accuracy_history(osp.join(save_dir, 'dice.png'))
     writer.close()

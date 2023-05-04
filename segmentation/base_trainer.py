@@ -106,10 +106,11 @@ class BaseTrainer(object, metaclass=ABCMeta):
             hd = compute_hausdorff_distance(y_pred, y_true, include_background=False).mean()
         return dice.item(), hd.item()
 
-    def training_loop(self, epochs, patience, scheduler, train_loader, val_loader, test_loader, tensorboard, save_dir):
+    def training_loop(self, epochs, scheduler, train_loader, val_loader, test_loader, tensorboard, save_dir,
+                      patience, metric_early_stopping, initial_best_metric_value, comparisson_fn):
         self.H = {'train_loss': [], 'train_dice': [], 'val_loss': [], 'val_dice': [], 'test_dice': []}
         epochs_since_last_improvement = 0
-        best_dice = 0.0
+        best_metric = initial_best_metric_value
 
         tic = time.time()
         for e in tqdm(range(1, epochs + 1)):
@@ -144,11 +145,11 @@ class BaseTrainer(object, metaclass=ABCMeta):
                 ['Epoch', e, epochs_since_last_improvement]
             ]).table)
 
-            if self.H['val_dice'][-1] > best_dice:
-                best_dice = self.H['val_dice'][-1]
+            if comparisson_fn(self.H[metric_early_stopping][-1], best_metric):
+                best_metric = self.H[metric_early_stopping][-1]
                 epochs_since_last_improvement = 0
                 self.create_checkpoint(e, osp.join(save_dir, 'checkpoint_best.pth'))
-                self.log(f'Checkpoint updated with dice: {best_dice:,.3f}')
+                self.log(f'Checkpoint updated with {metric_early_stopping}: {best_metric:,.3f}')
             else:
                 epochs_since_last_improvement += 1
 

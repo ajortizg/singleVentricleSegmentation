@@ -540,7 +540,7 @@ class ToRAS(BaseTransform):
             except ValueError:
                 # TODO: I don't know why this happens with svd :(
                 x[b] = xc_new.permute(0, 2, 3, 1).numpy()
-                print('ToRAS ValueError')
+                # print('ToRAS ValueError')
         return x
 
 

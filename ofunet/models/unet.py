@@ -50,7 +50,7 @@ class UNet(nn.Module):
 
     def forward(self, x):
         # TODO: it is clone necessary?
-        identity = x[:, 1:].clone()
+        identity = x[:, 1:]
 
         xi = [self.layers[0](x)]
         # Down path
