@@ -41,7 +41,7 @@ def get_fold(data_cfg):
 
 
 @torch.no_grad()
-def propagate_label(model, img, label, es, ed, fwd, is_test=False):
+def propagate_label(model, img, label, es, ed, fwd, compute_hd, is_test=False):
     *_, mi, mf, indices = get_bounds(es, ed, label, fwd=fwd, test=is_test)
     mi.unsqueeze_(0)
     mf.unsqueeze_(0)
@@ -70,17 +70,16 @@ def propagate_label(model, img, label, es, ed, fwd, is_test=False):
         true_masks = label[indices[1:]]
         est_masks = T.one_hot(est_masks, true_masks.shape[1], argmax=True)
         dice = compute_dice(est_masks, true_masks, include_background=False).mean()
-        hd = compute_hausdorff_distance(est_masks, true_masks, include_background=False).mean()
-        return dice, hd
+        return (dice, compute_hausdorff_distance(est_masks, true_masks, include_background=False).mean()) if compute_hd else dice
     else:
-        dice = compute_dice(T.one_hot(propagated_mask, mf.shape[1], argmax=True),
-                            mf, include_background=False).mean()
-        return dice
+        est_masks = T.one_hot(propagated_mask, mf.shape[1], argmax=True)
+        dice = compute_dice(est_masks, mf, include_background=False).mean()
+        return (dice, compute_hausdorff_distance(est_masks, mf, include_background=False).mean()) if compute_hd else dice
 
 
-def train(train_loader, model, optimizer, losses, weights, device, test=False):
+def train(train_loader, model, optimizer, losses, weights, device, compute_hd, test=False):
     model.train()
-    report = pd.DataFrame(columns=['Loss', 'Dice'])
+    report = pd.DataFrame(columns=['Loss', 'Dice']) if not compute_hd else pd.DataFrame(columns=['Loss', 'Dice', 'HD'])
 
     for data in train_loader:
         img = data['image'].squeeze(0).to(device)
@@ -106,8 +105,8 @@ def train(train_loader, model, optimizer, losses, weights, device, test=False):
         optimizer.step()
 
         with torch.no_grad():
-            dice = propagate_label(model, img, label, data['es'][0], data['ed'][0], fwd=True, is_test=test)
-            report.loc[len(report)] = [loss.item(), dice.item()]
+            metrics = propagate_label(model, img, label, data['es'][0], data['ed'][0], fwd=True, compute_hd=compute_hd, is_test=test)
+            report.loc[len(report)] = [loss.item(), metrics.item()] if not compute_hd else [loss.item(), metrics[0].item(), metrics[1].item()]
     return report
 
 
@@ -134,7 +133,7 @@ def validate(val_loader, model, losses, weights, device):
             curr_loss = loss_function(y_true[n], y_pred[n]) * weights[n]
             loss += curr_loss
 
-        dice = propagate_label(model, img, label, data['es'][0], data['ed'][0], fwd=True)
+        dice = propagate_label(model, img, label, data['es'][0], data['ed'][0], fwd=True, compute_hd=False)
         report.loc[len(report)] = [loss.item(), dice.item()]
     return report
 
@@ -149,8 +148,8 @@ def test(test_loader, model, device, logger=None, verbose=False):
         label = data['label'].squeeze(0).to(device)
         patient = data['patient'][0]
         tic = time.time()
-        dice_fwd, hd_fwd = propagate_label(model, img, label, data['es'][0], data['ed'][0], fwd=True, is_test=True)
-        dice_bwd, hd_bwd = propagate_label(model, img, label, data['es'][0], data['ed'][0], fwd=False, is_test=True)
+        dice_fwd, hd_fwd = propagate_label(model, img, label, data['es'][0], data['ed'][0], fwd=True, compute_hd=True, is_test=True)
+        dice_bwd, hd_bwd = propagate_label(model, img, label, data['es'][0], data['ed'][0], fwd=False, compute_hd=True, is_test=True)
         report.loc[len(report)] = [
             patient,
             (dice_fwd.item() + dice_bwd.item()) / 2,
@@ -249,7 +248,7 @@ if __name__ == '__main__':
 
     for e in tqdm(range(1, params_cfg.getint('num_epochs') + 1)):
         epoch_tic = time.time()
-        report = train(train_loader, model, optimizer, losses, weights, device)
+        report = train(train_loader, model, optimizer, losses, weights, device, False)
         H['train_loss'].append(report['Loss'].mean())
         H['train_dice'].append(report['Dice'].mean())
 
@@ -274,7 +273,7 @@ if __name__ == '__main__':
             create_checkpoint(model, optimizer, H, e, osp.join(save_dir, 'checkpoint_best.pth'))
             model.save(osp.join(save_dir, 'model_best.pt'))
             logger.info(f'Checkpoint updated with dice: {best_dice:,.3f}')
-            
+
         else:
             epochs_since_last_improvement += 1
 
@@ -288,7 +287,7 @@ if __name__ == '__main__':
             logger.info(f'Early stop at epoch: {e}')
             break
 
-    create_checkpoint(model, e, optimizer, H, osp.join(save_dir, 'checkpoint_final.pth'))
+    create_checkpoint(model, optimizer, H, e, osp.join(save_dir, 'checkpoint_final.pth'))
     model.save(osp.join(save_dir, 'model_final.pt'))
     logger.info('\nTraining time: {:.3f} hrs.'.format((time.time() - tic) / 3600.0))
 

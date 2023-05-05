@@ -3,10 +3,16 @@ from configparser import ConfigParser
 from torch.nn import Module
 
 from .unet import UNet
+from .swinunetr import SwinUNetr
+from .unetr import UNetr
+from .resunet import ResUNet
 
 
 _supported_models = {
-    'UNet': UNet
+    'UNet': UNet,
+    'SwinUNetr': SwinUNetr,
+    'UNetr': UNetr,
+    'ResUNet': ResUNet
 }
 
 

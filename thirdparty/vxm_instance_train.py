@@ -8,7 +8,10 @@ import torch
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
+import time
+import matplotlib.pyplot as plt
 from torch import nn
+import pandas as pd
 
 # import voxelmorph with pytorch backend
 os.environ['NEURITE_BACKEND'] = 'pytorch'
@@ -22,65 +25,34 @@ from utilities import path_utils
 from utilities import stuff
 from datasets.flowunet_dataset import FlowUNetDataset
 import segmentation.transforms as T
-
-
-def train(data, model, optimizer, losses, weights):
-    model.train()
-    epoch_total_loss = []
-
-    img = data['img'].permute(4, 0, 1, 2, 3).to(device)  # NT, CH, NZ, NY, NX
-    # img = data['img'].permute(4, 0, 3, 2, 1).to(device)  # NT, CH, NX, NY, NZ
-
-    for t in range(img.shape[0] - 1):
-        moving = img[t, ...].unsqueeze(0)
-        fixed = img[t + 1, ...].unsqueeze(0)
-        y_pred = model(moving, fixed)
-
-        # calculate total loss
-        y_true = [fixed, None]
-        loss = 0
-        for n, loss_function in enumerate(losses):
-            curr_loss = loss_function(y_true[n], y_pred[n]) * weights[n]
-            loss += curr_loss
-        epoch_total_loss.append(loss.item())
-
-        # backpropagate and optimize
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-    return np.array(epoch_total_loss).mean()
+from thirdparty.vxm_train import test, create_checkpoint, train
 
 
 if __name__ == '__main__':
     # Seeding for reproducible results
     stuff.seeding(42)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # Read configuration options
     config = configparser.ConfigParser()
     config.read('parser/vxm_instance_train.ini')
-    root_dir = config.get('DATA', 'ROOT_DIR')
-    output_dir = config.get('DATA', 'OUTPUT_DIR')
-    img_sz = config.getint('PARAMETERS', 'IMG_SIZE')
-    workers = config.getint('PARAMETERS', 'WORKERS')
-    epochs = config.getint('PARAMETERS', 'NUM_EPOCHS')
-    bidir = config.getboolean('PARAMETERS', 'BIDIR')
-    img_loss = config.get('PARAMETERS', 'IMG_LOSS')
-    lambda_param = config.getfloat('PARAMETERS', 'LAMBDA')
-    lr = config.getfloat('PARAMETERS', 'LR')
-    cudnn_nondet = config.getboolean('PARAMETERS', 'CUDNN_NONDET')
-    patient = config.get('DATA', 'PATIENT')
-    model_weights = config.get('DATA', 'MODEL')
+    params = config['PARAMETERS']
+    data = config['DATA']
 
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print('Device: ', device)
-    # enabling cudnn determinism appears to speed up training by a lot
+    cudnn_nondet = params.getboolean('cudnn_nondet')
+    model_weights = data['model']
+
+    # Enabling cudnn determinism appears to speed up training by a lot
     torch.backends.cudnn.deterministic = not cudnn_nondet
-    print('cudnn.deterministic: ', (not cudnn_nondet))
-    print('Weights: ', model_weights)
 
-    save_dir = path_utils.create_save_dir(output_dir, 'VXM_IT')
+    save_dir = path_utils.create_save_dir(data['output_dir'], data['patient'])
     stuff.save_config(config, save_dir)
     writer = SummaryWriter(log_dir=save_dir)
+    logger = stuff.create_logger(save_dir)
+    logger.info(f'Device: {device}')
+    logger.info(f'Save dir: {save_dir}')
+    logger.info(f'cudnn.deterministic: {(not cudnn_nondet)}')
+    logger.info(f'Weights: {model_weights}')
 
     # Create dataloaders
     val_transforms = T.Compose([
@@ -90,43 +62,90 @@ if __name__ == '__main__':
         T.ToTensor(keys=['image', 'label'])
     ])
 
-    test_ds = FlowUNetDataset(root_dir, 'test', val_transforms)
-    test_ds.filter_patient(patient)
-    
-    test_loader = DataLoader(test_ds, batch_size=1, shuffle=False, num_workers=workers)
+    train_ds = FlowUNetDataset(data['root_dir'], 'test', val_transforms)
+    train_ds.filter_patient(data['patient'])
+    train_loader = DataLoader(train_ds, batch_size=1, shuffle=False, num_workers=params.getint('workers'))
 
     # load and set up model
-    checkpoint = torch.load(model_weights)
-    model = vxm.networks.VxmDense.load(checkpoint['model_state_dict'], device)
+    model = vxm.networks.VxmDense.load(model_weights, device)
     model.to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    optimizer = torch.optim.Adam(model.parameters(), lr=params.getfloat('lr'))
 
-    if img_loss == 'ncc':
+    if params['img_loss'] == 'ncc':
         image_loss_func = vxm.losses.NCC().loss
-    elif img_loss == 'mse':
-        # image_loss_func = vxm.losses.MSE().loss
-        image_loss_func = nn.MSELoss(reduction='sum')
+    elif params['img_loss'] == 'mse':
+        image_loss_func = vxm.losses.MSE().loss
     else:
-        raise ValueError('Image loss should be "mse" or "ncc", but found "%s"' % img_loss)
+        raise ValueError('Image loss should be "mse" or "ncc", but found "%s"' % params['img_loss'])
 
     losses = [image_loss_func, vxm.losses.Grad('l2', loss_mult=2).loss]
-    weights = [1.0, lambda_param]
+    weights = [1.0, params.getfloat('lambda')]
+    H = {'train_loss': [], 'train_dice': [], 'val_loss': [], 'val_dice': [], 'test_dice': []}
+    epochs_since_last_improvement = 0
+    best_dice = 0.0
+    patience = params.getint('patience')
+    tic = time.time()
 
-    sys.exit()
+    for e in tqdm(range(1, params.getint('num_epochs') + 1)):
+        epoch_tic = time.time()
+        report = train(train_loader, model, optimizer, losses, weights, device, compute_hd=False, test=True)
+        H['train_loss'].append(report['Loss'].mean())
+        H['train_dice'].append(report['Dice'].mean())
 
+        report = test(train_loader, model, device, logger, True)
+        H['test_dice'].append(report['Dice'].mean())
 
-    for e in tqdm(range(1, epochs + 1)):
-        train_loss = train(data, model, optimizer, losses, weights)
+        H['val_loss'].append(0)
+        H['val_dice'].append(0)
 
-        # Save model every 20 epochs
-        if e % 10 == 0:
-            model.save(os.path.join(save_dir, 'model.pth'))
-
-        writer.add_scalar('loss', train_loss, e)
-
-        print(AsciiTable([
-            ['Split', 'Loss'],
-            ['Train', '{:.6f}'.format(train_loss)]
+        logger.info(AsciiTable([
+            ['Split', 'Loss', 'Dice'],
+            ['Train', '{:.6f}'.format(H['train_loss'][-1]), '{:.3f}'.format(H['train_dice'][-1])],
+            ['Test', '-', '{:.3f}'.format(H['test_dice'][-1])],
+            ['Epoch', e, epochs_since_last_improvement]
         ]).table)
 
-    model.save(os.path.join(save_dir, 'model.pth'))
+        if H['train_dice'][-1] > best_dice:
+            best_dice = H['train_dice'][-1]
+            epochs_since_last_improvement = 0
+            create_checkpoint(model, optimizer, H, e, osp.join(save_dir, 'checkpoint_best.pth'))
+            model.save(osp.join(save_dir, 'model_best.pt'))
+            logger.info(f'Checkpoint updated with dice: {best_dice:,.3f}')
+
+        else:
+            epochs_since_last_improvement += 1
+
+        writer.add_scalars('loss', {'train': H['train_loss'][-1], 'val': H['val_loss'][-1]}, e)
+        writer.add_scalars('dice', {'train': H['train_dice'][-1], 'val': H['val_dice'][-1], 'test': H['test_dice'][-1]}, e)
+        writer.add_scalar('epoch_time', time.time() - epoch_tic, e)
+        writer.add_scalar('lr', optimizer.param_groups[0]['lr'], e)
+
+        # early stop
+        if epochs_since_last_improvement > patience:
+            logger.info(f'Early stop at epoch: {e}')
+            break
+
+    create_checkpoint(model, optimizer, H, e, osp.join(save_dir, 'checkpoint_final.pth'))
+    model.save(osp.join(save_dir, 'model_final.pt'))
+    logger.info('\nTraining time: {:.3f} hrs.'.format((time.time() - tic) / 3600.0))
+
+    # Plot loss history
+    plt.figure()
+    plt.plot(H['train_loss'], label='train')
+    plt.plot(H['val_loss'], label='val')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.legend(loc='lower left')
+    plt.savefig(osp.join(save_dir, 'loss.png'))
+
+    # Plot dice history
+    plt.figure()
+    plt.plot(H['train_dice'], label='train')
+    plt.plot(H['val_dice'], label='val')
+    plt.plot(H['test_dice'], label='test')
+    plt.xlabel('Epoch')
+    plt.ylabel('Dice')
+    plt.legend(loc='lower right')
+    plt.savefig(osp.join(save_dir, 'dice.png'))
+
+    writer.close()
