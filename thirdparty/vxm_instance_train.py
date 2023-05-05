@@ -55,14 +55,14 @@ if __name__ == '__main__':
     logger.info(f'Weights: {model_weights}')
 
     # Create dataloaders
-    val_transforms = T.Compose([
+    transforms = T.Compose([
         T.XYZT_To_TZYX(keys=['image', 'label']),
         T.AddDimAt(axis=1, keys=['image', 'label']),
         T.OneHotEncoding(config.getint('DATA', 'num_classes'), keys=['label']),
         T.ToTensor(keys=['image', 'label'])
     ])
 
-    train_ds = FlowUNetDataset(data['root_dir'], 'test', val_transforms)
+    train_ds = FlowUNetDataset(data['root_dir'], 'test', transforms)
     train_ds.filter_patient(data['patient'])
     train_loader = DataLoader(train_ds, batch_size=1, shuffle=False, num_workers=params.getint('workers'))
 
