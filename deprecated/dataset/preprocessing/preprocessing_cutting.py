@@ -7,10 +7,10 @@ import os
 import configparser
 import os.path as osp
 
-ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../../'))
+ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../../../'))
 sys.path.append(ROOT_DIR)
-from utilities import plots
-from dataset import singleVentricleDataset
+from utilities import path_utils
+from deprecated.dataset import singleVentricleDataset
 
 __all__ = ['cut_patient']
 
@@ -48,63 +48,63 @@ def save_np_to_nifty(file, saveDir, fileName, hdr_old):
     # print("new header:")
     # print(hdr)
 
-def cut_patient(config, img4d, md, ms, df):
-    xTol = config.getint('CUTTING', 'xTol')
-    yTol = config.getint('CUTTING', 'yTol')
-    zTol = config.getint('CUTTING', 'zTol')
+# def cut_patient(config, img4d, md, ms, df):
+#     xTol = config.getint('CUTTING', 'xTol')
+#     yTol = config.getint('CUTTING', 'yTol')
+#     zTol = config.getint('CUTTING', 'zTol')
 
-    # get range of diastole and systole
-    zmin_dia, zmax_dia, ymin_dia, ymax_dia, xmin_dia, xmax_dia = getRangeOfMask_xyz(md, printRange=False, name="diastole")
-    zmin_sys, zmax_sys, ymin_sys, ymax_sys, xmin_sys, xmax_sys = getRangeOfMask_xyz(ms, printRange=False, name="systole")
+#     # get range of diastole and systole
+#     zmin_dia, zmax_dia, ymin_dia, ymax_dia, xmin_dia, xmax_dia = getRangeOfMask_xyz(md, printRange=False, name="diastole")
+#     zmin_sys, zmax_sys, ymin_sys, ymax_sys, xmin_sys, xmax_sys = getRangeOfMask_xyz(ms, printRange=False, name="systole")
 
-    # extend range by tolerance
-    NX,NY,NZ,NT = img4d.shape
-    xmin_total = max(0, min(xmin_dia, xmin_sys) - xTol)
-    xmax_total = min(NX - 1, max(xmax_dia, xmax_sys) + xTol)
-    ymin_total = max(0, min(ymin_dia, ymin_sys) - yTol)
-    ymax_total = min(NY - 1, max(ymax_dia, ymax_sys) + yTol)
-    zmin_total = max(0, min(zmin_dia, zmin_sys) - zTol)
-    zmax_total = min(NZ - 1, max(zmax_dia, zmax_sys) + zTol)
+#     # extend range by tolerance
+#     NX,NY,NZ,NT = img4d.shape
+#     xmin_total = max(0, min(xmin_dia, xmin_sys) - xTol)
+#     xmax_total = min(NX - 1, max(xmax_dia, xmax_sys) + xTol)
+#     ymin_total = max(0, min(ymin_dia, ymin_sys) - yTol)
+#     ymax_total = min(NY - 1, max(ymax_dia, ymax_sys) + yTol)
+#     zmin_total = max(0, min(zmin_dia, zmin_sys) - zTol)
+#     zmax_total = min(NZ - 1, max(zmax_dia, zmax_sys) + zTol)
 
-    # NX_cut = xmax_total - xmin_total + 1
-    # NY_cut = ymax_total - ymin_total + 1
-    # NZ_cut = zmax_total - zmin_total + 1
-    cutting_4d = img4d[xmin_total:xmax_total + 1, ymin_total:ymax_total + 1, zmin_total:zmax_total + 1, :]
-    cutting_diastole = md[xmin_total:xmax_total + 1, ymin_total:ymax_total + 1, zmin_total:zmax_total + 1]
-    cutting_systole = ms[xmin_total:xmax_total + 1, ymin_total:ymax_total + 1, zmin_total:zmax_total + 1]
+#     # NX_cut = xmax_total - xmin_total + 1
+#     # NY_cut = ymax_total - ymin_total + 1
+#     # NZ_cut = zmax_total - zmin_total + 1
+#     cutting_4d = img4d[xmin_total:xmax_total + 1, ymin_total:ymax_total + 1, zmin_total:zmax_total + 1, :]
+#     cutting_diastole = md[xmin_total:xmax_total + 1, ymin_total:ymax_total + 1, zmin_total:zmax_total + 1]
+#     cutting_systole = ms[xmin_total:xmax_total + 1, ymin_total:ymax_total + 1, zmin_total:zmax_total + 1]
 
-    output_df = df.copy()
-    output_df['original_NX'] = NX
-    output_df['original_NY'] = NY
-    output_df['original_NZ'] = NZ   
-    output_df['original_NT'] = NT
-    output_df['x_min'] = xmin_total
-    output_df['x_max'] = xmax_total
-    output_df['y_min'] = ymin_total
-    output_df['y_max'] = ymax_total
-    output_df['z_min'] = zmin_total
-    output_df['z_max'] = zmax_total
-    NX,NY,NZ,NT = cutting_4d.shape
-    output_df['cut_NX'] = NX
-    output_df['cut_NY'] = NY
-    output_df['cut_NZ'] = NZ   
-    output_df['cut_NT'] = NT
-    # output_df['yshift'] = ymin_total
-    # output_df['zshift'] = zmin_total
+#     output_df = df.copy()
+#     output_df['original_NX'] = NX
+#     output_df['original_NY'] = NY
+#     output_df['original_NZ'] = NZ   
+#     output_df['original_NT'] = NT
+#     output_df['x_min'] = xmin_total
+#     output_df['x_max'] = xmax_total
+#     output_df['y_min'] = ymin_total
+#     output_df['y_max'] = ymax_total
+#     output_df['z_min'] = zmin_total
+#     output_df['z_max'] = zmax_total
+#     NX,NY,NZ,NT = cutting_4d.shape
+#     output_df['cut_NX'] = NX
+#     output_df['cut_NY'] = NY
+#     output_df['cut_NZ'] = NZ   
+#     output_df['cut_NT'] = NT
+#     # output_df['yshift'] = ymin_total
+#     # output_df['zshift'] = zmin_total
 
-    return cutting_4d, cutting_diastole, cutting_systole, output_df
+#     return cutting_4d, cutting_diastole, cutting_systole, output_df
 
 
 if __name__ == "__main__":
 
-    plots.printConsoleOutput_Header("preprocessing data: cutting out heart region")
+    # plots.printConsoleOutput_Header("preprocessing data: cutting out heart region")
 
     # load config parser
     config = configparser.ConfigParser()
-    config.read('parser/configPreprocessing.ini')
+    config.read('parser/deprecated/configPreprocessing.ini')
 
     # create save directory
-    saveDir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), "preprocessing_cut")
+    saveDir = path_utils.create_save_dir(config.get('DATA', 'OUTPUT_PATH'), "preprocessing_cut")
 
     # save config file to save directory
     conifgOutput = os.path.sep.join([saveDir, "config.ini"])
@@ -128,8 +128,8 @@ if __name__ == "__main__":
     original_NT = np.zeros(len(dataSet))
 
     #
-    saveDir4D = plots.createSubDirectory(saveDir, dataSet.volumes_subdir_path)
-    saveDirSegmentations = plots.createSubDirectory(saveDir, dataSet.segmentations_subdir_path)
+    saveDir4D = path_utils.create_sub_dir(saveDir, dataSet.volumes_subdir_path)
+    saveDirSegmentations = path_utils.create_sub_dir(saveDir, dataSet.segmentations_subdir_path)
 
     # iterate over all patients
     pbar = tqdm(total=len(dataSet))
@@ -176,10 +176,10 @@ if __name__ == "__main__":
         cutting_systole = patient.nii_mask_systole_xyz[xmin_total:xmax_total + 1, ymin_total:ymax_total + 1, zmin_total:zmax_total + 1]
 
         # save to nifty
-        saveDirPatient = plots.createSubDirectory(saveDirSegmentations, patient.name)
+        saveDirPatient = path_utils.create_sub_dir(saveDirSegmentations, patient.name)
         save_np_to_nifty(cutting_4d, saveDir4D, patient.name + ".nii.gz", patient.nii_header_xyzt)
-        save_np_to_nifty(cutting_diastole, saveDirPatient, patient.name + "_Diastole_Labelmap.nii", patient.hdr_mask_diastole)
-        save_np_to_nifty(cutting_systole, saveDirPatient, patient.name + "_Systole_Labelmap.nii", patient.hdr_mask_systole)
+        save_np_to_nifty(cutting_diastole, saveDirPatient, patient.name + "_Diastole_Labelmap.nii.gz", patient.hdr_mask_diastole)
+        save_np_to_nifty(cutting_systole, saveDirPatient, patient.name + "_Systole_Labelmap.nii.gz", patient.hdr_mask_systole)
 
         if patient.full_cycle:
             for t in range(patient.NT):

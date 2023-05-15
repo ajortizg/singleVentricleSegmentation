@@ -18,15 +18,15 @@ class SwinUNetr(nn.Module):
         self.net = SwinUNETR(img_size=(img_size, img_size, img_size),
                              in_channels=input_channels,
                              out_channels=num_classes,
-                             depths=(2, 2, 2, 2),
-                             num_heads=(3, 6, 12, 24),
-                             feature_size=24,
+                             depths=(1, 1, 2, 2),
+                             num_heads=(3, 6, 12, 12),
+                             feature_size=12,
                              norm_name='instance',
                              spatial_dims=3)
 
     def forward(self, x):
         if self.residual:
-            identity = x[:, 1:, :, :, :].clone()
+            identity = x[:, 1:]
 
         output = self.net(x)
 

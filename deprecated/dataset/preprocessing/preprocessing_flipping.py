@@ -9,9 +9,9 @@ import configparser
 import time
 import os.path as osp
 
-ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../../'))
+ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../../../'))
 sys.path.append(ROOT_DIR)
-from utilities import plots
+from utilities import path_utils
 from dataset.singleVentricleDataset import SingleVentricleDataset
 
 __all__ = ['flip_patient']
@@ -41,36 +41,36 @@ def save_np_to_nifty(file, saveDir, fileName, hdr_old):
     nib.save(ni_img, outputFile)
 
 
-def flip_patient(config, name, md, ms, df):
-    flip_all = set(config.get('FLIPPING', 'flip_all').replace('{', '').replace('}', '').replace('\n', '').split(','))
-    mask_diastole_xyz_flip = flip_mask(name, md, flip_all)
-    mask_systole_xyz_flip = flip_mask(name, ms, flip_all)
+# def flip_patient(config, name, md, ms, df):
+#     flip_all = set(config.get('FLIPPING', 'flip_all').replace('{', '').replace('}', '').replace('\n', '').split(','))
+#     mask_diastole_xyz_flip = flip_mask(name, md, flip_all)
+#     mask_systole_xyz_flip = flip_mask(name, ms, flip_all)
 
-    if name in flip_all:
-        xflip = 1
-        yflip = 1
-        zflip = 1
-    else:
-        xflip = 0
-        yflip = 1
-        zflip = 0
+#     if name in flip_all:
+#         xflip = 1
+#         yflip = 1
+#         zflip = 1
+#     else:
+#         xflip = 0
+#         yflip = 1
+#         zflip = 0
 
-    output_df = df.copy()
-    output_df['xflip'] = xflip
-    output_df['yflip'] = yflip
-    output_df['zflip'] = zflip
-    return mask_diastole_xyz_flip, mask_systole_xyz_flip, output_df
+#     output_df = df.copy()
+#     output_df['xflip'] = xflip
+#     output_df['yflip'] = yflip
+#     output_df['zflip'] = zflip
+#     return mask_diastole_xyz_flip, mask_systole_xyz_flip, output_df
 
 
 if __name__ == "__main__":
-    plots.printConsoleOutput_Header("preprocessing data: flipping nifty files")
+    # plots.printConsoleOutput_Header("preprocessing data: flipping nifty files")
 
     # load config parser
     config = configparser.ConfigParser()
     config.read('parser/configPreprocessing.ini')
 
     # create save directory
-    saveDir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), "preprocessing_flip")
+    saveDir = path_utils.create_save_dir(config.get('DATA', 'OUTPUT_PATH'), "preprocessing_flip")
 
     # save config file to save directory
     conifgOutput = os.path.sep.join([saveDir, "config.ini"])
@@ -88,8 +88,8 @@ if __name__ == "__main__":
     yflip = np.zeros(len(dataSet))
     zflip = np.zeros(len(dataSet))
 
-    saveDir4D = plots.createSubDirectory(saveDir, dataSet.volumes_subdir_path)
-    saveDirSegmentations = plots.createSubDirectory(saveDir, dataSet.segmentations_subdir_path)
+    saveDir4D = path_utils.create_sub_dir(saveDir, dataSet.volumes_subdir_path)
+    saveDirSegmentations = path_utils.create_sub_dir(saveDir, dataSet.segmentations_subdir_path)
 
     # iterate over all patients
     pbar = tqdm(total=len(dataSet))
@@ -102,12 +102,12 @@ if __name__ == "__main__":
         nii_mask_systole_xyz_flip = flip_mask(patient.name, patient.nii_mask_systole_xyz, flip_all)
 
         # save to nifty
-        saveDirPatient = plots.createSubDirectory(saveDirSegmentations, patient.name)
+        saveDirPatient = path_utils.create_sub_dir(saveDirSegmentations, patient.name)
         save_np_to_nifty(patient.nii_data_xyzt, saveDir4D, patient.name + ".nii.gz", patient.nii_header_xyzt)
         save_np_to_nifty(nii_mask_diastole_xyz_flip, saveDirPatient,
-                         patient.name + "_Diastole_Labelmap.nii", patient.hdr_mask_diastole)
+                         patient.name + "_Diastole_Labelmap.nii.gz", patient.hdr_mask_diastole)
         save_np_to_nifty(nii_mask_systole_xyz_flip, saveDirPatient,
-                         patient.name + "_Systole_Labelmap.nii", patient.hdr_mask_systole)
+                         patient.name + "_Systole_Labelmap.nii.gz", patient.hdr_mask_systole)
 
         # flip masks for the whole cycle
         if patient.full_cycle:

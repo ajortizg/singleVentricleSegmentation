@@ -195,6 +195,7 @@ if __name__ == '__main__':
     stuff.save_config(config, save_dir)
     writer = SummaryWriter(log_dir=save_dir)
     logger = stuff.create_logger(save_dir)
+    logger.info(f'Save dir: {save_dir}')
     logger.info(f'Device: {device}')
     logger.info(f'Fold: {n}')
 
@@ -228,6 +229,7 @@ if __name__ == '__main__':
         int_downsize=params_cfg.getint('int_downsize')
     )
     model.to(device)
+    stuff.save_model(model, save_dir, 'net.txt')
     optimizer = torch.optim.Adam(model.parameters(), lr=params_cfg.getfloat('lr'))
 
     if params_cfg['img_loss'] == 'ncc':

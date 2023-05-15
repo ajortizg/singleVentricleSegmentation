@@ -7,6 +7,8 @@ import json
 from collections import defaultdict
 import torch.nn.functional as F
 
+from .utils.image_reader import ImageReader
+
 
 def get_bounds(es, ed, masks, fwd, test=False):
     mi, mf = None, None
@@ -52,6 +54,7 @@ class FlowUNetDataset(Dataset):
 
         # Read json
         self.json_ds = self.read_json(osp.join(root_dir, 'dataset.json'))
+        self.reader = ImageReader(self.file_ending(), read_meta=False)
 
         if mode == 'full':
             self.df_split = df
@@ -74,13 +77,17 @@ class FlowUNetDataset(Dataset):
         ext = self.file_ending()
 
         # Load images and masks
-        image_xyzt = np.load(osp.join(self.imgs_dir, patient_name + ext))
+        # image_xyzt = np.load(osp.join(self.imgs_dir, patient_name + ext))
+        image_xyzt = self.reader(osp.join(self.imgs_dir, patient_name + ext))['data']
 
         if self.is_test:
-            label_xyzt = np.load(osp.join(self.masks_dir, patient_name, f'{patient_name}_Labelmap{ext}'))
+            # label_xyzt = np.load(osp.join(self.masks_dir, patient_name, f'{patient_name}_Labelmap{ext}'))
+            label_xyzt = self.reader(osp.join(self.masks_dir, patient_name, f'{patient_name}_Labelmap{ext}'))['data']
         else:
-            label_xyz_es = np.load(osp.join(self.masks_dir, patient_name, patient_name + f'_Systole_Labelmap{ext}'))
-            label_xyz_ed = np.load(osp.join(self.masks_dir, patient_name, patient_name + f'_Diastole_Labelmap{ext}'))
+            # label_xyz_es = np.load(osp.join(self.masks_dir, patient_name, patient_name + f'_Systole_Labelmap{ext}'))
+            # label_xyz_ed = np.load(osp.join(self.masks_dir, patient_name, patient_name + f'_Diastole_Labelmap{ext}'))
+            label_xyz_es = self.reader(osp.join(self.masks_dir, patient_name, patient_name + f'_Systole_Labelmap{ext}'))['data']
+            label_xyz_ed = self.reader(osp.join(self.masks_dir, patient_name, patient_name + f'_Diastole_Labelmap{ext}'))['data']
             label_xyzt = np.stack((label_xyz_es, label_xyz_ed), axis=3)
 
         # Group data in a dictionary

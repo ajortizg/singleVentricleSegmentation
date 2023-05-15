@@ -7,9 +7,10 @@ import sys
 from tqdm import tqdm
 import pandas as pd
 
-ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
+ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../../'))
 sys.path.append(ROOT_DIR)
-from utilities import plots
+# from utilities import plots
+from utilities import path_utils
 
 
 class ACDCPatient:
@@ -28,10 +29,10 @@ class ACDCPatient:
 
         # Save masks
         if self.mask_systole_nii is not None and self.mask_diastole_nii is not None:
-            save_patient_seg_dir = plots.createSubDirectory(save_segmentations_dir, self.name)
-            outputFile = osp.sep.join([save_patient_seg_dir, self.name + "_Systole_Labelmap.nii"])
+            save_patient_seg_dir = path_utils.create_sub_dir(save_segmentations_dir, self.name)
+            outputFile = osp.sep.join([save_patient_seg_dir, self.name + "_Systole_Labelmap.nii.gz"])
             nib.save(self.mask_systole_nii, outputFile)
-            outputFile = osp.sep.join([save_patient_seg_dir, self.name + "_Diastole_Labelmap.nii"])
+            outputFile = osp.sep.join([save_patient_seg_dir, self.name + "_Diastole_Labelmap.nii.gz"])
             nib.save(self.mask_diastole_nii, outputFile)
 
         row = {'Name': self.name, 'Systole': self.tsystole, 'Diastole': self.tdiastole}
@@ -40,8 +41,7 @@ class ACDCPatient:
 
 
 class ACDCDataset:
-    def __init__(self, base_path, label):
-        self.label = label
+    def __init__(self, base_path):
         self.base_path = base_path
         self.patient_dirs = sorted(os.listdir(base_path))
 
@@ -58,8 +58,8 @@ class ACDCDataset:
         if mode == 'training':
             mask_diastole_nii = nib.load(osp.sep.join([self.base_path, name, name + '_frame%02d_gt.nii.gz' % (tdiastole)]))
             mask_systole_nii = nib.load(osp.sep.join([self.base_path, name, name + '_frame%02d_gt.nii.gz' % (tsystole)]))
-            mask_diastole_nii = self.extract_label(mask_diastole_nii)
-            mask_systole_nii = self.extract_label(mask_systole_nii)
+            # mask_diastole_nii = self.extract_label(mask_diastole_nii)
+            # mask_systole_nii = self.extract_label(mask_systole_nii)
         else:
             mask_diastole_nii = None
             mask_systole_nii = None
@@ -67,29 +67,29 @@ class ACDCDataset:
         patient = ACDCPatient(name, img4d_nii, mask_systole_nii, mask_diastole_nii, tsystole, tdiastole)
         return patient
 
-    def extract_label(self, mask_nii):
-        mask_data = mask_nii.get_fdata()
-        # mask_data_label = np.where(np.logical_or(mask_data == self.label1, mask_data == self.label2), 1.0, 0.0)
-        mask_data_label = np.where(mask_data == self.label, 1.0, 0.0)
-        mask_nii = nib.Nifti1Image(mask_data_label, affine=mask_nii.affine, header=mask_nii.header)
-        return mask_nii
+    # def extract_label(self, mask_nii):
+    #     mask_data = mask_nii.get_fdata()
+    #     # mask_data_label = np.where(np.logical_or(mask_data == self.label1, mask_data == self.label2), 1.0, 0.0)
+    #     mask_data_label = np.where(mask_data == self.label, 1.0, 0.0)
+    #     mask_nii = nib.Nifti1Image(mask_data_label, affine=mask_nii.affine, header=mask_nii.header)
+    #     return mask_nii
 
     def __len__(self):
         return len(self.patient_dirs)
 
 
 if __name__ == "__main__":
-    labels = {'background': 0,
-              'right_ventricle': 1,
-              'myocardium': 2,
-              'left_ventricle': 3}
+    # labels = {'background': 0,
+    #           'right_ventricle': 1,
+    #           'myocardium': 2,
+    #           'left_ventricle': 3}
 
-    save_dir = plots.createSaveDirectory('results', 'ACDCData')
-    save4d_dir = plots.createSubDirectory(save_dir, 'NIFTI_4D_Datasets')
-    save_segmentations_dir = plots.createSubDirectory(save_dir, 'NIFTI_Single_Ventricle_Segmentations')
+    save_dir = path_utils.create_save_dir('results', 'ACDCData')
+    save4d_dir = path_utils.create_sub_dir(save_dir, 'NIFTI_4D_Datasets')
+    save_segmentations_dir = path_utils.create_sub_dir(save_dir, 'NIFTI_Single_Ventricle_Segmentations')
     df_dset = pd.DataFrame(columns=['Name', 'Systole', 'Diastole'])
 
-    train_ds = ACDCDataset('data/0preprocessing/acdc/training', label=labels['myocardium'])
+    train_ds = ACDCDataset('data/acdc/training')
     # test_ds = ACDCDataset('data/ACDC/testing/testing', mode='test')
     dsets = [train_ds]
     pbar = tqdm(total=len(train_ds))

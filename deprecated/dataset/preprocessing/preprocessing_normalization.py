@@ -14,10 +14,10 @@ import math
 # from intensity_normalization.normalize.fcm import FCMNormalize
 
 
-ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../../'))
+ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../../../'))
 sys.path.append(ROOT_DIR)
-from utilities import plots
-from dataset.singleVentricleDataset import SingleVentricleDataset, SingleVentriclePatient
+from utilities import path_utils
+from deprecated.dataset.singleVentricleDataset import SingleVentricleDataset, SingleVentriclePatient
 import utilities.transforms.unary_transforms as T1
 
 __all__ = ['normalize_patient']
@@ -38,12 +38,12 @@ def save_np_to_nifty(file: np.array, saveDir: str, fileName: str, hdr_old):
 
 
 def save_data(patient: SingleVentriclePatient, saveDir4D: str, saveDirSegmentations: str):
-    saveDirPatient = plots.createSubDirectory(saveDirSegmentations, patient.name)
+    saveDirPatient = path_utils.create_sub_dir(saveDirSegmentations, patient.name)
     save_np_to_nifty(patient.nii_data_xyzt, saveDir4D, patient.name + ".nii.gz", patient.nii_header_xyzt)
     save_np_to_nifty(patient.nii_mask_diastole_xyz, saveDirPatient,
-                     patient.name + "_Diastole_Labelmap.nii", patient.hdr_mask_diastole)
+                     patient.name + "_Diastole_Labelmap.nii.gz", patient.hdr_mask_diastole)
     save_np_to_nifty(patient.nii_mask_systole_xyz, saveDirPatient,
-                     patient.name + "_Systole_Labelmap.nii", patient.hdr_mask_systole)
+                     patient.name + "_Systole_Labelmap.nii.gz", patient.hdr_mask_systole)
 
     if patient.full_cycle:
         for t in range(patient.NT):
@@ -53,41 +53,41 @@ def save_data(patient: SingleVentriclePatient, saveDir4D: str, saveDirSegmentati
                 patient.nii_masks_load[t].header)
 
 
-def normalize_patient(config, img4d, md, ms, td, ts):
-    minmax_norm = config.getboolean('NORMALIZATION', 'MIN_MAX_NORM')
+# def normalize_patient(config, img4d, md, ms, td, ts):
+#     minmax_norm = config.getboolean('NORMALIZATION', 'MIN_MAX_NORM')
 
-    # normalize data for newPatient
-    if minmax_norm:
-        norm_fn = T1.Normalize()
-        img4d_norm = norm_fn(img4d)
-        print(np.min(img4d_norm), np.max(img4d_norm))
-    else:
-        per95 = np.percentile(img4d, 95)
-        img4d_clipped = np.clip(img4d, 0, per95)
+#     # normalize data for newPatient
+#     if minmax_norm:
+#         norm_fn = T1.Normalize()
+#         img4d_norm = norm_fn(img4d)
+#         print(np.min(img4d_norm), np.max(img4d_norm))
+#     else:
+#         per95 = np.percentile(img4d, 95)
+#         img4d_clipped = np.clip(img4d, 0, per95)
 
-        avg_diastole = np.mean(img4d_clipped[..., td], where=md.astype('bool'))
-        avg_systole = np.mean(img4d_clipped[..., ts], where=ms.astype('bool'))
-        avg = 0.5 * (avg_diastole + avg_systole)
+#         avg_diastole = np.mean(img4d_clipped[..., td], where=md.astype('bool'))
+#         avg_systole = np.mean(img4d_clipped[..., ts], where=ms.astype('bool'))
+#         avg = 0.5 * (avg_diastole + avg_systole)
 
-        # normalization n(I) = a I/sqrt(1+beta I**2)
-        norm_a = math.sqrt(per95 * per95 - avg * avg) / (math.sqrt(3) * per95 * avg)
-        norm_b = (per95 * per95 - 4. * avg * avg) / (3. * per95 * per95 * avg * avg)
-        img4d_norm = norm_a * img4d_clipped / np.sqrt(1 + norm_b * img4d_clipped**2)
-        print("norm(per95) = ", norm_a * per95 / math.sqrt(1 + norm_b * per95 * per95))
-        print("norm(avg) = ", norm_a * avg / math.sqrt(1 + norm_b * avg * avg))
+#         # normalization n(I) = a I/sqrt(1+beta I**2)
+#         norm_a = math.sqrt(per95 * per95 - avg * avg) / (math.sqrt(3) * per95 * avg)
+#         norm_b = (per95 * per95 - 4. * avg * avg) / (3. * per95 * per95 * avg * avg)
+#         img4d_norm = norm_a * img4d_clipped / np.sqrt(1 + norm_b * img4d_clipped**2)
+#         print("norm(per95) = ", norm_a * per95 / math.sqrt(1 + norm_b * per95 * per95))
+#         print("norm(avg) = ", norm_a * avg / math.sqrt(1 + norm_b * avg * avg))
 
-        print(np.min(img4d_norm), np.max(img4d_norm))
+#         print(np.min(img4d_norm), np.max(img4d_norm))
     
-    return img4d_norm
+#     return img4d_norm
 
 
 if __name__ == "__main__":
     config = configparser.ConfigParser()
-    config.read('parser/configPreprocessing.ini')
+    config.read('parser/deprecated/configPreprocessing.ini')
     minmax_norm = config.getboolean('NORMALIZATION', 'MIN_MAX_NORM')
 
     ds = SingleVentricleDataset(config, mode='full')
-    saveDir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'preprocessing_normalization')
+    saveDir = path_utils.create_save_dir(config.get('DATA', 'OUTPUT_PATH'), 'preprocessing_normalization')
 
     print("===========================================================")
     print("Data normalization")
@@ -95,8 +95,8 @@ if __name__ == "__main__":
     print('save directory: ' + saveDir)
 
     # paths
-    saveDir4D = plots.createSubDirectory(saveDir, ds.volumes_subdir_path)
-    saveDirSegmentations = plots.createSubDirectory(saveDir, ds.segmentations_subdir_path)
+    saveDir4D = path_utils.create_sub_dir(saveDir, ds.volumes_subdir_path)
+    saveDirSegmentations = path_utils.create_sub_dir(saveDir, ds.segmentations_subdir_path)
 
     # save config file to save directory
     conifg_output = osp.sep.join([saveDir, "config.ini"])

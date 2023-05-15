@@ -4,7 +4,6 @@ import torch
 from torch import nn
 from monai.metrics.meandice import compute_dice
 from monai.metrics.hausdorff_distance import compute_hausdorff_distance
-from monai.transforms import RemoveSmallObjects,KeepLargestConnectedComponent
 import numpy as np
 import os
 import math
@@ -37,11 +36,11 @@ class Trainer:
         self.loss_fn = None
 
         # statistics
-        self.mean_epoch_stat = {'train_loss': [(0, 0, 0, 0, 0)],
-                                'train_acc': [(0, 0, 0)],
-                                'val_loss': [(0, 0, 0, 0, 0)],
-                                'val_acc': [(0, 0, 0)],
-                                'test_acc': [(0, 0, 0)]}
+        self.mean_epoch_stat = {'train_loss': [(0,) * 5],
+                                'train_acc': [(0,) * 3],
+                                'val_loss': [(0,) * 5],
+                                'val_acc': [(0,) * 3],
+                                'test_acc': [(0,) * 3]}
         self.best_acc = 0.0
         self.epochs_since_last_improvement = 0
 
@@ -71,8 +70,8 @@ class Trainer:
 
     def train_epoch(self, train_loader):
         self.net.train()
-        total_loss = (0.0, 0.0, 0.0, 0.0, 0.0)
-        total_acc = (0.0, 0.0, 0.0)
+        total_loss = (0.0,) * 5
+        total_acc = (0.0,) * 3
         steps = len(train_loader)
 
         for i, (_, img4d, m0, mk, _, times_fwd, times_bwd, ff, bf, offsets) in enumerate(train_loader):
@@ -108,8 +107,8 @@ class Trainer:
     @torch.no_grad()
     def val_epoch(self, val_loader, cnn=True):
         self.net.eval()
-        total_loss = (0.0, 0.0, 0.0, 0.0, 0.0)
-        total_acc = (0.0, 0.0, 0.0)
+        total_loss = (0.0,) * 5
+        total_acc = (0.0,) * 3
         steps = len(val_loader)
 
         for i, (_, img4d, m0, mk, _, times_fwd, times_bwd, ff, bf, offsets) in enumerate(val_loader):
@@ -140,7 +139,7 @@ class Trainer:
     @torch.no_grad()
     def test_epoch(self, test_loader, test_ds):
         self.net.eval()
-        total_acc = (0.0, 0.0, 0.0)
+        total_acc = (0.0,) * 3
         steps = len(test_loader)
         if steps == 0:
             self.mean_epoch_stat['test_acc'].append(total_acc)
@@ -171,6 +170,11 @@ class Trainer:
                 mtt = warp(mtts[..., times_bwd[t]], bf[..., t])
                 x = torch.cat((img4d[..., times_bwd[t + 1]], mtt), dim=1)
                 mtts[..., times_bwd[t + 1]], _ = self.net(x)
+
+            ti, tf = times_fwd[0], times_bwd[0]
+            mts = mts[..., ti:tf + 1]
+            mtts = mtts[..., ti:tf + 1]
+            masks = masks[..., ti:tf + 1]
 
             # Compute forward accuracy
             mts = mts.swapaxes(0, -1).squeeze(-1)

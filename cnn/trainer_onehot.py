@@ -43,7 +43,6 @@ class TrainerOneHot:
 
         self.loss_fn = CustomLoss(
             params.getfloat('loss_lambda'),
-            self.penalization,
             params.getfloat('loss_penalization_gamma')
         )
 

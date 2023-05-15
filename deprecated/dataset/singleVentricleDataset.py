@@ -37,14 +37,14 @@ class SingleVentriclePatient:
                self.NT = df_row.loc[idx, "original_NT"]
 
             # get input masks for diastole
-            self.nii_mask_diastole_load = nib.load(os.path.sep.join([segmentations_path, self.name, self.name + "_Diastole_Labelmap.nii"]))
+            self.nii_mask_diastole_load = nib.load(os.path.sep.join([segmentations_path, self.name, self.name + "_Diastole_Labelmap.nii.gz"]))
             self.hdr_mask_diastole = self.nii_mask_diastole_load.header
             #affine_mask_diastole = nii_mask_diastole_load.affine
             self.nii_mask_diastole_xyz = self.nii_mask_diastole_load.get_fdata()
             self.nii_mask_diastole = np.swapaxes(self.nii_mask_diastole_xyz, 0, 2)
 
             # get input masks for systole
-            self.nii_mask_systole_load = nib.load(os.path.sep.join([segmentations_path, self.name, self.name + "_Systole_Labelmap.nii"]))
+            self.nii_mask_systole_load = nib.load(os.path.sep.join([segmentations_path, self.name, self.name + "_Systole_Labelmap.nii.gz"]))
             self.hdr_mask_systole = self.nii_mask_systole_load.header
             #affine_mask_systole = nii_mask_systole_load.affine
             self.nii_mask_systole_xyz = self.nii_mask_systole_load.get_fdata()
@@ -62,7 +62,7 @@ class SingleVentriclePatient:
                 self.nii_masks_xyz = []
                 self.nii_masks_zyx = []
                 for t in range(0, self.NT):
-                    mask_filename = osp.sep.join([segmentations_path, self.name, self.name + f'_{t}_Labelmap.nii'])
+                    mask_filename = osp.sep.join([segmentations_path, self.name, self.name + f'_{t}_Labelmap.nii.gz'])
                     self.masks_dirs.append(mask_filename)
                     nii_mask = nib.load(mask_filename)
                     self.nii_masks_load.append(nii_mask)

@@ -25,13 +25,13 @@ from cnn.dataset import *
 from utilities.collate import *
 import utilities.path_utils as path_utils
 from utilities import stuff
-from utilities.fold import create_5fold
+# from utilities.fold import create_5fold
 
 
-def get_fold(config):
-    fold = config.getint('DATA', 'fold')
-    dataset = SingleVentricleDataset(config, 'train', LoadFlowMode.NO_LOAD)
-    return create_5fold(len(dataset))[fold], fold
+# def get_fold(config):
+#     fold = config.getint('DATA', 'fold')
+#     dataset = SingleVentricleDataset(config, 'train', LoadFlowMode.NO_LOAD)
+#     return create_5fold(len(dataset))[fold], fold
 
 
 if __name__ == "__main__":
@@ -50,6 +50,7 @@ if __name__ == "__main__":
         T6.RandomVerticalFlip(P['vflip_prob']),
         T6.RandomHorizontalFlip(P['hflip_prob']),
         T6.RandomDepthFlip(P['dflip_prob']),
+        T6.Resize(1.0, (64, 64, 64)),
         # T6.GammaScaling(P['gamma_scaling_prob'], P['gamma_scaling_range']),
         T6.GammaScaling_V2(P['gamma_scaling_prob'], P['gamma_scaling_range'], invert_image=False, retain_stats=True),
         T6.MutiplicativeScaling(P['mult_scaling_prob'], P['gamma_scaling_range']),
@@ -60,18 +61,25 @@ if __name__ == "__main__":
         T6.ToTensor()
     ])
 
-    val_transforms = T6.Compose([T6.ToTensor()])
-    fold, n = get_fold(config)
+    val_transforms = T6.Compose([
+        T6.Resize(1.0, (64, 64, 64)),
+        T6.RoundMasks(),
+        T6.ToTensor()
+    ])
+    # fold, n = get_fold(config)
 
-    train_ds = SingleVentricleDataset(config, 'train', LoadFlowMode.ED_ES, full_transforms=train_transforms, fold_indices=fold['train'])
-    val_ds = SingleVentricleDataset(config, 'train', LoadFlowMode.ED_ES, full_transforms=val_transforms, fold_indices=fold['val'])
-    test_ds = SingleVentricleDataset(config, 'test', LoadFlowMode.WHOLE_CYCLE, full_transforms=val_transforms)
+    # train_ds = SingleVentricleDataset(config, 'train', LoadFlowMode.ED_ES, full_transforms=train_transforms, fold_indices=fold['train'])
+    # val_ds = SingleVentricleDataset(config, 'train', LoadFlowMode.ED_ES, full_transforms=val_transforms, fold_indices=fold['val'])
+    # test_ds = SingleVentricleDataset(config, 'test', LoadFlowMode.WHOLE_CYCLE, full_transforms=val_transforms)
+    train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, LoadFlowMode.ED_ES, full_transforms=train_transforms)
+    val_ds = SingleVentricleDataset(config, DatasetMode.VAL, LoadFlowMode.ED_ES, full_transforms=val_transforms)
+    test_ds = SingleVentricleDataset(config, DatasetMode.TEST, LoadFlowMode.WHOLE_CYCLE, full_transforms=val_transforms)
 
     train_loader = DataLoader(train_ds, batch_size=P['batch_size'], shuffle=True, num_workers=P['workers'], collate_fn=collate_fn_batch)
     val_loader = DataLoader(val_ds, batch_size=P['batch_size'], shuffle=False, num_workers=P['workers'], collate_fn=collate_fn_batch)
     test_loader = DataLoader(test_ds, batch_size=1, shuffle=False, num_workers=3, collate_fn=collate_fn_batch)
 
-    save_dir = path_utils.create_save_dir(config.get('DATA', 'OUTPUT_PATH'), f'fold_{n}')
+    save_dir = path_utils.create_save_dir(config.get('DATA', 'OUTPUT_PATH'), f'CNN')
     logger = stuff.create_logger(save_dir)
     writer = SummaryWriter(log_dir=save_dir)
     logger.info(f'Using device {device}')
@@ -99,7 +107,8 @@ if __name__ == "__main__":
     logger.info('Trainig CNN')
 
     pbar = tqdm(total=P['epochs'])
-    trainer = TrainerOneHot(net, opt, pbar, config, device, writer, logger)
+    # trainer = TrainerOneHot(net, opt, pbar, config, device, writer, logger)
+    trainer = Trainer(net, opt, pbar, config, device, writer, logger)
     patience = P['patience']
     tic = time.time()
 

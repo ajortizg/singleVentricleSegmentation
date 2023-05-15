@@ -1,4 +1,4 @@
-import configparser
+from configparser import ConfigParser
 import os.path as osp
 from datetime import datetime
 from glob import glob
@@ -34,50 +34,41 @@ class Report:
             print('filter files first')
             return
 
-        df = pd.DataFrame()
+        report_df = pd.DataFrame()
         for i, dir in enumerate(self.filtered_dirs):
-            config = configparser.ConfigParser()
+            config = ConfigParser()
             config.read(osp.join(dir, 'config.ini'))
 
-            *_, best_train_acc, best_val_acc, best_test_acc, best_e = self.read_checkpoint(dir, 'checkpoint_best.pth')
-            *_, final_train_acc, final_val_acc, final_test_acc, final_e = self.read_checkpoint(dir, 'checkpoint_final.pth')
+            experiment_df = pd.DataFrame()
+            for section in config.sections():
+                items_df = pd.DataFrame({name: val for (name, val) in config.items(section)}, index=[i])
+                experiment_df = pd.concat([experiment_df, items_df], axis=1)
+            experiment_df.insert(0, 'experiment', dir.split(osp.sep)[-1])
 
-            data_items = dict(config.items('DATA'))
-            param_items = dict(config.items('PARAMETERS'))
-            da_items = dict(config.items('DATA_AUGMENTATION'))
+            metrics_df = pd.DataFrame()
+            for metric, flag in zip([self.read_metrics(dir, 'checkpoint_best.pth'),
+                                     self.read_metrics(dir, 'checkpoint_final.pth')],
+                                    ['best', 'final']):
+                df = pd.DataFrame({flag + '_' + k: v for (k, v) in metric.items()}, index=[i]).round(3)
+                metrics_df = pd.concat([metrics_df, df], axis=1)
 
-            try:
-                warping_items = dict(config.items('WARPING'))
-            except:
-                warping_items = {}
+            experiment_df = pd.concat([experiment_df, metrics_df], axis=1)
+            report_df = pd.concat([experiment_df, report_df], axis=0)
+        report_df.to_excel(filepath, index=False)
 
-            df_data = pd.DataFrame(data_items, index=[i])
-            df_data.insert(0, 'experiment', dir.split(osp.sep)[-1])
-            df_param = pd.DataFrame(param_items, index=[i])
-            df_warping = pd.DataFrame(warping_items, index=[i])
-            df_da = pd.DataFrame(da_items, index=[i])
-
-            metrics_row = pd.DataFrame(
-                {'best_epoch': best_e, 'best_train_acc': best_train_acc, 'best_val_acc': best_val_acc, 'best_test_acc': best_test_acc,
-                 'final_epoch': final_e, 'final_train_acc': final_train_acc, 'final_val_acc': final_val_acc, 'final_test_acc': final_test_acc},
-                index=[i]).round(3)
-
-            df_row = df_data.join([df_param, df_warping, df_da, metrics_row])
-            df = pd.concat([df_row, df])
-        df.to_excel(filepath, index=False)
-
-    def read_checkpoint(self, dir, filename):
+    def read_metrics(self, dir, filename):
+        metrics = {}
         try:
             checkpoint = torch.load(osp.join(dir, filename))
-            train_loss = checkpoint['train_loss']
-            val_loss = checkpoint['val_loss']
-            train_acc = checkpoint['train_acc']
-            val_acc = checkpoint['val_acc']
-            test_acc = checkpoint['test_acc']
-            e = checkpoint['epoch']
-            return (train_loss, val_loss, train_acc, val_acc, test_acc, e)
+            # metrics['train_loss'] = checkpoint['train_loss']
+            # metrics['val_loss'] = checkpoint['val_loss']
+            metrics['train_acc'] = checkpoint['train_acc']
+            metrics['val_acc'] = checkpoint['val_acc']
+            metrics['test_acc'] = checkpoint['test_acc']
+            metrics['epoch'] = checkpoint['epoch']
         except FileNotFoundError:
-            return (0,) * 6
+            pass
+        return metrics
 
     def from_str(self):
         return self.from_dt.strftime(str_fmt)
@@ -87,9 +78,9 @@ class Report:
 
 
 if __name__ == "__main__":
-    search_dir = 'results/segmentation/Dataset_SVD_crop_2d/fold_*'
-    from_dt = datetime.strptime(fmt_date(y='2023', m='04', d='18', hr='00', min='00', seg='00'), str_fmt)
-    to_dt = datetime.strptime(fmt_date(y='2023', m='05', d='19', hr='00', min='00', seg='00'), str_fmt)
+    search_dir = 'results/cnn/singleVentricleData_split/CNN_*'
+    from_dt = datetime.strptime(fmt_date(y='2022', m='04', d='18', hr='00', min='00', seg='00'), str_fmt)
+    to_dt = datetime.strptime(fmt_date(y='2024', m='05', d='19', hr='00', min='00', seg='00'), str_fmt)
 
     report_dir = path_utils.create_sub_dir('results', 'reports')
     print('Creating report from: ', from_dt, ' to: ', to_dt)

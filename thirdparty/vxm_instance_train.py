@@ -3,15 +3,12 @@ import os.path as osp
 import sys
 import configparser
 from terminaltables import AsciiTable
-import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 import time
 import matplotlib.pyplot as plt
-from torch import nn
-import pandas as pd
 
 # import voxelmorph with pytorch backend
 os.environ['NEURITE_BACKEND'] = 'pytorch'
@@ -20,7 +17,6 @@ import voxelmorph.voxelmorph as vxm  # nopep8
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
-from utilities import plots
 from utilities import path_utils
 from utilities import stuff
 from datasets.flowunet_dataset import FlowUNetDataset

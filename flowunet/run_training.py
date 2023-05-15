@@ -99,7 +99,8 @@ if __name__ == '__main__':
     gpus = len(os.environ['CUDA_VISIBLE_DEVICES'].split(','))
     assert gpus == params.getint('batch_size'), 'Number of gpus and batch size must be equal!'
     net = torch.nn.DataParallel(net, device_ids=np.arange(gpus).tolist())
-
+    stuff.save_model(net,save_dir, 'net.txt')
+    
     # Optimization
     loss_fn = CustomLoss(params.getfloat('loss_lambda'), params.getfloat('loss_penalization_gamma'))
     optimizer = optim.Adam(net.parameters(), lr=params.getfloat('lr'), weight_decay=params.getfloat('weight_decay'))

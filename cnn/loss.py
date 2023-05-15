@@ -34,8 +34,8 @@ class CustomLoss(nn.Module):
             # Penalization term
             mh = mhs[0:ts_hats - offsets[b], b]
             mhh = mhhs[0:ts_hats - offsets[b], b]
-            LP += (mh.norm().sum() + mhh.norm().sum()) / kl[b]
-            # LP += (mh.pow(2).sum() + mhh.pow(2).sum()) / kl[b]
+            # LP += (mh.norm().sum() + mhh.norm().sum()) / kl[b]
+            LP += (mh.pow(2).sum() + mhh.pow(2).sum()) / kl[b]
 
         LU *= (self.lambda_ss / bs)
         LP *= (self.gamma_p / bs)
