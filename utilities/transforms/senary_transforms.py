@@ -230,7 +230,7 @@ class ContrastAugmentation:
         return f"{self.__class__.__name__}()"
 
 
-class GaussialBlur:
+class GaussianBlur:
     def __init__(self, p, sigma_range):
         self.p = p
         self.sigma_range = sigma_range

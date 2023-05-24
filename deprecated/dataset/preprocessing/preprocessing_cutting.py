@@ -48,52 +48,6 @@ def save_np_to_nifty(file, saveDir, fileName, hdr_old):
     # print("new header:")
     # print(hdr)
 
-# def cut_patient(config, img4d, md, ms, df):
-#     xTol = config.getint('CUTTING', 'xTol')
-#     yTol = config.getint('CUTTING', 'yTol')
-#     zTol = config.getint('CUTTING', 'zTol')
-
-#     # get range of diastole and systole
-#     zmin_dia, zmax_dia, ymin_dia, ymax_dia, xmin_dia, xmax_dia = getRangeOfMask_xyz(md, printRange=False, name="diastole")
-#     zmin_sys, zmax_sys, ymin_sys, ymax_sys, xmin_sys, xmax_sys = getRangeOfMask_xyz(ms, printRange=False, name="systole")
-
-#     # extend range by tolerance
-#     NX,NY,NZ,NT = img4d.shape
-#     xmin_total = max(0, min(xmin_dia, xmin_sys) - xTol)
-#     xmax_total = min(NX - 1, max(xmax_dia, xmax_sys) + xTol)
-#     ymin_total = max(0, min(ymin_dia, ymin_sys) - yTol)
-#     ymax_total = min(NY - 1, max(ymax_dia, ymax_sys) + yTol)
-#     zmin_total = max(0, min(zmin_dia, zmin_sys) - zTol)
-#     zmax_total = min(NZ - 1, max(zmax_dia, zmax_sys) + zTol)
-
-#     # NX_cut = xmax_total - xmin_total + 1
-#     # NY_cut = ymax_total - ymin_total + 1
-#     # NZ_cut = zmax_total - zmin_total + 1
-#     cutting_4d = img4d[xmin_total:xmax_total + 1, ymin_total:ymax_total + 1, zmin_total:zmax_total + 1, :]
-#     cutting_diastole = md[xmin_total:xmax_total + 1, ymin_total:ymax_total + 1, zmin_total:zmax_total + 1]
-#     cutting_systole = ms[xmin_total:xmax_total + 1, ymin_total:ymax_total + 1, zmin_total:zmax_total + 1]
-
-#     output_df = df.copy()
-#     output_df['original_NX'] = NX
-#     output_df['original_NY'] = NY
-#     output_df['original_NZ'] = NZ   
-#     output_df['original_NT'] = NT
-#     output_df['x_min'] = xmin_total
-#     output_df['x_max'] = xmax_total
-#     output_df['y_min'] = ymin_total
-#     output_df['y_max'] = ymax_total
-#     output_df['z_min'] = zmin_total
-#     output_df['z_max'] = zmax_total
-#     NX,NY,NZ,NT = cutting_4d.shape
-#     output_df['cut_NX'] = NX
-#     output_df['cut_NY'] = NY
-#     output_df['cut_NZ'] = NZ   
-#     output_df['cut_NT'] = NT
-#     # output_df['yshift'] = ymin_total
-#     # output_df['zshift'] = zmin_total
-
-#     return cutting_4d, cutting_diastole, cutting_systole, output_df
-
 
 if __name__ == "__main__":
 

@@ -1,3 +1,4 @@
+from typing import Any
 import torch
 import numpy as np
 import cv2
@@ -93,9 +94,23 @@ class Round:
         return f"{self.__class__.__name__}()"
 
 
+class Round_V2:
+    def __init__(self):
+        pass
+
+    def __call__(self, x):
+        return x.round()
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}()"
+
+
+from scipy.ndimage import binary_erosion, generate_binary_structure
+
+
 class Erode:
-    def __init__(self, th=0.5):
-        self.th = th
+    def __init__(self, its=1):
+        self.its = its
 
     def __call__(self, x):
         is_tensor = isinstance(x, torch.Tensor)
@@ -106,9 +121,48 @@ class Erode:
         borders = np.zeros(x.shape)
         for z in range(NZ):
             mask = x[z, :, :]
-            borders[z, :, :] = (mask - cv2.erode(mask, kernel=None, borderValue=0,iterations=2))
+            borders[z, :, :] = (mask - cv2.erode(mask, kernel=None, borderValue=0, iterations=self.its))
 
         return torch.from_numpy(borders).float() if is_tensor else borders
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}()"
+
+
+class ErodeOneHot:
+    def __init__(self, its=1):
+        self.its = its
+
+    def __call__(self, x):
+        is_tensor = isinstance(x, torch.Tensor)
+        if is_tensor:
+            x = x.cpu().numpy()
+
+        nc, nz = x.shape[:2]
+        borders = np.zeros(x.shape)
+        for z in range(nz):
+            for c in range(1, nc):
+                mask = x[c, z, :, :]
+                borders[c, z, :, :] = (mask - cv2.erode(mask, kernel=None, borderValue=0, iterations=self.its))
+
+        return torch.from_numpy(borders).float() if is_tensor else borders
+
+
+class Erode_V2:
+    def __init__(self, connectivity=1, iterations=1):
+        self.connectivity = connectivity
+        self.iterations = iterations
+
+    def __call__(self, x):
+        is_tensor = isinstance(x, torch.Tensor)
+
+        if is_tensor:
+            x = x.cpu().numpy()
+        x = x > 0
+
+        footprint = generate_binary_structure(3, self.connectivity)
+        border = x ^ binary_erosion(x, structure=footprint, iterations=self.iterations)
+        return torch.from_numpy(border).float() if is_tensor else border
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}()"
@@ -137,6 +191,7 @@ class Resize:
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}()"
+
 
 class PadTime:
     def __init__(self, maxt=40):

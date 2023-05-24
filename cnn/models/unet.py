@@ -78,7 +78,7 @@ class Unet(nn.Module):
             Output tensor of shape `(N, out_chans, D, H, W)`.
         """
         if self.residual:
-            identity = image[:, 1:, :, :, :].clone()
+            identity = image[:, 1:]
 
         stack = []
         output = image

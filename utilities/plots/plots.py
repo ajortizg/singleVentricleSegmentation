@@ -13,6 +13,25 @@ import matplotlib.pyplot as plt
 import cv2
 import numpy as np
 import math
+import random
+import colorsys
+
+
+def random_colors(N, bright=True):
+    """
+    Generate random colors.
+    To get visually distinct colors, generate them in HSV space then
+    convert to RGB.
+    """
+    # brightness = 1.0 if bright else 0.7
+    # hsv = [(i / N, 1, brightness) for i in range(N)]
+    # colors = list(map(lambda c: colorsys.hsv_to_rgb(*c), hsv))
+    # print(colors)
+    # random.shuffle(colors)
+    # return colors
+
+    colors = [np.random.randint(0, 2, 3).tolist() for _ in range(N)]
+    return colors
 
 
 def save_curve_1d(input, LX1D, saveDir, name, type="plot"):
@@ -223,6 +242,35 @@ def save_img_masks(img3d: torch.Tensor, masks3d: list[torch.Tensor], filename: s
     plt.close('all')
 
 
+def save_img_masks_one_hot(img3d: torch.Tensor, masks3d: list[torch.Tensor], filename: str, save_dir: str, alphas: list, colors: list):
+    NZ = img3d.shape[0]
+    aspect_ratio = 16. / 9.
+    cols = int(NZ / aspect_ratio)
+    if(NZ % cols > 0):
+        cols += 1
+    rows = math.ceil(NZ / cols)
+
+    fig, axs = plt.subplots(rows, cols, constrained_layout=True, figsize=(18, 10), dpi=4)
+    fig.suptitle('file: {}'.format(os.path.basename(filename)), fontsize=16)
+    for z, ax in enumerate(axs.flat):
+        if z < NZ:
+            img = cv2.cvtColor(img3d[z, :, :].cpu().detach().numpy(), cv2.COLOR_GRAY2BGR)
+            if masks3d is not None:
+                for i, mask3d in enumerate(masks3d):
+                    if mask3d is not None:
+                        for c in range(1, mask3d.shape[0]):
+                            mask = mask3d[c, z, :, :].cpu().detach().numpy()
+                            img = merge_img_mask(img, mask, alphas[i], colors[i][c - 1])
+            ax.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+            ax.set_title("layer {}".format(z))
+            ax.axis('off')
+        else:
+            ax.axis('off')
+    path_name = os.path.join(save_dir, filename)
+    plt.savefig(path_name, dpi=100)
+    plt.close('all')
+
+
 def save_img_masks_slices(img3d: torch.Tensor, masks3d: list[torch.Tensor],
                           save_dir: str, sub_dir: str, th: float, alphas=list, colors=list, max_gray_value=1):
     save_dir_slices = os.path.sep.join([save_dir, sub_dir])
@@ -243,9 +291,9 @@ def save_img_masks_slices(img3d: torch.Tensor, masks3d: list[torch.Tensor],
         cv2.imwrite(path_name, factor_gray_value * img)
 
 
-def merge_img_mask(img, mask, th=0.5, alpha=0.35, color=[1, 1, 0]):
+def merge_img_mask(img, mask, alpha=0.35, color=[1, 1, 0]):
     for c in range(3):
-        img[:, :, c] = np.where(mask > th,
+        img[:, :, c] = np.where(mask == 1,
                                 img[:, :, c] *
                                 (1 - alpha) + alpha * color[c],
                                 img[:, :, c])
@@ -314,7 +362,8 @@ def plot_lr_vs_loss(lrs, losses, save_dir, filename):
 def save_nifti_mask(mask, header, save_dir, filename):
     mask = mask.squeeze()
     mask = torch.swapaxes(mask, 0, 2)           # xyz format
-    mask = torch.where(mask > 0.5, 1.0, 0.0)    # binarize
+    # mask = torch.where(mask > 0.5, 1.0, 0.0)    # binarize
+    mask = mask.round()
     mask = mask.detach().cpu().numpy()
 
     mt_nii = nib.Nifti1Image(mask, affine=None, header=header)

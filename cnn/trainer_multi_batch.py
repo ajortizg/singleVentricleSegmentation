@@ -13,7 +13,7 @@ ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 from cnn.warp import WarpCNN
 import utilities.path_utils as path_utils
-
+from cnn.metrics import ravd, surface_voxels
 
 __all__ = ['Trainer']
 
@@ -483,7 +483,7 @@ class Trainer:
         return metrics, mts, mtts
 
     @torch.no_grad()
-    def test_patient(self, img4d, masks, times_fwd, times_bwd, ff, bf, cnn, hd=True):
+    def test_patient(self, img4d, masks, times_fwd, times_bwd, ff, bf, cnn, hd=True, vol=True, surf=True):
         if cnn:
             self.net.eval()
 
@@ -530,6 +530,21 @@ class Trainer:
         accs_bwd = compute_dice(mtts_es_ed, mask_es_ed)
         mean_acc_bwd = accs_bwd.mean().item()
 
+        # Compute volumen
+        if vol:
+            vol_gt = torch.count_nonzero(mask_es_ed, dim=(1, 2, 3, 4))
+            vol_fwd = torch.count_nonzero(mts_es_ed, dim=(1, 2, 3, 4))
+            vol_bwd = torch.count_nonzero(mtts_es_ed, dim=(1, 2, 3, 4))
+            vd_fwd = ravd(mts_es_ed, mask_es_ed).mean().item()
+            vd_bwd = ravd(mtts_es_ed, mask_es_ed).mean().item()
+            # print(vd)
+
+        # computre surface
+        if surf:
+            border_gt = torch.count_nonzero(surface_voxels(mask_es_ed), dim=(1, 2, 3, 4))
+            border_fwd = torch.count_nonzero(surface_voxels(mts_es_ed), dim=(1, 2, 3, 4))
+            border_bwd = torch.count_nonzero(surface_voxels(mtts_es_ed), dim=(1, 2, 3, 4))
+
         if hd:
             hd_fwd = compute_hausdorff_distance(mts_es_ed, mask_es_ed)
             mean_hd_fwd = hd_fwd.mean().item()
@@ -544,7 +559,10 @@ class Trainer:
         metrics = {'mean_acc': 0.5 * (mean_acc_fwd + mean_acc_bwd),
                    'mean_acc_fwd': mean_acc_fwd,
                    'mean_acc_bwd': mean_acc_bwd,
-                   'mean_hd': 0.5 * (mean_hd_fwd + mean_hd_bwd)}
+                   'mean_hd': 0.5 * (mean_hd_fwd + mean_hd_bwd),
+                   'mean_ravd_fwd': vd_fwd,
+                   'mean_ravd_bwd': vd_bwd,
+                   'mean_ravd': 0.5 * (vd_fwd + vd_bwd)}
         self.mean_epoch_stat['test_acc'].append((metrics['mean_acc'], metrics['mean_acc_fwd'], metrics['mean_acc_bwd']))
         return (metrics,
                 accs_fwd.squeeze().detach().cpu().tolist(),
@@ -552,7 +570,14 @@ class Trainer:
                 mts,
                 mtts,
                 hd_fwd.squeeze().detach().cpu().tolist(),
-                hd_bwd.squeeze().detach().cpu().tolist())
+                hd_bwd.squeeze().detach().cpu().tolist(),
+                vol_gt.detach().cpu().tolist(),
+                vol_fwd.detach().cpu().tolist(),
+                vol_bwd.detach().cpu().tolist(),
+                border_gt.detach().cpu().tolist(),
+                border_fwd.detach().cpu().tolist(),
+                border_bwd.detach().cpu().tolist(),
+                mts_es_ed, mtts_es_ed)
 
     def plot_stats(self, save_dir, log_scale=False):
         # Plot accuracy

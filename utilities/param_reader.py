@@ -20,6 +20,8 @@ def train_params(config):
     gamma_scaling_range = tuple(map(float, config.get('DATA_AUGMENTATION', 'GAMMA_SCALING_RANGE').split(',')))
     ed_sigma_range = tuple(map(float, config.get('DATA_AUGMENTATION', 'ED_SIGMA_RANGE').split(',')))
     noise_std_range = tuple(map(float, config.get('DATA_AUGMENTATION', 'NOISE_STD_RANGE').split(',')))
+    contrast_range = tuple(map(float, config.get('DATA_AUGMENTATION', 'contrast_range').split(',')))
+    blur_sigma_range = tuple(map(float, config.get('DATA_AUGMENTATION', 'blur_sigma_range').split(',')))
 
     params = {
         'batch_size': config.getint('PARAMETERS', 'BATCH_SIZE'),
@@ -63,6 +65,8 @@ def train_params(config):
         # Gamma scaling
         'gamma_scaling_prob': config.getfloat('DATA_AUGMENTATION', 'GAMMA_SCALING_PROB'),
         'gamma_scaling_range': gamma_scaling_range,
+        'gamma_retain_stats': config.getboolean('DATA_AUGMENTATION', 'gamma_retain_stats'),
+        'gamma_invert_image': config.getboolean('DATA_AUGMENTATION', 'gamma_invert_image'),
 
         # Gaussian noise
         'noise_prob': config.getfloat('DATA_AUGMENTATION', 'NOISE_PROB'),
@@ -76,7 +80,16 @@ def train_params(config):
         'ed_boundary': config.get('DATA_AUGMENTATION', 'ED_BOUNDARY'),
         'ed_prefilter': config.getboolean('DATA_AUGMENTATION', 'ED_USE_PREFILTER'),
         'ed_axis': config.get('DATA_AUGMENTATION', 'ED_AXIS'),
-        'ed_order': config.getint('DATA_AUGMENTATION', 'ED_ORDER')
+        'ed_order': config.getint('DATA_AUGMENTATION', 'ED_ORDER'),
+
+        # Contrast augmentation
+        'contrast_prob': config.getfloat('DATA_AUGMENTATION', 'contrast_prob'),
+        'contrast_range': contrast_range,
+        'contrast_preserve_range': config.getboolean('DATA_AUGMENTATION', 'contrast_preserve_range'),
+
+        # Gaussian blur
+        'blur_prob': config.getfloat('DATA_AUGMENTATION', 'blur_prob'),
+        'blur_sigma_range': blur_sigma_range
     }
     return params
 

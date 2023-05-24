@@ -13,7 +13,7 @@ import os.path as osp
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 from utilities import plots
-from utilities import torch_utils
+from utilities.deprecated import torch_utils
 
 
 class NoiseType(Enum):

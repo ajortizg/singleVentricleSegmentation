@@ -72,7 +72,7 @@ class UNet3d(nn.Module):
 
     def forward(self, x):
         if self.residual:
-            identity = x[:, 1:, :, :, :]
+            identity = x[:, 1:]
 
         xi = [self.layers[0](x)]
         # Down path

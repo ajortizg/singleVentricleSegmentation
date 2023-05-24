@@ -7,7 +7,7 @@ import time
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
 from cnn.dataset import *
-from utilities import plots
+from utilities import path_utils, stuff
 import utilities.transforms.unary_transforms as T1
 
 
@@ -25,7 +25,7 @@ def compute_optical_flow(ds: SingleVentricleDataset, idx: int, mode: OpticalFlow
     data = data.to(device)
     NZ, NY, NX, NT = data.shape
 
-    patient_dir = plots.createSubDirectory(save_dir, pname)
+    patient_dir = path_utils.create_sub_dir(save_dir, pname)
     logger.info(f'{idx} - {pname} ({data.shape}), ({init_ts}-{final_ts})')
 
     # initialization of optical flow and mask
@@ -54,19 +54,20 @@ def compute_optical_flow(ds: SingleVentricleDataset, idx: int, mode: OpticalFlow
         else:
             indices = torch.arange(final_ts, init_ts - 1, -1)
 
+    alg = TVL1OpticalFlow3D(config)
     tic = time.time()
     for i in range(len(indices) - 1):
         # t0, t1 = t + inc_t, t
         t0 = indices[i + 1].item()
         t1 = indices[i].item()
-        I0 = data[:, :, :, t0]
-        I1 = data[:, :, :, t1]
+        I0 = data[..., t0]
+        I1 = data[..., t1]
         # print(f'{t1}->{t0}')
         pbar.set_postfix_str(f'P: {pname}, ({t1}->{t0}) - {i}/{len(indices)-1}')
-        save_dir_timestep = plots.createSubDirectory(patient_dir, f'time{t1}')
+        save_dir_timestep = path_utils.create_sub_dir(patient_dir, f'time{t1}')
 
         # Compute the optical flow
-        alg = TVL1OpticalFlow3D(save_dir_timestep, config)
+        alg.set_save_dir(save_dir_timestep)
         u, p = alg.computeOnPyramid(I0, I1, u, p)
 
         # save the old mask
@@ -84,7 +85,7 @@ def compute_optical_flow(ds: SingleVentricleDataset, idx: int, mode: OpticalFlow
 if __name__ == "__main__":
     # load config parser
     config = configparser.ConfigParser()
-    config.read('parser/configTVL1OF3D.ini')
+    config.read('parser/flow_compute.ini')
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     mode_str = config.get('PARAMETERS', 'mode').lower()
@@ -92,9 +93,9 @@ if __name__ == "__main__":
     direction = config.get('PARAMETERS', 'direction').lower()
 
     # create save directory
-    save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), f'TVL1OF3D{mode_str}')
+    save_dir = path_utils.create_save_dir(config.get('DATA', 'OUTPUT_PATH'), f'TVL1OF3D{mode_str}')
 
-    logger = plots.create_logger(save_dir)
+    logger = stuff.create_logger(save_dir)
     logger.info(f'Compute TV-L1 optical flow ({mode_str})')
 
     # save config file to save directory

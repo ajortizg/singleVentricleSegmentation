@@ -24,6 +24,7 @@ class SingleVentriclePatient:
 
             # Load 4D nifty [x,y,z,t]
             self.nii_xyzt = nib.load(osp.join(volumes_path, f'{self.name}.nii.gz'))
+        
             self.nii_data_xyzt = self.nii_xyzt.get_fdata()
             self.nii_header_xyzt = self.nii_xyzt.header
             self.nii_data_zyxt = np.swapaxes(self.nii_data_xyzt, 0, 2)
@@ -33,8 +34,8 @@ class SingleVentriclePatient:
             self.NZ = self.nii_data_xyzt.shape[2]
             self.NT = self.nii_data_xyzt.shape[3]
 
-            if 'original_NT' in df_row.columns:
-               self.NT = df_row.loc[idx, "original_NT"]
+            if 'orig_NT' in df_row.columns:
+               self.NT = df_row.loc[idx, "orig_NT"]
 
             # get input masks for diastole
             self.nii_mask_diastole_load = nib.load(os.path.sep.join([segmentations_path, self.name, self.name + "_Diastole_Labelmap.nii.gz"]))

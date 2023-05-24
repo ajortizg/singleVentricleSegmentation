@@ -23,15 +23,15 @@ import utilities.transforms.unary_transforms as T1
 __all__ = ['normalize_patient']
 
 
-def save_np_to_nifty(file: np.array, saveDir: str, fileName: str, hdr_old):
+def save_np_to_nifty(file: np.array, saveDir: str, fileName: str, hdr_old, affine):
     # header
-    hdr = nib.nifti1.Nifti1Header()
-    hdr.set_data_shape(file.shape)
-    hdr.set_qform(hdr_old.get_qform())
-    hdr.set_sform(hdr_old.get_sform())
-    hdr.set_zooms(hdr_old.get_zooms())
+    # hdr = nib.nifti1.Nifti1Header()
+    # hdr.set_data_shape(file.shape)
+    # hdr.set_qform(hdr_old.get_qform())
+    # hdr.set_sform(hdr_old.get_sform())
+    # hdr.set_zooms(hdr_old.get_zooms())
     # img
-    ni_img = nib.Nifti1Image(file, affine=None, header=hdr)
+    ni_img = nib.Nifti1Image(file, affine=affine, header=hdr_old)
     # save
     outputFile = osp.sep.join([saveDir, fileName])
     nib.save(ni_img, outputFile)
@@ -39,46 +39,18 @@ def save_np_to_nifty(file: np.array, saveDir: str, fileName: str, hdr_old):
 
 def save_data(patient: SingleVentriclePatient, saveDir4D: str, saveDirSegmentations: str):
     saveDirPatient = path_utils.create_sub_dir(saveDirSegmentations, patient.name)
-    save_np_to_nifty(patient.nii_data_xyzt, saveDir4D, patient.name + ".nii.gz", patient.nii_header_xyzt)
+    save_np_to_nifty(patient.nii_data_xyzt, saveDir4D, patient.name + ".nii.gz", patient.nii_header_xyzt, patient.nii_xyzt.affine)
     save_np_to_nifty(patient.nii_mask_diastole_xyz, saveDirPatient,
-                     patient.name + "_Diastole_Labelmap.nii.gz", patient.hdr_mask_diastole)
+                     patient.name + "_Diastole_Labelmap.nii.gz", patient.hdr_mask_diastole, patient.nii_mask_diastole_load.affine)
     save_np_to_nifty(patient.nii_mask_systole_xyz, saveDirPatient,
-                     patient.name + "_Systole_Labelmap.nii.gz", patient.hdr_mask_systole)
+                     patient.name + "_Systole_Labelmap.nii.gz", patient.hdr_mask_systole, patient.nii_mask_systole_load.affine)
 
     if patient.full_cycle:
         for t in range(patient.NT):
             save_np_to_nifty(
                 patient.nii_masks_xyz[t],
                 saveDirPatient, patient.masks_dirs[t].split('/')[-1],
-                patient.nii_masks_load[t].header)
-
-
-# def normalize_patient(config, img4d, md, ms, td, ts):
-#     minmax_norm = config.getboolean('NORMALIZATION', 'MIN_MAX_NORM')
-
-#     # normalize data for newPatient
-#     if minmax_norm:
-#         norm_fn = T1.Normalize()
-#         img4d_norm = norm_fn(img4d)
-#         print(np.min(img4d_norm), np.max(img4d_norm))
-#     else:
-#         per95 = np.percentile(img4d, 95)
-#         img4d_clipped = np.clip(img4d, 0, per95)
-
-#         avg_diastole = np.mean(img4d_clipped[..., td], where=md.astype('bool'))
-#         avg_systole = np.mean(img4d_clipped[..., ts], where=ms.astype('bool'))
-#         avg = 0.5 * (avg_diastole + avg_systole)
-
-#         # normalization n(I) = a I/sqrt(1+beta I**2)
-#         norm_a = math.sqrt(per95 * per95 - avg * avg) / (math.sqrt(3) * per95 * avg)
-#         norm_b = (per95 * per95 - 4. * avg * avg) / (3. * per95 * per95 * avg * avg)
-#         img4d_norm = norm_a * img4d_clipped / np.sqrt(1 + norm_b * img4d_clipped**2)
-#         print("norm(per95) = ", norm_a * per95 / math.sqrt(1 + norm_b * per95 * per95))
-#         print("norm(avg) = ", norm_a * avg / math.sqrt(1 + norm_b * avg * avg))
-
-#         print(np.min(img4d_norm), np.max(img4d_norm))
-    
-#     return img4d_norm
+                patient.nii_masks_load[t].header, patient.nii_masks_load[t].affine)
 
 
 if __name__ == "__main__":
@@ -156,14 +128,17 @@ if __name__ == "__main__":
         newPatient.tDiastole = patient.tDiastole
 
         # save new images with header
+        newPatient.nii_xyzt = patient.nii_xyzt
         newPatient.nii_data_xyzt = np.swapaxes(new_nii_data_zyxt, 0, 2)
         newPatient.nii_header_xyzt = patient.nii_header_xyzt
 
         # save new masks with header
         newPatient.nii_mask_systole_xyz = patient.nii_mask_systole_xyz
         newPatient.hdr_mask_systole = patient.hdr_mask_systole
+        newPatient.nii_mask_systole_load = patient.nii_mask_systole_load
         newPatient.nii_mask_diastole_xyz = patient.nii_mask_diastole_xyz
         newPatient.hdr_mask_diastole = patient.hdr_mask_diastole
+        newPatient.nii_mask_diastole_load = patient.nii_mask_diastole_load
 
         # Save full cycle masks
         newPatient.full_cycle = patient.full_cycle

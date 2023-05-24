@@ -16,7 +16,7 @@ from utilities.flow_viz import *
 
 pythonOps_lib_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../pythonOps'))
 sys.path.append(pythonOps_lib_path)
-import utilities.torch_utils as tu
+import utilities.deprecated.torch_utils as tu
 
 from opticalFlow_cuda_ext import opticalFlow
 

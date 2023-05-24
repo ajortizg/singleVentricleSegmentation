@@ -69,11 +69,11 @@ if __name__ == '__main__':
         T.ToTensor(keys=['image', 'label', 'forward_flow', 'backward_flow', 'mi', 'mf'])
     ])
 
-    full_ds = FlowUNetDataset(data_cfg['root_dir'], 'full', transforms, load_flow=True)
-    test_ds = FlowUNetDataset(data_cfg['root_dir'], 'test', transforms, load_flow=True)
+    full_ds = FlowUNetDataset(data_cfg['base_path_3d'], 'full', transforms, load_flow=True)
+    test_ds = FlowUNetDataset(data_cfg['base_path_3d'], 'test', transforms, load_flow=True)
     full_loader = DataLoader(full_ds, batch_size=1, shuffle=False, num_workers=8, collate_fn=FlowUNetDataset.collate)
     test_loader = DataLoader(test_ds, batch_size=1, shuffle=False, num_workers=3, collate_fn=FlowUNetDataset.collate)
-    n_classes = full_ds.num_classes()
+    n_classes = full_ds.num_classes() + 1 # Add background class
 
     # Saving directory for debug outputs
     # save_dir = plots.createSaveDirectory(data_cfg.get('output_path'), 'Warp')
@@ -87,13 +87,13 @@ if __name__ == '__main__':
         report = pd.DataFrame(columns=['Patient', 'Dice_Fwd', 'Dice_Bwd', 'HD_Fwd', 'HD_Bwd'])
 
         for data in tqdm(loader):
-            labels = T.one_hot(data['label'].squeeze(0).to(device), n_classes)
+            labels = T.one_hot(data['label'].squeeze(1).to(device), n_classes)
             mi = T.one_hot(data['mi'].squeeze(0).to(device), n_classes)
             mf = T.one_hot(data['mf'].squeeze(0).to(device), n_classes)
-            ff = data['forward_flow'].squeeze(0).to(device)
-            bf = data['backward_flow'].squeeze(0).to(device)
-            fwdt = data['times_fwd'].squeeze(0).to(device)
-            bwdt = data['times_bwd'].squeeze(0).to(device)
+            ff = data['forward_flow'].squeeze(1).to(device)
+            bf = data['backward_flow'].squeeze(1).to(device)
+            fwdt = data['times_fwd'].squeeze(1).to(device)
+            bwdt = data['times_bwd'].squeeze(1).to(device)
             nz, ny, nx = labels.shape[2:]
             warp = WarpCNN(cfg, nz, ny, nx)
 

@@ -17,7 +17,7 @@ import utilities.transforms.senary_transforms as T6
 import utilities.transforms.unary_transforms as T1
 from utilities.collate import collate_fn_batch
 from cnn.models.model_factory import create_model
-# from cnn.trainer_multi_batch import Trainer
+from cnn.trainer_multi_batch import Trainer
 from cnn.trainer_onehot import TrainerOneHot
 from utilities import plots
 from utilities import path_utils
@@ -51,8 +51,8 @@ class Evalautor:
             self.finetuning = True
             config_ft = configparser.ConfigParser()
             config_ft.read(osp.join(self.P['trained_model_dir'], 'config.ini'))
-            pretrained_dir = config_ft.get('DATA', 'PRETRAINED_DIR')
-            self.finetuned_patient = config_ft.get('DATA', 'PATIENT_NAME')
+            pretrained_dir = config_ft.get('DATA', 'pretrained_dir')
+            self.finetuned_patient = config_ft.get('DATA', 'patient_name')
 
             self.config_train = configparser.ConfigParser()
             self.config_train.read(osp.join(pretrained_dir, 'config.ini'))
@@ -63,21 +63,25 @@ class Evalautor:
             self.config_train.read(osp.join(self.P['trained_model_dir'], 'config.ini'))
 
     def load_data(self, config):
-        transforms = T6.Compose([T6.ToTensor()])
+        transforms = T6.Compose([
+            # T6.Resize(1.0, (64, 64, 64)),  # for swin unet
+            # T6.RoundMasks(), #  # for swin unet
+            T6.ToTensor()
+        ])
         dsettype = self.P['dataset']
         self.is_testset = False
         if dsettype == 'train':
-            self.dset = SingleVentricleDataset(config, 'train',
+            self.dset = SingleVentricleDataset(config, DatasetMode.TRAIN,
                                                LoadFlowMode.ED_ES, full_transforms=transforms)
-        # elif dsettype == 'val':
-        #     self.dset = SingleVentricleDataset(config, DatasetMode.VAL,
-        #                                        LoadFlowMode.ED_ES, full_transforms=transforms)
+        elif dsettype == 'val':
+            self.dset = SingleVentricleDataset(config, DatasetMode.VAL,
+                                               LoadFlowMode.ED_ES, full_transforms=transforms)
         elif dsettype == 'test':
             self.is_testset = True
-            self.dset = SingleVentricleDataset(config, 'test',
+            self.dset = SingleVentricleDataset(config, DatasetMode.TEST,
                                                LoadFlowMode.WHOLE_CYCLE, full_transforms=transforms)
         elif dsettype == 'full':
-            self.dset = SingleVentricleDataset(config, 'full',
+            self.dset = SingleVentricleDataset(config, DatasetMode.FULL,
                                                LoadFlowMode.ED_ES, full_transforms=transforms)
         else:
             self.dset = None
@@ -101,8 +105,7 @@ class Evalautor:
 
         # Create trainer for prediction
         self.pbar = tqdm(total=1) if self.finetuning else tqdm(total=len(self.dset))
-        self.trainer = TrainerOneHot(self.net, None, self.pbar, self.config_train,
-                               self.device, None, self.logger)
+        self.trainer = Trainer(self.net, None, self.pbar, self.config_train, self.device, None, self.logger)
 
     def evaluate(self):
         self.report = pd.DataFrame()
@@ -142,6 +145,12 @@ class Evalautor:
 
             self.save_list_to_csv([accs_fwd_cnn, accs_bwd_cnn, accs_fwd_flow, accs_bwd_flow], f'{self.cur_patient}_acc.csv')
             self.save_list_to_csv([hd_fwd_cnn, hd_bwd_cnn, hd_fwd_flow, hd_bwd_flow], f'{self.cur_patient}_hd.csv')
+
+            pd.DataFrame({'volgt': self.cnn_res[7], 'volfwd': self.cnn_res[8], 'volbwd': self.cnn_res[9]}
+                         ).to_csv(osp.join(self.save_dir, f'{self.cur_patient}_vol.csv'), index=False)
+
+            pd.DataFrame({'surgt': self.cnn_res[10], 'surfwd': self.cnn_res[11], 'surbwd': self.cnn_res[12]}
+                         ).to_csv(osp.join(self.save_dir, f'{self.cur_patient}_sur.csv'), index=False)
 
             # x = np.arange(abs(self.timesfwd[0] + 1 - self.timesbwd[0])).tolist()
             # times = slice(self.timesfwd[0] + 1, self.timesbwd[0])

@@ -46,7 +46,7 @@ class Report:
             experiment_df.insert(0, 'experiment', dir.split(osp.sep)[-1])
 
             metrics_df = pd.DataFrame()
-            for metric, flag in zip([self.read_metrics(dir, 'checkpoint_best.pth'),
+            for metric, flag in zip([self.read_metrics(dir, 'checkpoint_best.pth'), 
                                      self.read_metrics(dir, 'checkpoint_final.pth')],
                                     ['best', 'final']):
                 df = pd.DataFrame({flag + '_' + k: v for (k, v) in metric.items()}, index=[i]).round(3)

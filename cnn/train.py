@@ -45,25 +45,27 @@ if __name__ == "__main__":
 
     # Create train and validation datasets
     train_transforms = T6.Compose([
-        T6.RandomRotate(P['rot_prob'], P['rot_range_x'], P['rot_range_y'], P['rot_range_z'], boundary=P['rot_boundary']),
+        T6.RandomRotate(P['rot_prob'], P['rot_range_x'], P['rot_range_y'], P['rot_range_z'], P['rot_boundary']),
         T6.ElasticDeformation(P['ed_prob'], P['ed_sigma_range'], P['ed_grid'], P['ed_boundary'], P['ed_prefilter'], P['ed_axis'], P['ed_order']),
         T6.RandomVerticalFlip(P['vflip_prob']),
         T6.RandomHorizontalFlip(P['hflip_prob']),
         T6.RandomDepthFlip(P['dflip_prob']),
-        T6.Resize(1.0, (64, 64, 64)),
+        # T6.Resize(1.0, (64, 64, 64)),  # for swin unet
         # T6.GammaScaling(P['gamma_scaling_prob'], P['gamma_scaling_range']),
-        T6.GammaScaling_V2(P['gamma_scaling_prob'], P['gamma_scaling_range'], invert_image=False, retain_stats=True),
+        T6.GammaScaling_V2(P['gamma_scaling_prob'], P['gamma_scaling_range'], P['gamma_invert_image'], P['gamma_retain_stats']),
+        T6.ContrastAugmentation(P['contrast_prob'], P['contrast_range'], P['contrast_preserve_range']),
         T6.MutiplicativeScaling(P['mult_scaling_prob'], P['gamma_scaling_range']),
         T6.AdditiveScaling(P['add_scaling_prob'], P['add_scaling_mean'], P['add_scaling_std']),
+        T6.GaussianBlur(P['blur_prob'], P['blur_sigma_range']),
         T6.AdditiveGaussianNoise(P['noise_prob'], P['noise_mu'], P['noise_std_range']),
-        # T6.BinarizeMasks(th=0.5),  # TODO! this only works for svd
-        T6.RoundMasks(),
+        T6.BinarizeMasks(th=0.5),  # TODO! this only works for svd
+        # T6.RoundMasks(),
         T6.ToTensor()
     ])
 
     val_transforms = T6.Compose([
-        T6.Resize(1.0, (64, 64, 64)),
-        T6.RoundMasks(),
+        # T6.Resize(1.0, (64, 64, 64)),  # for swin unet
+        # T6.RoundMasks(), #  # for swin unet
         T6.ToTensor()
     ])
     # fold, n = get_fold(config)

@@ -191,7 +191,7 @@ class TVL1OpticalFlow3D:
             # self.saveSingleStepToFile(s, I0s[s], I1s[s], us[s], ps[s], meshInfos[s])
 
             if s == 0:
-                # self.saveSingleStepToFile(s, I0s[s], I1s[s], us[s], ps[s], meshInfos[s])
+                self.saveSingleStepToFile(s, I0s[s], I1s[s], us[s], ps[s], meshInfos[s])
                 break
 
             # Prolongate the optical flow and dual variables to the next pyramid level

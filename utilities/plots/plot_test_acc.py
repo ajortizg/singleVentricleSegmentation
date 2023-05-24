@@ -10,7 +10,7 @@ import numpy as np
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
-from utilities import plots
+from utilities import path_utils, stuff
 
 
 @dataclass
@@ -45,8 +45,8 @@ def read_config_params(base_dir, eval_dirs):
 
 if __name__ == "__main__":
     base_dir = 'results'
-    save_dir = plots.createSaveDirectory(base_dir, 'PLOTS')
-    logger = plots.create_logger(save_dir)
+    save_dir = path_utils.create_save_dir(base_dir, osp.join("plots", "test_acc"))
+    logger = stuff.create_logger(save_dir)
 
     patients = [Patient('Child_73', es=14, ed=32 + 1), Patient('Adolescent_53', es=14, ed=28 + 1), Patient('Adult_11', es=15, ed=39 + 1)]
 

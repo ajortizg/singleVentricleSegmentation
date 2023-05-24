@@ -8,16 +8,16 @@ import shutil
 import os.path as osp
 import shutil
 
-ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../../'))
+ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../../../'))
 sys.path.append(ROOT_DIR)
-from utilities import plots
-from dataset.singleVentricleDataset import SingleVentricleDataset
+from utilities import path_utils, stuff
+from deprecated.dataset.singleVentricleDataset import SingleVentricleDataset
 
 
 def copy(patient_name, src_img4d_dir, dst_img4d_dir, dst_segmentations_dir, dset):
     shutil.copy(src_img4d_dir, dst_img4d_dir)
-    src_segmentation_files = glob.glob(osp.sep.join([dset.segmentations_path, patient_name, '*.nii']))
-    dst_segmentations_dir = plots.createSubDirectory(dst_segmentations_dir, patient_name)
+    src_segmentation_files = glob.glob(osp.sep.join([dset.segmentations_path, patient_name, '*.nii.gz']))
+    dst_segmentations_dir = path_utils.create_sub_dir(dst_segmentations_dir, patient_name)
     [shutil.copy(f, dst_segmentations_dir) for f in src_segmentation_files]
     return dset.get_row(patient_name)
 
@@ -25,15 +25,15 @@ def copy(patient_name, src_img4d_dir, dst_img4d_dir, dst_segmentations_dir, dset
 if __name__ == "__main__":
     # load config parser
     config = configparser.ConfigParser()
-    config.read('parser/configPreprocessing.ini')
+    config.read('parser/deprecated/configPreprocessing.ini')
 
     # create save directory
-    saveDir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), "preprocessing_split")
-    logger = plots.create_logger(saveDir)
+    saveDir = path_utils.create_save_dir(config.get('DATA', 'OUTPUT_PATH'), "preprocessing_split")
+    logger = stuff.create_logger(saveDir)
     logger.info('Preprocessing data: split train, validation and test dataset')
     logger.info(f'Save directory: {saveDir}')
 
-    plots.save_config(config, saveDir, 'config.ini')
+    stuff.save_config(config, saveDir, 'config.ini')
 
     dset = SingleVentricleDataset(config)
 
@@ -42,19 +42,19 @@ if __name__ == "__main__":
     test_patients = set(config.get('SPLIT', 'test_patients').replace('{', '').replace('}', '').replace('\n', '').split(','))
 
     # Paths for training dataset
-    save_dir_train = plots.createSubDirectory(saveDir, 'train')
-    img4d_dir_train = plots.createSubDirectory(save_dir_train, dset.volumes_subdir_path)
-    segmentations_dir_train = plots.createSubDirectory(save_dir_train, dset.segmentations_subdir_path)
+    save_dir_train = path_utils.create_sub_dir(saveDir, 'train')
+    img4d_dir_train = path_utils.create_sub_dir(save_dir_train, dset.volumes_subdir_path)
+    segmentations_dir_train = path_utils.create_sub_dir(save_dir_train, dset.segmentations_subdir_path)
 
     # Paths for validation dataset
-    save_dir_val = plots.createSubDirectory(saveDir, 'val')
-    img4d_dir_val = plots.createSubDirectory(save_dir_val, dset.volumes_subdir_path)
-    segmentations_dir_val = plots.createSubDirectory(save_dir_val, dset.segmentations_subdir_path)
+    save_dir_val = path_utils.create_sub_dir(saveDir, 'val')
+    img4d_dir_val = path_utils.create_sub_dir(save_dir_val, dset.volumes_subdir_path)
+    segmentations_dir_val = path_utils.create_sub_dir(save_dir_val, dset.segmentations_subdir_path)
 
     # Paths for test dataset
-    save_dir_test = plots.createSubDirectory(saveDir, 'test')
-    img4d_dir_test = plots.createSubDirectory(save_dir_test, dset.volumes_subdir_path)
-    segmentations_dir_test = plots.createSubDirectory(save_dir_test, dset.segmentations_subdir_path)
+    save_dir_test = path_utils.create_sub_dir(saveDir, 'test')
+    img4d_dir_test = path_utils.create_sub_dir(save_dir_test, dset.volumes_subdir_path)
+    segmentations_dir_test = path_utils.create_sub_dir(save_dir_test, dset.segmentations_subdir_path)
 
     imgs4d_dir_full = glob.glob(osp.join(dset.volumes_path, '*.nii.gz'))
     logger.info(f'Found {len(imgs4d_dir_full)} .nii.gz files')

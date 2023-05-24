@@ -4,6 +4,7 @@ import nibabel as nib
 import numpy as np
 import pandas
 from enum import Enum
+import json
 
 __all__ = ['LoadFlowMode', 'DatasetMode', 'SingleVentricleDataset']
 
@@ -38,6 +39,10 @@ class SingleVentricleDataset(Dataset):
         self.test_masks_transforms = test_masks_transforms
 
         self.base_path = config.get('DATA', 'BASE_PATH_3D')
+        self.json_ds = self.read_json(osp.join(self.base_path, 'dataset.json'))
+        self.img_ext = self.img_file_ending()
+        self.label_ext = self.label_file_ending()
+
         if mode == DatasetMode.TRAIN:
             self.base_path = osp.join(self.base_path, 'train')
         elif mode == DatasetMode.VAL:
@@ -94,19 +99,19 @@ class SingleVentricleDataset(Dataset):
             full_cycle = False
 
         # Load 4D nifty
-        img4d = nib.load(osp.join(self.volumes_path, patient_name + '.nii.gz'))
+        img4d = nib.load(osp.join(self.volumes_path, patient_name + self.img_ext))
         img4d_zyxt = np.swapaxes(img4d.get_fdata(), 0, 2)
 
         # Load segmentations masks
-        mask_syst_zyx = self.load_mask(patient_name, '_Systole_Labelmap.nii')
-        mask_diast_zyx = self.load_mask(patient_name, '_Diastole_Labelmap.nii')
+        mask_syst_zyx = self.load_mask(patient_name, f'_Systole_Labelmap{self.label_ext}')
+        mask_diast_zyx = self.load_mask(patient_name, f'_Diastole_Labelmap{self.label_ext}')
 
         # Load whole cycle masks
         if full_cycle:
-            orig_NT = df_row.loc[idx, 'original_NT']
+            orig_NT = df_row.loc[idx, 'orig_NT']
             masks = np.empty(shape=(*mask_syst_zyx.shape, orig_NT), dtype=mask_syst_zyx.dtype)
             for t in range(orig_NT):
-                masks[..., t] = self.load_mask(patient_name, f'_{t}_Labelmap.nii')
+                masks[..., t] = self.load_mask(patient_name, f'_{t}_Labelmap{self.label_ext}')
         else:
             masks = None
 
@@ -140,6 +145,24 @@ class SingleVentricleDataset(Dataset):
             bf = self.flow_transforms(bf)
 
         return (patient_name, img4d_zyxt, m0, mk, masks, init_ts, final_ts, ff, bf)
+
+    def num_classes(self):
+        return self.json_ds['n_classes']
+
+    def name(self):
+        return self.json_ds['name']
+
+    def img_file_ending(self):
+        return self.json_ds['img_file_ending']
+
+    def label_file_ending(self):
+        return self.json_ds['label_file_ending']
+
+    def read_json(self, filepath):
+        f = open(filepath, mode='r')
+        data = json.load(f)
+        f.close()
+        return data
 
     def header(self, idx):
         df_row = self.df.iloc[[idx]]
@@ -196,7 +219,7 @@ class SingleVentricleDataset(Dataset):
         return self.df.iloc[idx]['Diastole']
 
     def get_original_NT(self, idx):
-        return self.df.iloc[idx]['original_NT']
+        return self.df.iloc[idx]['orig_NT']
 
     def load_mask(self, patient_name, ending):
         mask = nib.load(osp.sep.join([self.segmentations_path, patient_name, patient_name + ending]))

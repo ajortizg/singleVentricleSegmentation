@@ -4,7 +4,7 @@ from enum import Enum
 from TVL1OF.deprecated.TVL1SymOF3D import *
 from cnn.dataset import SingleVentricleDataset
 from utilities import plots
-from utilities import torch_utils
+from utilities.deprecated import torch_utils
 
 
 class OpticalFlowMode(Enum):

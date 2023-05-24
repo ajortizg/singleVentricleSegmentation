@@ -13,7 +13,7 @@ import os.path as osp
 
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
 sys.path.append(ROOT_DIR)
-from utilities import plots
+from utilities import path_utils, stuff, plots
 from utilities.collate import collate_fn_batch
 from utilities import param_reader
 import utilities.transforms.senary_transforms as T6
@@ -41,7 +41,11 @@ if __name__ == "__main__":
     P = param_reader.fine_tuning_params(config)
 
     # Create dataset and loader
-    transforms = T6.Compose([T6.ToTensor()])
+    transforms = T6.Compose([
+        # T6.Resize(1.0, (64, 64, 64)),  # for swin unet
+        # T6.RoundMasks(), #  # for swin unet
+        T6.ToTensor()
+        ])
 
     if P['dataset'] == 'train':
         train_ds = SingleVentricleDataset(config, DatasetMode.TRAIN, LoadFlowMode.ED_ES, full_transforms=transforms)
@@ -56,10 +60,10 @@ if __name__ == "__main__":
         
     train_loader = DataLoader(train_ds, batch_size=P['batch_size'], shuffle=False, num_workers=P['num_workers'], collate_fn=collate_fn_batch)
 
-    save_dir = plots.createSaveDirectory(config.get('DATA', 'OUTPUT_PATH'), 'FT')
-    logger = plots.create_logger(save_dir)
+    save_dir = path_utils.create_save_dir(config.get('DATA', 'OUTPUT_PATH'), 'FT')
+    logger = stuff.create_logger(save_dir)
     writer = SummaryWriter(log_dir=save_dir)
-    plots.save_config(config, save_dir, 'config.ini')
+    stuff.save_config(config, save_dir, 'config.ini')
 
     # Create model and load weights
     config_train = configparser.ConfigParser()
@@ -96,7 +100,6 @@ if __name__ == "__main__":
         test_bf = test_data[8].to(device)
         test_times_fwd, test_times_bwd = test_ds.create_timeline(test_data[5][0], test_data[6][0], test_masks.shape[-1])
     
-
     pbar = tqdm(total=P['num_epochs'])
     tic = time.time()
     trainer = Trainer(net, opt, pbar, config, device, writer, logger)
@@ -108,19 +111,20 @@ if __name__ == "__main__":
 
         if P['dataset'] == 'test':
             pbar.set_postfix_str(f'Test: {test_data[0][0]}')
-            trainer.test_patient(test_imgs4d, test_masks, test_times_fwd, test_times_bwd, test_ff, test_bf, cnn=True, hd=False)
+            metrics, *_ = trainer.test_patient(test_imgs4d, test_masks, test_times_fwd, test_times_bwd, test_ff, test_bf, cnn=True, hd=True)
                
         trainer.log(e)
+        logger.info('\ttest_hd:\t{:.3f}'.format(metrics['mean_hd']))
         scheduler.step()
         pbar.update(1)
         
-        trainer.create_checkpoint(e, save_dir, when_better=True, which='test', verbose=True)
+        # trainer.create_checkpoint(e, save_dir, when_better=True, which='test', verbose=True)
         
         # early stop
-        patience = 50
-        if trainer.epochs_since_last_improvement > patience:
-            logger.info(f'Early stop at epoch: {e}')
-            break
+        # patience = 50
+        # if trainer.epochs_since_last_improvement > patience:
+        #     logger.info(f'Early stop at epoch: {e}')
+        #     break
 
     toc = time.time()
     logger.info('\nTotal time taken to train the model: {:.4f}s'.format(toc - tic))
@@ -128,6 +132,26 @@ if __name__ == "__main__":
     trainer.create_checkpoint(e, save_dir, when_better=False)
     trainer.save_stats(save_dir)
     trainer.plot_stats(save_dir, log_scale=False)
+
+    # # Save nifti files
+    # # Create save dirs
+    # logger.info("\nSaving result nifti files")
+    # patient_dir = path_utils.create_sub_dir(save_dir, 'nifti')
+    # fwd_dir = path_utils.create_sub_dir(patient_dir, 'fwd')
+    # bwd_dir = path_utils.create_sub_dir(patient_dir, 'bwd')
+    # gt_dir = path_utils.create_sub_dir(patient_dir, 'gt')
+
+    # *_, mts, mtts = trainer.test_patient(test_imgs4d, test_masks, test_times_fwd, test_times_bwd, test_ff, test_bf, cnn=True, hd=True)
+    # ti = times_fwd[0]
+    # tf = times_bwd[0]
+    # times = np.arange(ti, tf+1)
+    # for i, t in enumerate(times):
+    #     hdr = test_loader.dataset.header(0)
+    #     plots.save_nifti_mask(mts[i], hdr, fwd_dir, f'm_fwd_{t}.nii')
+    #     plots.save_nifti_mask(mtts[i], hdr, bwd_dir, f'm_bwd_{t}.nii')
+    
+    # plots.save_nifti_mask(m0, hdr, gt_dir, "m0.nii")
+    # plots.save_nifti_mask(mk, hdr, gt_dir, "mk.nii")
    
     pbar.close()
     writer.close()
