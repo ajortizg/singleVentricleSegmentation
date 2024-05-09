@@ -12,8 +12,8 @@ from monai.metrics.meandice import compute_dice
 from monai.metrics.hausdorff_distance import compute_hausdorff_distance
 from tabulate import tabulate
 
-ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
-sys.path.append(ROOT_DIR)
+# ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../'))
+# sys.path.append(ROOT_DIR)
 from utilities import path_utils as fpu
 from datasets.flowunet_dataset import FlowUNetDataset, get_bounds
 import segmentation.transforms as T

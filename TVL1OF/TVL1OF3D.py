@@ -27,7 +27,6 @@ sys.path.append(pythonOps_lib_path)
 # import mesh
 # import differentialOps
 
-
 from opticalFlow_cuda_ext import opticalFlow
 
 

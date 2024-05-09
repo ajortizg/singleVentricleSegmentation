@@ -1,4 +1,4 @@
-name: svs
+name: svs-env
 channels:
   - pytorch
   - nvidia
@@ -22,9 +22,9 @@ dependencies:
    # python visualization
    - matplotlib
    # machine learning
-   - pytorch==2.0
+   - pytorch=2.1
    - pytorch-cuda=11.8
-   # - torchvision
+   - torchvision
    - einops
    - scikit-learn
    - scikit-image
@@ -44,4 +44,4 @@ dependencies:
       - batchgenerators
       - tabulate
       # this package
-      - -e .
+      - .

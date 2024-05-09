@@ -7,7 +7,7 @@ import json
 from collections import defaultdict
 import torch.nn.functional as F
 
-from .utils.image_reader import ImageReader
+from datasets.utils.image_reader import ImageReader
 
 
 def get_bounds(es, ed, masks, fwd, test=False):
