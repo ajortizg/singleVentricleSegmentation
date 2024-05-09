@@ -1,9 +1,6 @@
 [submodule "thirdparty/nnUNet"]
 	path = thirdparty/nnUNet
 	url = https://github.com/MIC-DKFZ/nnUNet.git
-[submodule "thirdparty/voxelmorph"]
-	path = thirdparty/voxelmorph
-	url = https://github.com/voxelmorph/voxelmorph.git
 [submodule "thirdparty/FullyConvolutionalTransformer"]
 	path = thirdparty/FullyConvolutionalTransformer
 	url = https://github.com/Thanos-DB/FullyConvolutionalTransformer.git
