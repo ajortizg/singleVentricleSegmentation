@@ -134,10 +134,10 @@ class QuadraticNormalizationd(T.transform.MapTransform):
 
 
 if __name__ == "__main__":
-    # root_dir = "data/singleVentricleData/"
-    root_dir = "results/ACDCData_20230522-085510"
+    root_dir = "data/singleVentricleData/"
+    # root_dir = "results/ACDCData_20230522-085510"
     img_ext = ".nii.gz"
-    label_ext = ".nii.gz"
+    label_ext = ".nii"
     images_dir = "NIFTI_4D_Datasets"
     segmentations_dir = "NIFTI_Single_Ventricle_Segmentations"
     df = pd.read_excel(osp.join(root_dir, "Segmentation_volumes.xlsx"))
@@ -156,7 +156,7 @@ if __name__ == "__main__":
         T.Spacingd(keys=("label"), pixdim=(1.0, 1.0, 1.0), mode=("nearest"))
     ])
 
-    save_dir = path_utils.create_save_dir('results', 'acdc_iso')
+    save_dir = path_utils.create_save_dir('results', 'svd_iso')
     print('Save dir: ', save_dir)
 
     for i in tqdm(range(len(df))):

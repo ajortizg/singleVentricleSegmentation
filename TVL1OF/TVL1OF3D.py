@@ -61,6 +61,7 @@ class TVL1OpticalFlow3D:
     def __init__(self, config):
         self.config = config
         # self.saveDir = saveDir
+        self.saveDir = None
         self.NUM_SCALES = config.getint('PARAMETERS', 'NUM_SCALES')
         self.MAX_WARPS = config.getint('PARAMETERS', 'MAX_WARPS')
         self.MAX_OUTER_ITERATIONS = config.getint('PARAMETERS', 'MAX_OUTER_ITERATIONS')
@@ -191,7 +192,8 @@ class TVL1OpticalFlow3D:
             # self.saveSingleStepToFile(s, I0s[s], I1s[s], us[s], ps[s], meshInfos[s])
 
             if s == 0:
-                self.saveSingleStepToFile(s, I0s[s], I1s[s], us[s], ps[s], meshInfos[s])
+                if self.saveDir is not None:
+                    self.saveSingleStepToFile(s, I0s[s], I1s[s], us[s], ps[s], meshInfos[s]) # TODO! fix this (compute_flow.py and main_optflow.py) conflict
                 break
 
             # Prolongate the optical flow and dual variables to the next pyramid level

@@ -1,10 +1,9 @@
 # singleVentricleSegmentation
 
 ## install
-* conda create -n singleVentricleSegmentationEnv
-* conda install python=3.9
-* conda install pytorch torchvision torchaudio cudatoolkit=11.3 -c pytorch
-* conda install pytorch torchvision torchaudio pytorch-cuda=11.6 -c pytorch -c nvidia (for CUDA 11.6)
+* conda env create -f environment.yaml
+<!-- * conda create -n svs-env python=3.10
+* conda install pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia
 * pip install opencv-python
 * pip install nibabel
 * pip install matplotlib
@@ -19,6 +18,9 @@
 * pip install elasticdeform
 * pip install monai
 * pip install intensity-normalization
+* pip install natsort
+* pip install batchgenerators
+* pip install tabulate -->
 
 to install setup file use one of the following:
 * pip install . 
