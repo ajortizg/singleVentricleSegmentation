@@ -43,5 +43,6 @@ dependencies:
       - natsort
       - batchgenerators
       - tabulate
+      - ml_collections
       # this package
       - .
