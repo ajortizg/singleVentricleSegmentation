@@ -36,6 +36,12 @@ on windows:
 * New-Item -ItemType SymbolicLink -Target "C:\Users\...\data\" -Path "C:\Users\...\singleVentricleSegmentation\data"
 * New-Item -ItemType SymbolicLink -Target "C:\Users\...\results\" -Path "C:\Users\...\singleVentricleSegmentation\results"
 
+## Instructions for the ACDC dataset
+* First you need to format the acdc dataset to separately extract the 3 different ROIs contained in the dataset:
+    ```
+    python deprecated/dataset/format_acdc.py
+    ```
+
 
 ## 1. Preprocessing 
 *   First preprocess the raw data to store it in a specific format:

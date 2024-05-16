@@ -1,3 +1,4 @@
+from utilities import path_utils
 import numpy as np
 from glob import glob
 import os
@@ -10,7 +11,6 @@ import pandas as pd
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), '../../'))
 sys.path.append(ROOT_DIR)
 # from utilities import plots
-from utilities import path_utils
 
 
 class ACDCPatient:
@@ -41,9 +41,10 @@ class ACDCPatient:
 
 
 class ACDCDataset:
-    def __init__(self, base_path):
+    def __init__(self, base_path, label):
         self.base_path = base_path
         self.patient_dirs = sorted(os.listdir(base_path))
+        self.label = label
 
     def __getitem__(self, idx):
         name = self.patient_dirs[idx]
@@ -58,8 +59,8 @@ class ACDCDataset:
         if mode == 'training':
             mask_diastole_nii = nib.load(osp.sep.join([self.base_path, name, name + '_frame%02d_gt.nii.gz' % (tdiastole)]))
             mask_systole_nii = nib.load(osp.sep.join([self.base_path, name, name + '_frame%02d_gt.nii.gz' % (tsystole)]))
-            # mask_diastole_nii = self.extract_label(mask_diastole_nii)
-            # mask_systole_nii = self.extract_label(mask_systole_nii)
+            mask_diastole_nii = self.extract_label(mask_diastole_nii)
+            mask_systole_nii = self.extract_label(mask_systole_nii)
         else:
             mask_diastole_nii = None
             mask_systole_nii = None
@@ -67,37 +68,34 @@ class ACDCDataset:
         patient = ACDCPatient(name, img4d_nii, mask_systole_nii, mask_diastole_nii, tsystole, tdiastole)
         return patient
 
-    # def extract_label(self, mask_nii):
-    #     mask_data = mask_nii.get_fdata()
-    #     # mask_data_label = np.where(np.logical_or(mask_data == self.label1, mask_data == self.label2), 1.0, 0.0)
-    #     mask_data_label = np.where(mask_data == self.label, 1.0, 0.0)
-    #     mask_nii = nib.Nifti1Image(mask_data_label, affine=mask_nii.affine, header=mask_nii.header)
-    #     return mask_nii
+    def extract_label(self, mask_nii):
+        mask_data = mask_nii.get_fdata()
+        # mask_data_label = np.where(np.logical_or(mask_data == self.label1, mask_data == self.label2), 1.0, 0.0)
+        mask_data_label = np.where(mask_data == self.label, 1.0, 0.0)
+        mask_nii = nib.Nifti1Image(mask_data_label, affine=mask_nii.affine, header=mask_nii.header)
+        return mask_nii
 
     def __len__(self):
         return len(self.patient_dirs)
 
 
 if __name__ == "__main__":
-    # labels = {'background': 0,
-    #           'right_ventricle': 1,
-    #           'myocardium': 2,
-    #           'left_ventricle': 3}
+    # background: 0
+    labels = {'right_ventricle': 1,
+              'myocardium': 2,
+              'left_ventricle': 3}
 
-    save_dir = path_utils.create_save_dir('results', 'ACDCData')
-    save4d_dir = path_utils.create_sub_dir(save_dir, 'NIFTI_4D_Datasets')
-    save_segmentations_dir = path_utils.create_sub_dir(save_dir, 'NIFTI_Single_Ventricle_Segmentations')
-    df_dset = pd.DataFrame(columns=['Name', 'Systole', 'Diastole'])
+    for roi, tag in labels.items():
+        print("Extracting:", roi)
+        save_dir = path_utils.create_save_dir('results', f'ACDCData_{roi}')
+        save4d_dir = path_utils.create_sub_dir(save_dir, 'NIFTI_4D_Datasets')
+        save_segmentations_dir = path_utils.create_sub_dir(save_dir, 'NIFTI_Single_Ventricle_Segmentations')
+        df_dset = pd.DataFrame(columns=['Name', 'Systole', 'Diastole'])
 
-    train_ds = ACDCDataset('data/acdc/training')
-    # test_ds = ACDCDataset('data/ACDC/testing/testing', mode='test')
-    dsets = [train_ds]
-    pbar = tqdm(total=len(train_ds))
-    for ds in dsets:
-        for i in range(len(ds)):
-            patient = ds[i]
+        train_ds = ACDCDataset('data/acdc/training', label=tag)
+        for i in tqdm(range(len(train_ds))):
+            patient = train_ds[i]
             df = patient.save(save4d_dir, save_segmentations_dir)
             df_dset = pd.concat([df_dset, df])
-            pbar.update(1)
 
-    df_dset.to_excel(osp.join(save_dir, 'Segmentation_volumes.xlsx'), index=False)
+        df_dset.to_excel(osp.join(save_dir, 'Segmentation_volumes.xlsx'), index=False)

@@ -1,4 +1,4 @@
-name: svs-env
+name: svs
 channels:
   - pytorch
   - nvidia
