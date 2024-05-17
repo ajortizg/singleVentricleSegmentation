@@ -4,10 +4,9 @@ import os.path as osp
 import pandas as pd
 from ml_collections import config_dict
 import yaml
-import shutil
 
-from utilities import path_utils
-from scripts.datasets import MRIBaseDataset, Patient
+from svs.utils import paths
+from svs.modules.datasets import MRIBaseDataset, Patient
 
 
 def get_range_mask(mask, print_range=False, name=""):
@@ -49,7 +48,7 @@ def run(config_dir='conf', config_name='preprocessing.yaml', base_dir=None):
     print('Cutting')
     # Load configuration
     cfg = config_dict.ConfigDict(yaml.load(open(osp.join(config_dir, config_name), 'r'), Loader=yaml.FullLoader))
-    save_dir = path_utils.create_save_dir(cfg.data.out_dir, "preprocessing_cut")
+    save_dir = paths.create_timestamped_dir(cfg.data.out_dir, "preprocessing_cut")
 
     if base_dir is not None:
         cfg.data.base_dir = base_dir
@@ -64,8 +63,8 @@ def run(config_dir='conf', config_name='preprocessing.yaml', base_dir=None):
     original_NZ = np.zeros(len(ds))
     original_NT = np.zeros(len(ds))
 
-    out_img_dir = path_utils.create_sub_dir(save_dir, cfg.data.imgs_dir)
-    out_seg_dir = path_utils.create_sub_dir(save_dir, cfg.data.segs_dir)
+    out_img_dir = paths.create_subdir(save_dir, cfg.data.imgs_dir)
+    out_seg_dir = paths.create_subdir(save_dir, cfg.data.segs_dir)
 
     for i in tqdm(range(len(ds))):
         patient = ds[i]

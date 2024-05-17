@@ -1,6 +1,6 @@
-from scripts import setup_acdc
-from scripts.preprocessing import cutting
-from scripts.preprocessing import prolongation
+from svs.preprocessing import setup_acdc
+from svs.preprocessing import cutting
+from svs.preprocessing import prolongation
 
 
 def run():

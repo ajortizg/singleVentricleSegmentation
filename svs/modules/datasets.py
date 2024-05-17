@@ -10,8 +10,8 @@ from PIL import Image
 import glob
 from natsort import natsorted
 
-from utilities import path_utils
-from utilities.plots import plots
+from svs.utils import paths
+from svs.utils import plots
 
 
 xyzt_to_zyxt = (2, 1, 0, 3)
@@ -108,13 +108,22 @@ class Patient:
             out_img_dir (str): Directory to save the 4D image.
             out_seg_dir (str): Directory to save the segmentation masks.
         """
-        out_patient_dir = path_utils.create_sub_dir(out_seg_dir, self.name)
-        nib.save(self.img, osp.join(out_img_dir, self.name + ".nii.gz"))
-        nib.save(self.seg_dia, osp.join(out_patient_dir, self.name + "_Diastole_Labelmap.nii.gz"))
-        nib.save(self.seg_sys, osp.join(out_patient_dir, self.name + "_Systole_Labelmap.nii.gz"))
+        out_patient_dir = paths.create_subdir(out_seg_dir, self.name)
+        nib.save(self.img, osp.join(out_img_dir, f'{self.name}.nii.gz'))
+        nib.save(self.seg_dia, osp.join(out_patient_dir,  f"{self.name}_Diastole_Labelmap.nii.gz"))
+        nib.save(self.seg_sys, osp.join(out_patient_dir, f"{self.name}_Systole_Labelmap.nii.gz"))
 
     def viz_data(self, save_dir, gif, dur, aspect_ratio=1.7):
-        save_dir = path_utils.create_sub_dir(save_dir, self.name)
+        """
+        Visualizes the data and saves it as images or a GIF.
+
+        Args:
+            save_dir (str): Directory to save the visualizations.
+            gif (bool): Whether to create a GIF.
+            dur (int): Duration of each frame in the GIF (in milliseconds).
+            aspect_ratio (float, optional): Aspect ratio for visualization. Defaults to 1.7.
+        """
+        save_dir = paths.create_subdir(save_dir, self.name)
         img = self.img_array().transpose((3, 2, 1, 0))  # x,y,z,t -> t,z,y,x
         for t in range(img.shape[0]):
             if t == self.tsys:
@@ -123,12 +132,12 @@ class Patient:
                 seg = self.seg_dia_array().swapaxes(2, 0)
             else:
                 seg = None
-            plots.save_overlaped_img_mask_numpy(img[t], seg, '{}_{}.png'.format(self.name, t), save_dir, 0.3, aspect_ratio)
+            plots.save_image_mask_overlay(img[t], seg, f'{self.name}_{t}.png', save_dir, 0.3, aspect_ratio)
 
         if gif:
-            frames = [Image.open(image) for image in natsorted(glob.glob(f"{save_dir}/*.png"))]
+            frames = [Image.open(image) for image in natsorted(glob.glob(f'{save_dir}/*.png'))]
             frame_one = frames[0]
-            frame_one.save(osp.join(save_dir, "animation.gif"), format="GIF", append_images=frames,
+            frame_one.save(osp.join(save_dir, 'animation.gif'), format='GIF', append_images=frames,
                            save_all=True, duration=dur, loop=0)
 
 
@@ -160,8 +169,8 @@ class MRIBaseDataset(Dataset):
         img = nib.load(osp.join(self.imgs_dir, f'{name}.nii.gz'))
 
         # Load segmentation masks [x,y,z]
-        seg_dia = nib.load(osp.join(self.segs_dir, name, name + "_Diastole_Labelmap.nii.gz"))
-        seg_sys = nib.load(osp.join(self.segs_dir, name, name + "_Systole_Labelmap.nii.gz"))
+        seg_dia = nib.load(osp.join(self.segs_dir, name, f'{name}_Diastole_Labelmap.nii.gz'))
+        seg_sys = nib.load(osp.join(self.segs_dir, name,   f'{name}_Systole_Labelmap.nii.gz'))
 
         return Patient(name, tsys, tdia,  min(tdia, tsys), max(tdia, tsys), img, seg_dia, seg_sys)
 

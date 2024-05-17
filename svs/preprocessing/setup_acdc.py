@@ -1,5 +1,4 @@
 import numpy as np
-import os
 import nibabel as nib
 import os.path as osp
 from tqdm import tqdm
@@ -8,8 +7,8 @@ import shutil
 import yaml
 from ml_collections import config_dict
 
-from utilities import path_utils
-from scripts.datasets import RawACDCDadataset
+from svs.utils import paths
+from svs.modules.datasets import RawACDCDadataset
 
 
 def extract_label(seg: nib.Nifti1Image, label: int) -> nib.Nifti1Image:
@@ -34,9 +33,9 @@ def run(config_dir='conf', config_name='setup_acdc.yaml'):
 
     roi = cfg.label.roi
     tag = cfg.label.tag
-    save_dir = path_utils.create_save_dir(cfg.data.save_dir, f'acdc_{roi}')
-    out_imgs_dir = path_utils.create_sub_dir(save_dir, cfg.data.out_imgs_dir)
-    out_segs_dir = path_utils.create_sub_dir(save_dir, cfg.data.out_segs_dir)
+    save_dir = paths.create_timestamped_dir(cfg.data.save_dir, f'acdc_{roi}')
+    out_imgs_dir = paths.create_subdir(save_dir, cfg.data.out_imgs_dir)
+    out_segs_dir = paths.create_subdir(save_dir, cfg.data.out_segs_dir)
 
     print(f'Extracting: {roi}, wit Tag: {tag}')
 

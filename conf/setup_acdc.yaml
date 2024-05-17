@@ -1,6 +1,6 @@
 data:
   # Input data dir
-  # Use only training split becase there is no groundtruth masks avaibale for the testing split 
+  # Use only training split becase there are no groundtruth masks avaibale for the testing split 
   raw_dir: 'data/acdc/training'
   # Output data dirs
   save_dir: 'results'

@@ -1,16 +1,14 @@
 import numpy as np
 from tqdm import tqdm
-import os
 import torch
 from ml_collections import config_dict
 import yaml
 import os.path as osp
 import torch.nn.functional as F
 
-
 from opticalFlow_cuda_ext import opticalFlow
-from utilities import path_utils
-from scripts.datasets import MRIBaseDataset, Patient, xyz_to_zyx, zyx_to_xyz, xyzt_to_zyxt, zyxt_to_xyzt
+from svs.utils import paths
+from svs.modules.datasets import MRIBaseDataset, Patient, xyz_to_zyx, zyx_to_xyz, xyzt_to_zyxt, zyxt_to_xyzt
 
 
 def get_interpolation_type(inter_type_str: str, bound_type_str: str):
@@ -67,9 +65,9 @@ def run(config_dir='conf', config_name='preprocessing.yaml', base_dir=None):
     cfg = config_dict.ConfigDict(yaml.load(open(osp.join(config_dir, config_name), 'r'), Loader=yaml.FullLoader))
 
     # Create output dirs
-    save_dir = path_utils.create_save_dir(cfg.data.out_dir, "preprocessing_prolongation")
-    out_img_dir = path_utils.create_sub_dir(save_dir, cfg.data.imgs_dir)
-    out_seg_dir = path_utils.create_sub_dir(save_dir, cfg.data.segs_dir)
+    save_dir = paths.create_timestamped_dir(cfg.data.out_dir, "preprocessing_prolongation")
+    out_img_dir = paths.create_subdir(save_dir, cfg.data.imgs_dir)
+    out_seg_dir = paths.create_subdir(save_dir, cfg.data.segs_dir)
 
     # Prolongation type
     interpolation_type, boundary_type = get_interpolation_type(cfg.prolongation.interpolation, cfg.prolongation.boundary)
