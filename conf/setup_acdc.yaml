@@ -1,8 +1,21 @@
-# Input data dir
-# Use only training split becase there is no groundtruth masks avaibale for the testing split 
-raw_dir: 'data/acdc/training'
-# Output data dirs
-save_dir: 'results'
-out_imgs_dir: 'NIFTI_4D_Datasets'
-out_segs_dir: 'NIFTI_Single_Ventricle_Segmentations'
-out_metadata_file: 'Segmentation_volumes.xlsx'
+data:
+  # Input data dir
+  # Use only training split becase there is no groundtruth masks avaibale for the testing split 
+  raw_dir: 'data/acdc/training'
+  # Output data dirs
+  save_dir: 'results'
+  out_imgs_dir: 'NIFTI_4D_Datasets'
+  out_segs_dir: 'NIFTI_Single_Ventricle_Segmentations'
+  out_metadata_file: 'Segmentation_volumes.xlsx'
+
+# 'right-ventricle':  1
+# 'myocardium':       2
+# 'left-ventricle':   3
+label: 
+  roi: 'right-ventricle'
+  tag: 1
+
+debug:
+  viz: false
+  gif: true
+  dur: 200

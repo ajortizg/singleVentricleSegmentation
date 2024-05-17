@@ -25,8 +25,15 @@ setup(
     ext_package='opticalFlow_cuda_ext',
     ext_modules=[
         CUDAExtension('opticalFlow',
-                      sources=['src/bindings.cpp', 'src/differentialOps.cu', 'src/anisotropicDifferentialOps.cu', 'src/rotationOps.cu',
-                               'src/warpingOps.cu', 'src/warpingOpsCNN.cu', 'src/prolongationOps.cu', 'src/opticalFlowOps.cu', 'src/ROFOps.cu'],
+                      sources=['svs/src/bindings.cpp',
+                               'svs/src/differentialOps.cu',
+                               'svs/src/anisotropicDifferentialOps.cu',
+                               'svs/src/rotationOps.cu',
+                               'svs/src/warpingOps.cu',
+                               'svs/src/warpingOpsCNN.cu',
+                               'svs/src/prolongationOps.cu',
+                               'svs/src/opticalFlowOps.cu',
+                               'svs/src/ROFOps.cu'],
                       runtime_library_dirs=library_dirs,
                       extra_compile_args={'cxx': [], 'nvcc': ['-O3']}),
     ],
@@ -35,5 +42,5 @@ setup(
     },
 
     packages=find_packages(),
-    version="0.1"
+    version="0.2"
 )
