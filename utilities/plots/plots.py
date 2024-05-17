@@ -1,20 +1,20 @@
 # ==================================
+import colorsys
+import random
+import math
+import numpy as np
+import cv2
+import matplotlib.pyplot as plt
+import matplotlib
+import os.path as osp
+import torch
+import nibabel as nib
+import os
 import sys
 sys.path.append('core')
 
 # ==================================
-import os
-import nibabel as nib
-import torch
-import os.path as osp
-import matplotlib
 matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-import cv2
-import numpy as np
-import math
-import random
-import colorsys
 
 
 def random_colors(N, bright=True):
@@ -127,13 +127,13 @@ def save_slices(image3D, fileName, saveDir, max_gray_value=1):
     numZSlices = image3D.shape[0]
     aspect_ratio = 16. / 9.
     numCols = int(numZSlices / aspect_ratio)
-    if(numZSlices % numCols > 0):
+    if (numZSlices % numCols > 0):
         numCols += 1
     numRows = math.ceil(numZSlices / numCols)
 
     fig, axs = plt.subplots(numRows, numCols, constrained_layout=True, figsize=(18, 10), dpi=4)
-    #fig.canvas.manager.set_window_title('4D Nifti Image')
-    #fig.suptitle('4D_Nifti file: {} \n with {} slices in z-direction'.format(os.path.basename(fileName),numZSlices), fontsize=16)
+    # fig.canvas.manager.set_window_title('4D Nifti Image')
+    # fig.suptitle('4D_Nifti file: {} \n with {} slices in z-direction'.format(os.path.basename(fileName),numZSlices), fontsize=16)
     fig.suptitle('file: {}'.format(os.path.basename(fileName)), fontsize=16)
     for z, ax in enumerate(axs.flat):
         if z < numZSlices:
@@ -151,7 +151,7 @@ def save_colorbar_slices(img3d, filename, save_dir, max_gray_value=1):
     NZ = img3d.shape[0]
     aspect_ratio = 16. / 9.
     cols = int(NZ / aspect_ratio)
-    if(NZ % cols > 0):
+    if (NZ % cols > 0):
         cols += 1
     rows = math.ceil(NZ / cols)
 
@@ -219,7 +219,7 @@ def save_img_masks(img3d: torch.Tensor, masks3d: list[torch.Tensor], filename: s
     NZ = img3d.shape[0]
     aspect_ratio = 16. / 9.
     cols = int(NZ / aspect_ratio)
-    if(NZ % cols > 0):
+    if (NZ % cols > 0):
         cols += 1
     rows = math.ceil(NZ / cols)
 
@@ -246,7 +246,7 @@ def save_img_masks_one_hot(img3d: torch.Tensor, masks3d: list[torch.Tensor], fil
     NZ = img3d.shape[0]
     aspect_ratio = 16. / 9.
     cols = int(NZ / aspect_ratio)
-    if(NZ % cols > 0):
+    if (NZ % cols > 0):
         cols += 1
     rows = math.ceil(NZ / cols)
 
@@ -301,10 +301,13 @@ def merge_img_mask(img, mask, alpha=0.35, color=[1, 1, 0]):
 
 
 def save_overlaped_img_mask(img3d: torch.Tensor, mask3d: torch.Tensor, filename: str, save_dir: str, alpha: float):
+    """
+    Expected shape: z,y,x
+    """
     NZ = img3d.shape[0]
     aspect_ratio = 16. / 9.
     cols = int(NZ / aspect_ratio)
-    if(NZ % cols > 0):
+    if (NZ % cols > 0):
         cols += 1
     rows = math.ceil(NZ / cols)
 
@@ -316,6 +319,35 @@ def save_overlaped_img_mask(img3d: torch.Tensor, mask3d: torch.Tensor, filename:
             ax.imshow(img, cmap="gray", interpolation='none')
             if mask3d is not None:
                 mask = mask3d[z].cpu().detach().numpy()
+                ax.imshow(mask, cmap='jet', alpha=alpha, interpolation='none')
+            ax.set_title("layer {}".format(z))
+            ax.axis('off')
+        else:
+            ax.axis('off')
+    path_name = os.path.join(save_dir, filename)
+    plt.savefig(path_name, dpi=100)
+    plt.close('all')
+
+
+def save_overlaped_img_mask_numpy(img3d: np.ndarray, mask3d: np.ndarray, filename: str, save_dir: str, alpha: float):
+    """
+    Expected shape: z,y,x
+    """
+    NZ = img3d.shape[0]
+    aspect_ratio = 16. / 9.
+    cols = int(NZ / aspect_ratio)
+    if (NZ % cols > 0):
+        cols += 1
+    rows = math.ceil(NZ / cols)
+
+    fig, axs = plt.subplots(rows, cols, constrained_layout=True, figsize=(18, 10), dpi=4)
+    fig.suptitle('file: {}'.format(os.path.basename(filename)), fontsize=16)
+    for z, ax in enumerate(axs.flat):
+        if z < NZ:
+            img = img3d[z]
+            ax.imshow(img, cmap="gray", interpolation='none')
+            if mask3d is not None:
+                mask = mask3d[z]
                 ax.imshow(mask, cmap='jet', alpha=alpha, interpolation='none')
             ax.set_title("layer {}".format(z))
             ax.axis('off')

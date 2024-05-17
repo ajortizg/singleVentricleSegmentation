@@ -1,0 +1,95 @@
+data:
+  # Input data will be loaded from this dir
+  base_dir: 'results/acdc_left-ventricle_20240516-231322'
+  imgs_dir: 'NIFTI_4D_Datasets'
+  segs_dir: 'NIFTI_Single_Ventricle_Segmentations'
+  metadata_file: 'Segmentation_volumes.xlsx'
+
+  # Output data will be save in this dir
+  out_dir: 'results'
+
+device:
+  use_gpu: true
+
+# Create visualization by overlaping images with segmentation masks.
+debug:
+  viz: true
+  gif: true
+  dur: 200
+
+# Step 1
+# SV dataset has some inconsistencies. No need to do this step for ACDC dataset
+flipping:
+  patients: 
+    - Adolescent_7
+    - Adolescent_26
+    - Adolescent_54
+    - Adolescent_75
+    - Adult_6
+    - Adult_11
+    - Adult_16
+    - Adult_17
+    - Child_27
+
+# Step 2
+cutting:
+  x_tol: 10
+  y_tol: 10
+  z_tol: 10
+
+# Step 3
+prolongation:
+  nx: 80
+  ny: 80
+  nz: 80
+  pad_time: 40
+
+  # Interpolation stuff
+  LenghtType: 'numDofs'
+  InterpolationType: 'LINEAR'   # NEAREST, LINEAR or CUBIC_HERMITESPLINE
+  BoundaryType: 'MIRROR'        # NEAREST, MIRROR or REFLECT
+
+# Step 4
+normalization:
+  min_max_norm: false
+
+# Step 5
+split:
+  val:
+    - Adolescent_1
+    - Adolescent_62
+    - Adolescent_107
+    - Adult_3
+    - Adult_24
+    - Adult_36
+    - Adult_62
+    - Adult_104
+    - Child_14
+    - Child_24
+    - Child_36
+    - Child_45
+    - Child_53
+    - patient001
+    - patient005
+    - patient010
+    - patient015
+    - patient020
+    - patient025
+    - patient030
+    - patient035
+    - patient040
+    - patient045
+    - patient050
+    - patient055
+    - patient060
+    - patient065
+    - patient070
+    - patient075
+    - patient080
+    - patient085
+    - patient090
+    - patient095
+  test:
+    - Adolescent_53
+    - Adult_11
+    - Child_73
