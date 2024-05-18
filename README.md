@@ -39,7 +39,7 @@ You can also preprocess the ACDC dataset by independently running each preproces
     python svs/preprocessing/cutting.py
     ```
 
-3. **Prolongation**: Adjust the time dimension as needed.
+3. **Prolongation**: Adjust the dimensions as needed.
 
     ```bash
     python svs/preprocessing/prolongation.py
@@ -77,5 +77,3 @@ This will create a folder named `optical_flow` inside the `{root_dir}`. Configur
 - Ensure that you have the necessary permissions to read and write to the specified directories.
 - Verify that all required dependencies are installed in your conda environment.
 - Adjust the configuration files as needed for your specific dataset and processing requirements.
-
-This README should now provide a clear and concise guide for setting up, preprocessing the ACDC dataset, computing optical flow, and training the CNN for single ventricle segmentation.
