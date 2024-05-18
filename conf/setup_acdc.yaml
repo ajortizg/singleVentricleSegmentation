@@ -16,6 +16,6 @@ label:
   tag: 2
 
 debug:
-  viz: true
+  viz: false
   gif: true
   dur: 200

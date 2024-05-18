@@ -1,30 +1,13 @@
-import numpy as np
-import nibabel as nib
 import os.path as osp
 from tqdm import tqdm
 import pandas as pd
 import shutil
 import yaml
 from ml_collections import config_dict
+import torch
 
 from svs.utils import dirs
 from svs.modules.datasets import RawACDCDadataset
-
-
-def extract_label(seg: nib.Nifti1Image, label: int) -> nib.Nifti1Image:
-    """
-    Extracts the specified label from the segmentation mask.
-
-    Args:
-        seg (Nifti1Image): Input segmentation mask image.
-        label (int): Label value to extract from the segmentation masks.
-
-    Returns:
-        Nifti1Image: Mask image with the specified label extracted.
-    """
-    seg_array_res = np.where(seg.get_fdata() == label, 1.0, 0.0)
-    seg_res = nib.Nifti1Image(seg_array_res, affine=seg.affine, header=seg.header)
-    return seg_res
 
 
 def run(config_dir='conf', config_name='setup_acdc.yaml'):
@@ -45,8 +28,8 @@ def run(config_dir='conf', config_name='setup_acdc.yaml'):
 
     for i in tqdm(range(len(ds))):
         patient = ds[i]
-        patient.seg_dia = extract_label(patient.seg_dia, tag)
-        patient.seg_sys = extract_label(patient.seg_sys, tag)
+        patient.seg_dia = torch.where(patient.seg_dia == tag, 1.0, 0.0)
+        patient.seg_sys = torch.where(patient.seg_sys == tag, 1.0, 0.0)
         patient.write_nifti(out_imgs_dir, out_segs_dir)
 
         if cfg.debug.viz:

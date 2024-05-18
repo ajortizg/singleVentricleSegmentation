@@ -49,6 +49,7 @@ def save_image_mask_overlay(
     rows = math.ceil(NZ / cols)
 
     fig, axs = plt.subplots(rows, cols, constrained_layout=True, figsize=(18, 10), dpi=4)
+    fig.patch.set_facecolor('black')
     fig.suptitle('file: {}'.format(os.path.basename(filename)), fontsize=16)
     for z, ax in enumerate(axs.flat):
         if z < NZ:

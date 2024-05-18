@@ -77,7 +77,9 @@ class Patient:
             elif t == self.tdia:
                 seg = self.seg_dia.as_tensor().swapaxes(3, 1).squeeze(0)
             else:
-                plots.save_image_mask_overlay(img[t], seg, osp.join(save_dir, f'{self.name}_{t}.png'), 0.3, aspect_ratio)
+                seg = None
+
+            plots.save_image_mask_overlay(img[t], seg, osp.join(save_dir, f'{self.name}_{t}.png'), 0.3, aspect_ratio)
 
         if gif:
             frames = [Image.open(image) for image in natsorted(glob.glob(f'{save_dir}/*.png'))]
