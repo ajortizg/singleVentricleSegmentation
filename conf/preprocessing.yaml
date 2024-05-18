@@ -1,6 +1,6 @@
 data:
   # Input data will be loaded from this dir
-  base_dir: 'results/preprocessing_prolongation_20240517-205012'
+  base_dir: 'data/acdc_right-ventricle_preprocessing_norm'
   imgs_dir: 'NIFTI_4D_Datasets'
   segs_dir: 'NIFTI_Single_Ventricle_Segmentations'
   metadata_file: 'Segmentation_volumes.xlsx'
@@ -55,40 +55,9 @@ prolongation:
 
 # Step 5
 split:
-  val:
-    - 'Adolescent_1'
-    - 'Adolescent_62'
-    - 'Adolescent_107'
-    - 'Adult_3'
-    - 'Adult_24'
-    - 'Adult_36'
-    - 'Adult_62'
-    - 'Adult_104'
-    - 'Child_14'
-    - 'Child_24'
-    - 'Child_36'
-    - 'Child_45'
-    - 'Child_53'
-    - 'patient001'
-    - 'patient005'
-    - 'patient010'
-    - 'patient015'
-    - 'patient020'
-    - 'patient025'
-    - 'patient030'
-    - 'patient035'
-    - 'patient040'
-    - 'patient045'
-    - 'patient050'
-    - 'patient055'
-    - 'patient060'
-    - 'patient065'
-    - 'patient070'
-    - 'patient075'
-    - 'patient080'
-    - 'patient085'
-    - 'patient090'
-    - 'patient095'
+  val_size: 20
+  seed: 42
+
   test:
     - 'Adolescent_53'
     - 'Adult_11'

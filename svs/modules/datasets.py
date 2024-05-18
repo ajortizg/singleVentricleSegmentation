@@ -125,7 +125,7 @@ class Patient:
             aspect_ratio (float, optional): Aspect ratio for visualization. Defaults to 1.7.
         """
         save_dir = dirs.create_subdir(save_dir, self.name)
-        img = self.get_img_array().transpose(xyzt_to_tzyx) 
+        img = self.get_img_array().transpose(xyzt_to_tzyx)
         for t in range(img.shape[0]):
             if t == self.tsys:
                 seg = self.get_seg_sys_array().swapaxes(2, 0)
@@ -160,7 +160,7 @@ class MRIBaseDataset(Dataset):
     def __len__(self):
         return len(self.df)
 
-    def __getitem__(self, idx) -> Patient:
+    def __getitem__(self, idx: int) -> Patient:
         row = self.df.iloc[idx]
         name = row["Name"]
         tsys = row["Systole"]
@@ -190,15 +190,6 @@ class RawACDCDadataset(Dataset):
         return len(self.data_dirs)
 
     def __getitem__(self, idx) -> Patient:
-        """
-        Retrieves a patient data entry including image and segmentation masks.
-
-        Args:
-            idx (int): Index of the patient directory to load.
-
-        Returns:
-            Patient: A dataclass containing the patient's data.
-        """
         patient_dir = self.data_dirs[idx]
         name = osp.basename(patient_dir)
         tdia, tsys = self.extract_diastole_systole_times(patient_dir)
