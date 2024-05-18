@@ -10,7 +10,7 @@ data:
 
 # Create visualization by overlaping images with segmentation masks.
 debug:
-  viz: false
+  viz: true
   gif: true
   dur: 200
 
@@ -51,7 +51,6 @@ prolongation:
 
 # Step 4
 # normalization:
-#   min_max_norm: false
 
 # Step 5
 split:

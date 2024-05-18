@@ -12,10 +12,10 @@ data:
 # 'myocardium':       2
 # 'left-ventricle':   3
 label: 
-  roi: 'right-ventricle'
-  tag: 1
+  roi: 'myocardium'
+  tag: 2
 
 debug:
-  viz: false
+  viz: true
   gif: true
   dur: 200

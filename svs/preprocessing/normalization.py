@@ -11,12 +11,19 @@ from svs.modules.datasets import MRIBaseDataset
 
 def normalize(x: np.ndarray, seg_dia: np.ndarray, seg_sys: np.ndarray, tdia: int, tsys: int) -> np.ndarray:
     """
-    Normalize the intensity values of a 4D image array.
+    Normalize the intensity values of a 4D image array using a custom normalization function.
+
+    This function performs intensity normalization on a 4D medical image array. It first clips the image 
+    intensities at the 95th percentile to reduce the impact of outliers. Then, it computes the average 
+    intensities within the diastole and systole segmentation masks. These averages are used to define 
+    normalization parameters that scale the image intensity values according to the formula:
+
+    n(I) = a * I / sqrt(1 + beta * I^2)
 
     Args:
         x (np.ndarray): 4D array with shape [x, y, z, t], representing the image.
-        seg_dia (np.ndarray): 3D array with shape [x, y, z], representing the diastole segmentation.
-        seg_sys (np.ndarray): 3D array with shape [x, y, z], representing the systole segmentation.
+        seg_dia (np.ndarray): 3D array with shape [x, y, z], representing the diastole segmentation mask.
+        seg_sys (np.ndarray): 3D array with shape [x, y, z], representing the systole segmentation mask.
         tdia (int): Time index for the diastole phase.
         tsys (int): Time index for the systole phase.
 
