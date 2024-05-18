@@ -1,6 +1,7 @@
 from svs.preprocessing import setup_acdc
 from svs.preprocessing import cutting
 from svs.preprocessing import prolongation
+from svs.preprocessing import normalization
 
 
 def run():
@@ -12,6 +13,9 @@ def run():
     tree_dirs.append(save_dir)
 
     save_dir = prolongation.run(base_dir=save_dir)
+    tree_dirs.append(save_dir)
+
+    save_dir = normalization.run(base_dir=save_dir)
     tree_dirs.append(save_dir)
 
     for i, d in enumerate(tree_dirs):

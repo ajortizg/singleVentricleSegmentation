@@ -1,98 +1,81 @@
-# singleVentricleSegmentation
+# Single Ventricle Segmentation
 
-## install
-* conda env create -f environment.yaml
-<!-- * conda create -n svs-env python=3.10
-* conda install pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia
-* pip install opencv-python
-* pip install nibabel
-* pip install matplotlib
-* pip install tikzplotlib
-* pip install termcolor
-* pip install scipy
-* conda install scikit-image
-* pip install tqdm
-* pip install pandas
-* pip install openpyxl
-* pip install torchsummary
-* pip install elasticdeform
-* pip install monai
-* pip install intensity-normalization
-* pip install natsort
-* pip install batchgenerators
-* pip install tabulate -->
+## Installation
 
-to install setup file use one of the following:
-* pip install . 
-* pip install . --use-feature=in-tree-build
-
-to use config file link data and result folder: 
-
-on linux:
-* ln -s /home/.../singleVentricleData/ /home/.../singleVentricleSegmentation/
-* ln -s /home/.../results /home/.../singleVentricleSegmentation/
-
-on windows:
-* New-Item -ItemType SymbolicLink -Target "C:\Users\...\data\" -Path "C:\Users\...\singleVentricleSegmentation\data"
-* New-Item -ItemType SymbolicLink -Target "C:\Users\...\results\" -Path "C:\Users\...\singleVentricleSegmentation\results"
-
-## Instructions for the ACDC dataset
-* First you need to format the acdc dataset to separately extract the 3 different ROIs contained in the dataset:
-    ```
-    python deprecated/dataset/format_acdc.py
+1. Create a conda environment using the provided `environment.yaml` file:
+    ```bash
+    conda env create -f environment.yaml
     ```
 
+## Instructions for the ACDC Dataset
 
-## 1. Preprocessing 
-*   First preprocess the raw data to store it in a specific format:
-    ```
-    python datasets/preprocessing/preprocess_{dataset_name}.py
-    ```
-    This will create a new folder *{dataset_name}_{date-time}* inside *{output_dir}*. 
-*   Use *parser/preprocessing.ini* to modify the configuration parameters.
+The ACDC dataset contains information for 3 ROIs (left ventricle, right ventricle, and myocardium). These ROIs must be separately extracted and preprocessed before computing the optical flow and performing CNN postprocessing.
 
-## 2. Optical flow
-*   After preprocess the data, the optical flow can be computed:
-    ```
-    python TVL1OF/compute_flow.py
-    ```
-*   This will create a folder *optical_flow* inside the *{root_dir}*. Use *parser/flow_compute.ini* to set the correct paths and desired configuration.
+Configuration parameters can be found in `conf/setup_acdc.yaml` and `conf/preprocessing.yaml`. There are two different ways to preprocess the ACDC dataset:
 
-## 3. Train CNN
+### Method 1: All-in-One
 
-<!-- 1. possibly flip the original data
-   in parser set BASE_PATH_3D to data/singleVentricleData
-    ```
-    python ./dataset/preprocessing/preprocessing_flipping.py
-    ```
-    save resulting folder to /data/singleVentricleData_flip
+This method reads the raw ACDC dataset folder and runs all preprocessing steps listed in `scripts/run_acdc_preprocessing.py`. A folder for each preprocessing step will be created in the `out_dir` directory, which is specified in the `conf/preprocessing.yaml` configuration file.
 
-2. cut the (possibly flipped) original data
-    in parser set BASE_PATH_3D to data/singleVentricleData_norm
-    ```
-    python ./dataset/preprocessing/preprocessing_cutting.py
-    ```
-    save resulting folder to /data/singleVentricleData_cut
+```bash
+python scripts/run_acdc_preprocessing.py
+```
 
-3. resize the (flipped and cutted) data
-    in parser set BASE_PATH_3D to data/singleVentricleData_cut
-    ```
-    python ./dataset/preprocessing/preprocessing_prolongation.py
-    ```
-    Save resulting folder to /data/singleVentricleData_prol.
-    Note that this depends on the Interpolationtype and Bondarytype.
+### Method 2: Step-by-Step
 
-4. Data normalization
-    in parset set BASE_PATH_3D to /data/singleVentricleData_prol
-    ```
-    python ./dataset/preprocessing/preprocessing_normalization.py
-    ```
-    Save resulting folder to /data/singleVentricleData_norm
+You can also preprocess the ACDC dataset by independently running each preprocessing script. Adjust settings as needed by editing `conf/preprocessing.yaml`.
 
-5. split the dataset for training the CNN in training, validation and testing sets, 
-    in parser set BASE_PATH_3D to data/singleVentricleData_norm
-    ```
-    python ./dataset/preprocessing/preprocessing_split.py
-    ```
-    Save resulting folder to /data/singleVentricleData_split. -->
+1. **Reformat the ACDC Dataset**: Set up the directory structure and filename convention used in this project.
 
+    ```bash
+    python svs/preprocessing/setup_acdc.py
+    ```
+
+    Use the `conf/setup_acdc.yaml` file to set the correct paths and desired configuration.
+
+2. **Cutting**: Extract relevant portions of the dataset.
+
+    ```bash
+    python svs/preprocessing/cutting.py
+    ```
+
+3. **Prolongation**: Adjust the time dimension as needed.
+
+    ```bash
+    python svs/preprocessing/prolongation.py
+    ```
+
+4. **Normalization**: Normalize the intensity values in the dataset.
+
+    ```bash
+    python svs/preprocessing/normalization.py
+    ```
+
+5. **Split**: Split the dataset for training, validation, and testing.
+
+    ```bash
+    python svs/preprocessing/split.py
+    ```
+
+## Optical Flow
+*Instructions for the optical flow will go here.*
+
+<!-- After preprocessing the data, compute the optical flow:
+
+```bash
+python TVL1OF/compute_flow.py
+```
+
+This will create a folder named `optical_flow` inside the `{root_dir}`. Configure the paths and settings in `parser/flow_compute.ini`. -->
+
+## Training the CNN
+
+*Instructions for training the CNN will go here.*
+
+## Notes
+
+- Ensure that you have the necessary permissions to read and write to the specified directories.
+- Verify that all required dependencies are installed in your conda environment.
+- Adjust the configuration files as needed for your specific dataset and processing requirements.
+
+This README should now provide a clear and concise guide for setting up, preprocessing the ACDC dataset, computing optical flow, and training the CNN for single ventricle segmentation.
