@@ -9,13 +9,13 @@ from typing import Optional, Union
 
 # Use 'Agg' backend for matplotlib to work in environments without a display
 matplotlib.use('Agg')
+plt.rcParams["savefig.bbox"] = 'tight'
 
 
 def save_image_mask_overlay(
     img3d: Union[np.ndarray, torch.Tensor],
     mask3d: Optional[Union[np.ndarray, torch.Tensor]],
     filename: str,
-    save_dir: str,
     alpha: float,
     aspect_ratio: float = 1.7
 ):
@@ -61,6 +61,5 @@ def save_image_mask_overlay(
             ax.axis('off')
         else:
             ax.axis('off')
-    path_name = osp.join(save_dir, filename)
-    plt.savefig(path_name, dpi=100)
+    plt.savefig(filename, dpi=100)
     plt.close('all')

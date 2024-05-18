@@ -149,7 +149,7 @@ def run(config_dir='conf', config_name='preprocessing.yaml', base_dir=None):
             zooms=(zoom_x * nx / nx_prol, zoom_y * ny / ny_prol, zoom_z * nz / nz_prol)
         )
 
-        prol_patient.save_nifti(out_img_dir, out_seg_dir)
+        prol_patient.write_nifti(out_img_dir, out_seg_dir)
 
         if cfg.debug.viz:
             prol_patient.viz_data(osp.join(save_dir, 'images'), cfg.debug.gif, cfg.debug.dur, aspect_ratio=5.)

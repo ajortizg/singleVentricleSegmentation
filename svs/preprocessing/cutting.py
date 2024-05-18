@@ -115,7 +115,7 @@ def run(config_dir='conf', config_name='preprocessing.yaml', base_dir=None):
             header=patient.seg_sys.header.copy(),
             update_shape=True
         )
-        cut_patient.save_nifti(out_img_dir, out_seg_dir)
+        cut_patient.write_nifti(out_img_dir, out_seg_dir)
 
         if cfg.debug.viz:
             cut_patient.viz_data(osp.join(save_dir, "images"), cfg.debug.gif, cfg.debug.dur)

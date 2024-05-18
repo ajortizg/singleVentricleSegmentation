@@ -71,7 +71,7 @@ def run(config_dir='conf', config_name='preprocessing.yaml', base_dir=None):
         # Update patient image with normalized values
         patient.set_img_from_array(norm_img_array, patient.img.affine.copy(), patient.img.header.copy(), update_shape=False)
 
-        patient.save_nifti(out_img_dir, out_seg_dir)
+        patient.write_nifti(out_img_dir, out_seg_dir)
 
         if cfg.debug.viz:
             patient.viz_data(osp.join(save_dir, 'images'), cfg.debug.gif, cfg.debug.dur, aspect_ratio=5.0)
