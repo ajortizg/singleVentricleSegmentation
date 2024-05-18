@@ -1,6 +1,6 @@
 data:
   # Input data will be loaded from this dir
-  base_dir: 'results/preprocessing_cut_20240517-152210'
+  base_dir: 'results/preprocessing_prolongation_20240517-205012'
   imgs_dir: 'NIFTI_4D_Datasets'
   segs_dir: 'NIFTI_Single_Ventricle_Segmentations'
   metadata_file: 'Segmentation_volumes.xlsx'
@@ -50,8 +50,8 @@ prolongation:
   boundary: 'MIRROR'        # NEAREST, MIRROR or REFLECT
 
 # Step 4
-normalization:
-  min_max_norm: false
+# normalization:
+#   min_max_norm: false
 
 # Step 5
 split:

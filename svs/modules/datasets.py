@@ -10,7 +10,7 @@ from PIL import Image
 import glob
 from natsort import natsorted
 
-from svs.utils import paths
+from svs.utils import dirs
 from svs.utils import plots
 
 
@@ -18,6 +18,7 @@ xyzt_to_zyxt = (2, 1, 0, 3)
 zyxt_to_xyzt = (2, 1, 0, 3)
 xyz_to_zyx = (2, 1, 0)
 zyx_to_xyz = (2, 1, 0)
+xyzt_to_tzyx = (3, 2, 1, 0)
 
 
 @dataclass
@@ -34,25 +35,25 @@ class Patient:
     seg_dia: Optional[nib.Nifti1Image] = None
     seg_sys: Optional[nib.Nifti1Image] = None
 
-    def img_array(self) -> np.ndarray:
+    def get_img_array(self) -> np.ndarray:
         """
-        Returns the 4D image data as a NumPy array.
+        Returns the 4D image data as a NumPy array with shape [x,y,z,t]
         """
         return self.img.get_fdata() if self.img else np.array([])
 
-    def seg_dia_array(self) -> np.ndarray:
+    def get_seg_dia_array(self) -> np.ndarray:
         """
-        Returns the diastole segmentation mask data as a NumPy array.
+        Returns the diastole segmentation mask data as a NumPy array with shape [x,y,z]
         """
         return self.seg_dia.get_fdata() if self.seg_dia else np.array([])
 
-    def seg_sys_array(self) -> np.ndarray:
+    def get_seg_sys_array(self) -> np.ndarray:
         """
-        Returns the systole segmentation mask data as a NumPy array.
+        Returns the systole segmentation mask data as a NumPy array with shape [x,y,z]
         """
         return self.seg_sys.get_fdata() if self.seg_sys else np.array([])
 
-    def img_from_array(self, x: np.ndarray, affine: nib.Nifti1Image, header: nib.Nifti1Header, update_shape: bool, zooms=None):
+    def set_img_from_array(self, x: np.ndarray, affine: nib.Nifti1Image, header: nib.Nifti1Header, update_shape: bool, zooms=None):
         """
         Creates a Nifti1Image from a NumPy array for the 4D image data.
 
@@ -68,7 +69,7 @@ class Patient:
             header.set_zooms(zooms)
         self.img = nib.Nifti1Image(x, affine=affine, header=header)
 
-    def seg_dia_from_array(self, x: np.ndarray, affine: nib.Nifti1Image, header: nib.Nifti1Header, update_shape: bool, zooms=None):
+    def set_seg_dia_from_array(self, x: np.ndarray, affine: nib.Nifti1Image, header: nib.Nifti1Header, update_shape: bool, zooms=None):
         """
         Creates a Nifti1Image from a NumPy array for the diastole segmentation mask.
 
@@ -84,7 +85,7 @@ class Patient:
             header.set_zooms(zooms)
         self.seg_dia = nib.Nifti1Image(x, affine=affine, header=header)
 
-    def seg_sys_from_array(self, x: np.ndarray, affine: nib.Nifti1Image, header: nib.Nifti1Header, update_shape: bool, zooms=None):
+    def set_seg_sys_from_array(self, x: np.ndarray, affine: nib.Nifti1Image, header: nib.Nifti1Header, update_shape: bool, zooms=None):
         """
         Creates a Nifti1Image from a NumPy array for the systole segmentation mask.
 
@@ -108,7 +109,7 @@ class Patient:
             out_img_dir (str): Directory to save the 4D image.
             out_seg_dir (str): Directory to save the segmentation masks.
         """
-        out_patient_dir = paths.create_subdir(out_seg_dir, self.name)
+        out_patient_dir = dirs.create_subdir(out_seg_dir, self.name)
         nib.save(self.img, osp.join(out_img_dir, f'{self.name}.nii.gz'))
         nib.save(self.seg_dia, osp.join(out_patient_dir,  f"{self.name}_Diastole_Labelmap.nii.gz"))
         nib.save(self.seg_sys, osp.join(out_patient_dir, f"{self.name}_Systole_Labelmap.nii.gz"))
@@ -123,13 +124,13 @@ class Patient:
             dur (int): Duration of each frame in the GIF (in milliseconds).
             aspect_ratio (float, optional): Aspect ratio for visualization. Defaults to 1.7.
         """
-        save_dir = paths.create_subdir(save_dir, self.name)
-        img = self.img_array().transpose((3, 2, 1, 0))  # x,y,z,t -> t,z,y,x
+        save_dir = dirs.create_subdir(save_dir, self.name)
+        img = self.get_img_array().transpose(xyzt_to_tzyx) 
         for t in range(img.shape[0]):
             if t == self.tsys:
-                seg = self.seg_sys_array().swapaxes(2, 0)
+                seg = self.get_seg_sys_array().swapaxes(2, 0)
             elif t == self.tdia:
-                seg = self.seg_dia_array().swapaxes(2, 0)
+                seg = self.get_seg_dia_array().swapaxes(2, 0)
             else:
                 seg = None
             plots.save_image_mask_overlay(img[t], seg, f'{self.name}_{t}.png', save_dir, 0.3, aspect_ratio)

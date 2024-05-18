@@ -5,7 +5,7 @@ import pandas as pd
 from ml_collections import config_dict
 import yaml
 
-from svs.utils import paths
+from svs.utils import dirs
 from svs.modules.datasets import MRIBaseDataset, Patient
 
 
@@ -37,18 +37,10 @@ def get_range_mask(mask, print_range=False, name=""):
 
 
 def run(config_dir='conf', config_name='preprocessing.yaml', base_dir=None):
-    """
-    Main function for preprocessing MRI data.
-
-    Args:
-        config_dir (str): Directory containing the configuration file.
-        config_name (str): Name of the configuration file.
-        base_dir (str): Optional base directory for MRI data. When used, the config base_dir will be replaced
-    """
     print('Cutting')
     # Load configuration
     cfg = config_dict.ConfigDict(yaml.load(open(osp.join(config_dir, config_name), 'r'), Loader=yaml.FullLoader))
-    save_dir = paths.create_timestamped_dir(cfg.data.out_dir, "preprocessing_cut")
+    save_dir = dirs.create_timestamped_dir(cfg.data.out_dir, "preprocessing_cut")
 
     if base_dir is not None:
         cfg.data.base_dir = base_dir
@@ -63,8 +55,8 @@ def run(config_dir='conf', config_name='preprocessing.yaml', base_dir=None):
     original_NZ = np.zeros(len(ds))
     original_NT = np.zeros(len(ds))
 
-    out_img_dir = paths.create_subdir(save_dir, cfg.data.imgs_dir)
-    out_seg_dir = paths.create_subdir(save_dir, cfg.data.segs_dir)
+    out_img_dir = dirs.create_subdir(save_dir, cfg.data.imgs_dir)
+    out_seg_dir = dirs.create_subdir(save_dir, cfg.data.segs_dir)
 
     for i in tqdm(range(len(ds))):
         patient = ds[i]
@@ -74,7 +66,7 @@ def run(config_dir='conf', config_name='preprocessing.yaml', base_dir=None):
         zmin_sys, zmax_sys, ymin_sys, ymax_sys, xmin_sys, xmax_sys = get_range_mask(patient.seg_sys.get_fdata())
 
         # Original shape of the 4D image
-        NX, NY, NZ, NT = patient.img_array().shape
+        NX, NY, NZ, NT = patient.get_img_array().shape
 
         # Extend range by tolerance values from the configuration
         x_tol = cfg.cutting.x_tol
@@ -105,20 +97,20 @@ def run(config_dir='conf', config_name='preprocessing.yaml', base_dir=None):
         )
 
         # Crop and save the image and segmentation masks
-        cut_patient.img_from_array(
-            x=patient.img_array()[xmin_total:xmax_total + 1, ymin_total:ymax_total + 1, zmin_total:zmax_total + 1, :],
+        cut_patient.set_img_from_array(
+            x=patient.get_img_array()[xmin_total:xmax_total + 1, ymin_total:ymax_total + 1, zmin_total:zmax_total + 1, :],
             affine=patient.img.affine.copy(),
             header=patient.img.header.copy(),
             update_shape=True
         )
-        cut_patient.seg_dia_from_array(
-            x=patient.seg_dia_array()[xmin_total:xmax_total + 1, ymin_total:ymax_total + 1, zmin_total:zmax_total + 1],
+        cut_patient.set_seg_dia_from_array(
+            x=patient.get_seg_dia_array()[xmin_total:xmax_total + 1, ymin_total:ymax_total + 1, zmin_total:zmax_total + 1],
             affine=patient.seg_dia.affine.copy(),
             header=patient.seg_dia.header.copy(),
             update_shape=True
         )
-        cut_patient.seg_sys_from_array(
-            x=patient.seg_sys_array()[xmin_total:xmax_total + 1, ymin_total:ymax_total + 1, zmin_total:zmax_total + 1],
+        cut_patient.set_seg_sys_from_array(
+            x=patient.get_seg_sys_array()[xmin_total:xmax_total + 1, ymin_total:ymax_total + 1, zmin_total:zmax_total + 1],
             affine=patient.seg_sys.affine.copy(),
             header=patient.seg_sys.header.copy(),
             update_shape=True

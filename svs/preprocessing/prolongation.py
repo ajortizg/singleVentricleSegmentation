@@ -7,7 +7,7 @@ import os.path as osp
 import torch.nn.functional as F
 
 from opticalFlow_cuda_ext import opticalFlow
-from svs.utils import paths
+from svs.utils import dirs
 from svs.modules.datasets import MRIBaseDataset, Patient, xyz_to_zyx, zyx_to_xyz, xyzt_to_zyxt, zyxt_to_xyzt
 
 
@@ -58,16 +58,16 @@ def time_pading(maxt: int, img: torch.Tensor) -> torch.Tensor:
 
 
 def run(config_dir='conf', config_name='preprocessing.yaml', base_dir=None):
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
     print(f'Prolongation, devive: {device}')
 
     # Load configuration
     cfg = config_dict.ConfigDict(yaml.load(open(osp.join(config_dir, config_name), 'r'), Loader=yaml.FullLoader))
 
     # Create output dirs
-    save_dir = paths.create_timestamped_dir(cfg.data.out_dir, "preprocessing_prolongation")
-    out_img_dir = paths.create_subdir(save_dir, cfg.data.imgs_dir)
-    out_seg_dir = paths.create_subdir(save_dir, cfg.data.segs_dir)
+    save_dir = dirs.create_timestamped_dir(cfg.data.out_dir, 'preprocessing_prol')
+    out_img_dir = dirs.create_subdir(save_dir, cfg.data.imgs_dir)
+    out_seg_dir = dirs.create_subdir(save_dir, cfg.data.segs_dir)
 
     # Prolongation type
     interpolation_type, boundary_type = get_interpolation_type(cfg.prolongation.interpolation, cfg.prolongation.boundary)
@@ -98,9 +98,9 @@ def run(config_dir='conf', config_name='preprocessing.yaml', base_dir=None):
         zoom_t = zooms[3]
 
         # Conver numpy arrays to torch tensor and permute the axes
-        img_t = torch.from_numpy(patient.img_array()).float().permute(xyzt_to_zyxt).to(device)
-        seg_dia_t = torch.from_numpy(patient.seg_dia_array()).float().permute(xyz_to_zyx).to(device)
-        seg_sys_t = torch.from_numpy(patient.seg_sys_array()).float().permute(xyz_to_zyx).to(device)
+        img_t = torch.from_numpy(patient.get_img_array()).float().permute(xyzt_to_zyxt).to(device)
+        seg_dia_t = torch.from_numpy(patient.get_seg_dia_array()).float().permute(xyz_to_zyx).to(device)
+        seg_sys_t = torch.from_numpy(patient.get_seg_sys_array()).float().permute(xyz_to_zyx).to(device)
 
         # Generate old mesh
         nz, ny, nx, nt = img_t.shape
@@ -127,21 +127,21 @@ def run(config_dir='conf', config_name='preprocessing.yaml', base_dir=None):
             init_ts=patient.init_ts,
             final_ts=patient.final_ts
         )
-        prol_patient.img_from_array(
+        prol_patient.set_img_from_array(
             x=prol_img_t.permute(zyxt_to_xyzt).cpu().detach().numpy(),
             affine=patient.img.affine.copy(),
             header=patient.img.header.copy(),
             update_shape=True,
             zooms=(zoom_x * nx / nx_prol, zoom_y * ny / ny_prol, zoom_z * nz / nz_prol, zoom_t / nt_prol)
         )
-        prol_patient.seg_dia_from_array(
+        prol_patient.set_seg_dia_from_array(
             x=prol_seg_dia_t.permute(zyx_to_xyz).cpu().detach().numpy(),
             affine=patient.seg_dia.affine.copy(),
             header=patient.seg_dia.header.copy(),
             update_shape=True,
             zooms=(zoom_x * nx / nx_prol, zoom_y * ny / ny_prol, zoom_z * nz / nz_prol)
         )
-        prol_patient.seg_sys_from_array(
+        prol_patient.set_seg_sys_from_array(
             x=prol_seg_sys_t.permute(zyx_to_xyz).cpu().detach().numpy(),
             affine=patient.seg_sys.affine.copy(),
             header=patient.seg_sys.header.copy(),
@@ -152,7 +152,7 @@ def run(config_dir='conf', config_name='preprocessing.yaml', base_dir=None):
         prol_patient.save_nifti(out_img_dir, out_seg_dir)
 
         if cfg.debug.viz:
-            prol_patient.viz_data(osp.join(save_dir, "images"), cfg.debug.gif, cfg.debug.dur, aspect_ratio=5.)
+            prol_patient.viz_data(osp.join(save_dir, 'images'), cfg.debug.gif, cfg.debug.dur, aspect_ratio=5.)
 
         xprolongfac[i] = nx_prol / nx
         yprolongfac[i] = ny_prol / ny
@@ -168,7 +168,7 @@ def run(config_dir='conf', config_name='preprocessing.yaml', base_dir=None):
     output_df_file = osp.join(save_dir, cfg.data.metadata_file)
     output_df.to_excel(output_df_file, index=False)
 
-    with open(osp.join(save_dir, "config.json"), "w") as f:
+    with open(osp.join(save_dir, 'config.json'), 'w') as f:
         f.write(cfg.to_json(indent=4))
     return save_dir
 
