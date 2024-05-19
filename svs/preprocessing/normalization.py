@@ -4,46 +4,42 @@ from ml_collections import config_dict
 import os.path as osp
 import math
 import yaml
+from monai.data import MetaTensor
+import torch
 
 from svs.utils import dirs
 from svs.modules.datasets import MRIBaseDataset
 
 
-def normalize(x: np.ndarray, seg_dia: np.ndarray, seg_sys: np.ndarray, tdia: int, tsys: int) -> np.ndarray:
+def normalize(x: MetaTensor, seg_dia: MetaTensor, seg_sys: MetaTensor, tdia: int, tsys: int) -> MetaTensor:
     """
     Normalize the intensity values of a 4D image array using a custom normalization function.
 
-    This function performs intensity normalization on a 4D medical image array. It first clips the image 
-    intensities at the 95th percentile to reduce the impact of outliers. Then, it computes the average 
-    intensities within the diastole and systole segmentation masks. These averages are used to define 
-    normalization parameters that scale the image intensity values according to the formula:
-
-    n(I) = a * I / sqrt(1 + beta * I^2)
-
     Args:
-        x (np.ndarray): 4D array with shape [x, y, z, t], representing the image.
-        seg_dia (np.ndarray): 3D array with shape [x, y, z], representing the diastole segmentation mask.
-        seg_sys (np.ndarray): 3D array with shape [x, y, z], representing the systole segmentation mask.
+        x (MetaTensor): 4D tensor with shape [t, x, y, z], representing the image.
+        seg_dia (MetaTensor): 3D tensor with shape [c, x, y, z], representing the diastole segmentation mask.
+        seg_sys (MetaTensor): 3D tensor with shape [c, x, y, z], representing the systole segmentation mask.
         tdia (int): Time index for the diastole phase.
         tsys (int): Time index for the systole phase.
 
     Returns:
-        np.ndarray: The normalized 4D image array.
+        torch.Tensor: The normalized 4D image MetaTensor.
     """
-    p95 = np.percentile(x, 95)
-    x = np.clip(x, 0, p95)
-
-    avg_dia = np.mean(x[..., tdia], where=seg_dia.astype('bool'))
-    avg_sys = np.mean(x[..., tsys], where=seg_sys.astype('bool'))
+    p95 = np.quantile(x.array, 0.95).item()
+    x = torch.clamp(x, 0, p95)
+    avg_dia = torch.mean(x[tdia][seg_dia.squeeze(0).bool()]).item()
+    avg_sys = torch.mean(x[tsys][seg_sys.squeeze(0).bool()]).item()
     avg = 0.5 * (avg_dia + avg_sys)
 
-    # n(I) = a I/sqrt(1+beta I**2)
+    # n(I) = a I / sqrt(1 + beta I^2)
     norm_a = math.sqrt(p95 * p95 - avg * avg) / (math.sqrt(3) * p95 * avg)
     norm_b = (p95 * p95 - 4. * avg * avg) / (3. * p95 * p95 * avg * avg)
-    x = norm_a * x / np.sqrt(1 + norm_b * x**2)
+    x = norm_a * x / torch.sqrt(1 + norm_b * x**2)
+
     # print("norm(per95) = ", norm_a * p95 / math.sqrt(1 + norm_b * p95 * p95))
     # print("norm(avg) = ", norm_a * avg / math.sqrt(1 + norm_b * avg * avg))
-    # print(np.min(x), np.max(x))
+    # print(torch.min(x), torch.max(x))
+
     return x
 
 
@@ -65,16 +61,12 @@ def run(config_dir='conf', config_name='preprocessing.yaml', base_dir=None):
     for i in tqdm(range(len(ds))):
         patient = ds[i]
 
-        # Normalize image intensity values
-        norm_img_array = normalize(patient.get_img_array(), patient.get_seg_dia_array(), patient.get_seg_sys_array(), patient.tdia, patient.tsys)
-
-        # Update patient image with normalized values
-        patient.set_img_from_array(norm_img_array, patient.img.affine.copy(), patient.img.header.copy(), update_shape=False)
+        patient.img = normalize(patient.img, patient.seg_dia, patient.seg_sys, patient.tdia, patient.tsys)
 
         patient.write_nifti(out_img_dir, out_seg_dir)
 
         if cfg.debug.viz:
-            patient.viz_data(osp.join(save_dir, 'images'), cfg.debug.gif, cfg.debug.dur, aspect_ratio=5.0)
+            patient.viz_data(osp.join(save_dir, "images"), cfg.debug.gif, cfg.debug.dur, cfg.debug.alpha, cfg.debug.color, 5.)
 
     # Save metadata to Excel file
     ds.df.to_excel(osp.join(save_dir, cfg.data.metadata_file), index=False)

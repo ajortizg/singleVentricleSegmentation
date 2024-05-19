@@ -53,10 +53,6 @@ def run(config_dir='conf', config_name='preprocessing.yaml', base_dir=None):
         cfg.data.base_dir = base_dir
     ds = MRIBaseDataset(cfg.data.base_dir, cfg.data.imgs_dir, cfg.data.segs_dir, cfg.data.metadata_file)
 
-    # Generate columns for (x,y,z)-shifts and original dimensions
-    xshifts = np.zeros(len(ds))
-    yshifts = np.zeros(len(ds))
-    zshifts = np.zeros(len(ds))
     original_NX = np.zeros(len(ds))
     original_NY = np.zeros(len(ds))
     original_NZ = np.zeros(len(ds))
@@ -86,9 +82,6 @@ def run(config_dir='conf', config_name='preprocessing.yaml', base_dir=None):
         zmin_total = max(0, min(zmin_dia, zmin_sys) - z_tol)
         zmax_total = min(NZ - 1, max(zmax_dia, zmax_sys) + z_tol)
 
-        xshifts[i] = xmin_total
-        yshifts[i] = ymin_total
-        zshifts[i] = zmin_total
         original_NX[i] = NX
         original_NY[i] = NY
         original_NZ[i] = NZ
@@ -109,9 +102,6 @@ def run(config_dir='conf', config_name='preprocessing.yaml', base_dir=None):
 
    # Save metadata with shifts and original dimensions
     output_df = ds.df.copy()
-    output_df['xshift'] = xshifts
-    output_df['yshift'] = yshifts
-    output_df['zshift'] = zshifts
     output_df['original_NX'] = original_NX
     output_df['original_NY'] = original_NY
     output_df['original_NZ'] = original_NZ

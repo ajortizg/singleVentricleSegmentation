@@ -1,6 +1,6 @@
 data:
   # Input data will be loaded from this dir
-  base_dir: 'results/preprocessing_cut_20240519-184356'
+  base_dir: 'results/preprocessing_norm_20240519-205722'
   imgs_dir: 'NIFTI_4D_Datasets'
   segs_dir: 'NIFTI_Single_Ventricle_Segmentations'
   metadata_file: 'Segmentation_volumes.xlsx'
@@ -10,7 +10,7 @@ data:
 
 # Create visualization by overlaping images with segmentation masks.
 debug:
-  viz: false
+  viz: true
   alpha: 0.3
   color:
     - 0
