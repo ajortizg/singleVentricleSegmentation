@@ -1,6 +1,6 @@
 data:
   # Input data will be loaded from this dir
-  base_dir: 'data/acdc_right-ventricle_preprocessing_norm'
+  base_dir: 'results/acdc_right-ventricle_20240519-114808'
   imgs_dir: 'NIFTI_4D_Datasets'
   segs_dir: 'NIFTI_Single_Ventricle_Segmentations'
   metadata_file: 'Segmentation_volumes.xlsx'
@@ -10,23 +10,29 @@ data:
 
 # Create visualization by overlaping images with segmentation masks.
 debug:
-  viz: true
+  viz: false
+  alpha: 0.3
+  color:
+    - 0
+    - 1
+    - 1
+  aspect_ratio: 1.7
   gif: true
   dur: 200
 
-# Step 1
-# SV dataset has some inconsistencies. No need to do this step for ACDC dataset
-flipping:
-  patients: 
-    - Adolescent_7
-    - Adolescent_26
-    - Adolescent_54
-    - Adolescent_75
-    - Adult_6
-    - Adult_11
-    - Adult_16
-    - Adult_17
-    - Child_27
+# Step 2
+orientation:
+  axcodes: 'RAS'
+
+# Step 3
+isotropic_resample:
+  pixdim:
+  - 1.0
+  - 1.0
+  - 1.0
+  mode: 'bilinear'        # nearest, bilinear or bicubic
+  padding_mode: 'border'  # zeros, border or reflection
+  align_corners: false
 
 # Step 2
 cutting:

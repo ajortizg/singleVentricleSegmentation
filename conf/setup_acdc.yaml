@@ -12,8 +12,8 @@ data:
 # 'myocardium':       2
 # 'left-ventricle':   3
 label: 
-  roi: 'myocardium'
-  tag: 2
+  roi: 'right-ventricle'
+  tag: 1
 
 debug:
   viz: true

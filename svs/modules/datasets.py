@@ -23,11 +23,14 @@ from svs.utils import dirs
 from svs.utils import plots
 from svs.utils import io
 
-xyzt_to_zyxt = (2, 1, 0, 3)
-zyxt_to_xyzt = (2, 1, 0, 3)
-xyz_to_zyx = (2, 1, 0)
-zyx_to_xyz = (2, 1, 0)
-xyzt_to_tzyx = (3, 2, 1, 0)
+# xyzt_to_zyxt = (2, 1, 0, 3)
+# zyxt_to_xyzt = (2, 1, 0, 3)
+# xyz_to_zyx = (2, 1, 0)
+# zyx_to_xyz = (2, 1, 0)
+# xyzt_to_tzyx = (3, 2, 1, 0)
+
+txyz_to_tzyx = (3, 1)
+cxyz_to_czyx = (3, 1)
 
 
 @dataclass
@@ -52,11 +55,11 @@ class Patient:
             out_img_dir (str): Directory to save the 4D image.
             out_seg_dir (str): Directory to save the segmentation masks.
         """
-        io.write_metatensor_to_nifti(self.img, osp.join(out_img_dir, f'{self.name}.nii.gz'))
+        io.write_metatensor_to_nifti(self.img, osp.join(out_img_dir, f'{self.name}.nii.gz'), resample=False)
 
         out_patient_dir = dirs.create_subdir(out_seg_dir, self.name)
-        io.write_metatensor_to_nifti(self.seg_dia, osp.join(out_patient_dir,  f'{self.name}_Diastole_Labelmap.nii.gz'))
-        io.write_metatensor_to_nifti(self.seg_sys, osp.join(out_patient_dir, f'{self.name}_Systole_Labelmap.nii.gz'))
+        io.write_metatensor_to_nifti(self.seg_dia, osp.join(out_patient_dir,  f'{self.name}_Diastole_Labelmap.nii.gz'), resample=False)
+        io.write_metatensor_to_nifti(self.seg_sys, osp.join(out_patient_dir, f'{self.name}_Systole_Labelmap.nii.gz'), resample=False)
 
     def viz_data(self, save_dir, gif, dur, alpha=0.3, color=(1, 1, 0), aspect_ratio=1.7):
         """
@@ -102,6 +105,7 @@ class MRIBaseDataset(Dataset):
         self.imgs_dir = osp.join(base_dir, imgs_dir)
         self.segs_dir = osp.join(base_dir, segs_dir)
         self.df = pd.read_excel(osp.join(base_dir, metadata_file))
+        self.loader = LoadImage(image_only=True, ensure_channel_first=True, simple_keys=True)
 
     def __len__(self):
         return len(self.df)
@@ -112,12 +116,12 @@ class MRIBaseDataset(Dataset):
         tsys = row["Systole"]
         tdia = row["Diastole"]
 
-        # Load 4D image [x,y,z,t]
-        img = nib.load(osp.join(self.imgs_dir, f'{name}.nii.gz'))
+        # Load 4D image [t,x,y,z]
+        img = self.loader(osp.join(self.imgs_dir, f'{name}.nii.gz'))
 
-        # Load segmentation masks [x,y,z]
-        seg_dia = nib.load(osp.join(self.segs_dir, name, f'{name}_Diastole_Labelmap.nii.gz'))
-        seg_sys = nib.load(osp.join(self.segs_dir, name,   f'{name}_Systole_Labelmap.nii.gz'))
+        # Load segmentation masks [c,x,y,z]
+        seg_dia = self.loader(osp.join(self.segs_dir, name, f'{name}_Diastole_Labelmap.nii.gz'))
+        seg_sys = self.loader(osp.join(self.segs_dir, name,   f'{name}_Systole_Labelmap.nii.gz'))
 
         return Patient(name, tsys, tdia,  min(tdia, tsys), max(tdia, tsys), img, seg_dia, seg_sys)
 

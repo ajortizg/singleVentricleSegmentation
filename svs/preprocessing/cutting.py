@@ -1,38 +1,45 @@
+import torch
 import numpy as np
 from tqdm import tqdm
 import os.path as osp
 import pandas as pd
 from ml_collections import config_dict
 import yaml
+from monai.data import MetaTensor
 
 from svs.utils import dirs
 from svs.modules.datasets import MRIBaseDataset, Patient
 
 
-def get_range_mask(mask, print_range=False, name=""):
+def get_range_mask(mask: MetaTensor, print_range=False, name=""):
     """
     Compute the bounding box of non-zero values in a 3D mask.
 
     Args:
-        mask (np.ndarray): The 3D mask array.
+        mask (MetaTensor): The 3D mask tensor.
         print_range (bool): Whether to print the range of the mask.
         name (str): Name of the mask for printing purposes.
 
     Returns:
         Tuple[int, int, int, int, int, int]: The bounding box (zmin, zmax, ymin, ymax, xmin, xmax).
     """
-    x, y, z = np.nonzero(mask)
-    xmin = np.min(x)
-    xmax = np.max(x)
-    ymin = np.min(y)
-    ymax = np.max(y)
-    zmin = np.min(z)
-    zmax = np.max(z)
+    # Find non-zero indices
+    non_zero_indices = torch.nonzero(mask, as_tuple=True)
+
+    # Get the min and max values for each dimension
+    xmin = torch.min(non_zero_indices[0]).item()
+    xmax = torch.max(non_zero_indices[0]).item()
+    ymin = torch.min(non_zero_indices[1]).item()
+    ymax = torch.max(non_zero_indices[1]).item()
+    zmin = torch.min(non_zero_indices[2]).item()
+    zmax = torch.max(non_zero_indices[2]).item()
+
     if print_range:
         print("\nrange of mask", name, ":")
-        print("(xmin, xmax) = ", xmin, ",", xmax)
-        print("(ymin, ymax) = ", ymin, ",", ymax)
-        print("(zmin, zmax) = ", zmin, ",", zmax)
+        print("(xmin, xmax) =", xmin, ",", xmax)
+        print("(ymin, ymax) =", ymin, ",", ymax)
+        print("(zmin, zmax) =", zmin, ",", zmax)
+
     return zmin, zmax, ymin, ymax, xmin, xmax
 
 
@@ -62,11 +69,11 @@ def run(config_dir='conf', config_name='preprocessing.yaml', base_dir=None):
         patient = ds[i]
 
         # Get bounding boxes of diastole and systole masks
-        zmin_dia, zmax_dia, ymin_dia, ymax_dia, xmin_dia, xmax_dia = get_range_mask(patient.seg_dia.get_fdata())
-        zmin_sys, zmax_sys, ymin_sys, ymax_sys, xmin_sys, xmax_sys = get_range_mask(patient.seg_sys.get_fdata())
+        zmin_dia, zmax_dia, ymin_dia, ymax_dia, xmin_dia, xmax_dia = get_range_mask(patient.seg_dia.squeeze(0))
+        zmin_sys, zmax_sys, ymin_sys, ymax_sys, xmin_sys, xmax_sys = get_range_mask(patient.seg_sys.squeeze(0))
 
         # Original shape of the 4D image
-        NX, NY, NZ, NT = patient.get_img_array().shape
+        NT, NX, NY, NZ = patient.img.shape
 
         # Extend range by tolerance values from the configuration
         x_tol = cfg.cutting.x_tol
@@ -87,38 +94,18 @@ def run(config_dir='conf', config_name='preprocessing.yaml', base_dir=None):
         original_NZ[i] = NZ
         original_NT[i] = NT
 
-        # Create a new patient with cropped data
-        cut_patient = Patient(
-            name=patient.name,
-            tsys=patient.tsys,
-            tdia=patient.tdia,
-            init_ts=patient.init_ts,
-            final_ts=patient.final_ts
-        )
+        patient.img = patient.img[:, xmin_total:xmax_total + 1, ymin_total:ymax_total + 1, zmin_total:zmax_total + 1]
+        patient.seg_dia[:, xmin_total:xmax_total + 1, ymin_total:ymax_total + 1, zmin_total:zmax_total + 1],
+        patient.seg_sys[:, xmin_total:xmax_total + 1, ymin_total:ymax_total + 1, zmin_total:zmax_total + 1]
 
-        # Crop and save the image and segmentation masks
-        cut_patient.set_img_from_array(
-            x=patient.get_img_array()[xmin_total:xmax_total + 1, ymin_total:ymax_total + 1, zmin_total:zmax_total + 1, :],
-            affine=patient.img.affine.copy(),
-            header=patient.img.header.copy(),
-            update_shape=True
-        )
-        cut_patient.set_seg_dia_from_array(
-            x=patient.get_seg_dia_array()[xmin_total:xmax_total + 1, ymin_total:ymax_total + 1, zmin_total:zmax_total + 1],
-            affine=patient.seg_dia.affine.copy(),
-            header=patient.seg_dia.header.copy(),
-            update_shape=True
-        )
-        cut_patient.set_seg_sys_from_array(
-            x=patient.get_seg_sys_array()[xmin_total:xmax_total + 1, ymin_total:ymax_total + 1, zmin_total:zmax_total + 1],
-            affine=patient.seg_sys.affine.copy(),
-            header=patient.seg_sys.header.copy(),
-            update_shape=True
-        )
-        cut_patient.write_nifti(out_img_dir, out_seg_dir)
+        patient.img.meta['spatial_shape'] = patient.img.shape[1:]
+        patient.seg_dia.meta['spatial_shape'] = patient.seg_dia.shape[1:]
+        patient.seg_sys.meta['spatial_shape'] = patient.seg_sys.shape[1:]
+
+        patient.write_nifti(out_img_dir, out_seg_dir)
 
         if cfg.debug.viz:
-            cut_patient.viz_data(osp.join(save_dir, "images"), cfg.debug.gif, cfg.debug.dur)
+            patient.viz_data(osp.join(save_dir, "images"), cfg.debug.gif, cfg.debug.dur, cfg.debug.alpha, cfg.debug.color, 1.7)
 
    # Save metadata with shifts and original dimensions
     output_df = ds.df.copy()
