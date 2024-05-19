@@ -58,7 +58,7 @@ class Patient:
         io.write_metatensor_to_nifti(self.seg_dia, osp.join(out_patient_dir,  f'{self.name}_Diastole_Labelmap.nii.gz'))
         io.write_metatensor_to_nifti(self.seg_sys, osp.join(out_patient_dir, f'{self.name}_Systole_Labelmap.nii.gz'))
 
-    def viz_data(self, save_dir, gif, dur, aspect_ratio=1.7):
+    def viz_data(self, save_dir, gif, dur, alpha=0.3, color=(1, 1, 0), aspect_ratio=1.7):
         """
         Visualizes the data and saves it as 2d images and GIF.
 
@@ -69,17 +69,17 @@ class Patient:
             aspect_ratio (float, optional): Aspect ratio for visualization. Defaults to 1.7.
         """
         save_dir = dirs.create_subdir(save_dir, self.name)
-        img = self.img.as_tensor().swapaxes(3, 1)
+        img = self.img.swapaxes(3, 1)
 
         for t in range(img.shape[0]):
             if t == self.tsys:
-                seg = self.seg_sys.as_tensor().swapaxes(3, 1).squeeze(0)
+                mask = self.seg_sys.swapaxes(3, 1).squeeze(0)
             elif t == self.tdia:
-                seg = self.seg_dia.as_tensor().swapaxes(3, 1).squeeze(0)
+                mask = self.seg_dia.swapaxes(3, 1).squeeze(0)
             else:
-                seg = None
+                mask = None
 
-            plots.save_image_mask_overlay(img[t], seg, osp.join(save_dir, f'{self.name}_{t}.png'), 0.3, aspect_ratio)
+            plots.write_image_mask_overlay(img[t], mask, osp.join(save_dir, f'{self.name}_{t}.png'), 0.3, color, aspect_ratio)
 
         if gif:
             frames = [Image.open(image) for image in natsorted(glob.glob(f'{save_dir}/*.png'))]

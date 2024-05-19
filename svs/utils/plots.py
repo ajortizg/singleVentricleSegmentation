@@ -1,3 +1,5 @@
+from torchvision.utils import draw_segmentation_masks, make_grid
+import cv2
 import math
 import numpy as np
 import matplotlib.pyplot as plt
@@ -12,11 +14,12 @@ matplotlib.use('Agg')
 plt.rcParams["savefig.bbox"] = 'tight'
 
 
-def save_image_mask_overlay(
+def write_image_mask_overlay(
     img3d: Union[np.ndarray, torch.Tensor],
     mask3d: Optional[Union[np.ndarray, torch.Tensor]],
     filename: str,
     alpha: float,
+    color: list = [1, 1, 0],
     aspect_ratio: float = 1.7
 ):
     """
@@ -29,7 +32,8 @@ def save_image_mask_overlay(
         filename (str): The name of the file to save the image as.
         save_dir (str): Directory where the file will be saved.
         alpha (float): Transparency level for the mask overlay (between 0 and 1).
-        aspect_ratio (float, optional): Aspect ratio to determine the layout of subplots. Defaults to 1.7.
+        color (list, optional): RGB color values for the overlay mask.
+        aspect_ratio (float, optional): Aspect ratio to determine the layout of subplots.
 
     Returns:
         None
@@ -40,6 +44,8 @@ def save_image_mask_overlay(
 
     if isinstance(mask3d, torch.Tensor):
         mask3d = mask3d.cpu().detach().numpy()
+    if mask3d is not None:
+        mask3d = mask3d.astype(bool)
 
     # Determine the number of columns and rows for the subplots
     NZ = img3d.shape[0]
@@ -50,17 +56,43 @@ def save_image_mask_overlay(
 
     fig, axs = plt.subplots(rows, cols, constrained_layout=True, figsize=(18, 10), dpi=4)
     fig.patch.set_facecolor('black')
-    fig.suptitle('file: {}'.format(os.path.basename(filename)), fontsize=16)
+    fig.suptitle('file: {}'.format(osp.basename(filename)), fontsize=16)
     for z, ax in enumerate(axs.flat):
         if z < NZ:
-            img = img3d[z]
-            ax.imshow(img, cmap='gray', interpolation='none')
+            img = cv2.cvtColor(img3d[z], cv2.COLOR_GRAY2BGR)
+            img = cv2.normalize(img, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
             if mask3d is not None:
                 mask = mask3d[z]
-                ax.imshow(mask, cmap='jet', alpha=alpha, interpolation='none')
+                img = overlay(img, mask, alpha, color)
+            ax.imshow(img)
             ax.set_title(f'layer {z}')
             ax.axis('off')
         else:
             ax.axis('off')
     plt.savefig(filename, dpi=100)
     plt.close('all')
+
+
+def overlay(
+    img: np.ndarray,
+    mask: np.ndarray,
+    alpha: float = 0.35,
+    color: list = [1, 1, 0]
+) -> np.ndarray:
+    """
+    Merges an image with its corresponding mask with a specified alpha transparency level and color.
+
+    Args:
+        img (numpy.ndarray): 2D or 3D array of image pixels.
+        mask (numpy.ndarray): 2D array of mask pixels.
+        alpha (float, optional): Transparency level for the mask overlay (between 0 and 1).
+        color (list, optional): RGB color values for the overlay mask.
+
+    Returns:
+        numpy.ndarray: Merged image with overlay mask.
+    """
+    res = np.zeros_like(img, dtype=np.float32)
+    for c in range(3):
+        res[..., c] = img[..., c] * (1 - alpha) + alpha * color[c] * 255
+    img[mask] = res[mask]
+    return img.astype(np.uint8)
