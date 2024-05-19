@@ -1,6 +1,6 @@
 data:
   # Input data will be loaded from this dir
-  base_dir: 'results/acdc_right-ventricle_20240519-114808'
+  base_dir: 'results/preprocessing_cut_20240519-184356'
   imgs_dir: 'NIFTI_4D_Datasets'
   segs_dir: 'NIFTI_Single_Ventricle_Segmentations'
   metadata_file: 'Segmentation_volumes.xlsx'
@@ -20,19 +20,9 @@ debug:
   gif: true
   dur: 200
 
-# Step 2
+# Step 1
 orientation:
   axcodes: 'RAS'
-
-# Step 3
-isotropic_resample:
-  pixdim:
-  - 1.0
-  - 1.0
-  - 1.0
-  mode: 'bilinear'        # nearest, bilinear or bicubic
-  padding_mode: 'border'  # zeros, border or reflection
-  align_corners: false
 
 # Step 2
 cutting:
@@ -41,19 +31,19 @@ cutting:
   z_tol: 10
 
 # Step 3
-prolongation:
-  nx: 80
-  ny: 80
-  nz: 80
-  pad_time: 40
-
-  # Interpolation stuff
-  length_type: 'numDofs'    # numDofs or fixed. If fixed, then set lx, ly, and lz
-  lx: 1
-  ly: 1
-  lz: 1
-  interpolation: 'LINEAR'   # NEAREST, LINEAR or CUBIC_HERMITESPLINE
-  boundary: 'MIRROR'        # NEAREST, MIRROR or REFLECT
+isotropic_resample:
+  pixdim:
+    - 1.0   # x
+    - 1.0   # y
+    - 1.0   # z
+  out_size:
+    - 35  # t
+    - 80  # x
+    - 80  # y
+    - 80  # z
+  mode: 'bilinear'        # nearest, bilinear or bicubic
+  padding_mode: 'border'  # zeros, border or reflection
+  align_corners: false
 
 # Step 4
 # normalization:

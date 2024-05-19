@@ -3,6 +3,8 @@ from svs.preprocessing import cutting
 from svs.preprocessing import prolongation
 from svs.preprocessing import normalization
 from svs.preprocessing import split
+from svs.preprocessing import orientation
+from svs.preprocessing import isotropic_resample
 
 
 def run():
@@ -19,7 +21,13 @@ def run():
     save_dir = setup_acdc.run()
     tree_dirs.append(save_dir)
 
+    save_dir = orientation.run(base_dir=save_dir)
+    tree_dirs.append(save_dir)
+
     save_dir = cutting.run(base_dir=save_dir)
+    tree_dirs.append(save_dir)
+
+    save_dir = isotropic_resample.run(base_dir=save_dir)
     tree_dirs.append(save_dir)
 
     save_dir = prolongation.run(base_dir=save_dir)

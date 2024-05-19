@@ -95,8 +95,8 @@ def run(config_dir='conf', config_name='preprocessing.yaml', base_dir=None):
         original_NT[i] = NT
 
         patient.img = patient.img[:, xmin_total:xmax_total + 1, ymin_total:ymax_total + 1, zmin_total:zmax_total + 1]
-        patient.seg_dia[:, xmin_total:xmax_total + 1, ymin_total:ymax_total + 1, zmin_total:zmax_total + 1],
-        patient.seg_sys[:, xmin_total:xmax_total + 1, ymin_total:ymax_total + 1, zmin_total:zmax_total + 1]
+        patient.seg_dia = patient.seg_dia[:, xmin_total:xmax_total + 1, ymin_total:ymax_total + 1, zmin_total:zmax_total + 1]
+        patient.seg_sys = patient.seg_sys[:, xmin_total:xmax_total + 1, ymin_total:ymax_total + 1, zmin_total:zmax_total + 1]
 
         patient.img.meta['spatial_shape'] = patient.img.shape[1:]
         patient.seg_dia.meta['spatial_shape'] = patient.seg_dia.shape[1:]
@@ -105,7 +105,7 @@ def run(config_dir='conf', config_name='preprocessing.yaml', base_dir=None):
         patient.write_nifti(out_img_dir, out_seg_dir)
 
         if cfg.debug.viz:
-            patient.viz_data(osp.join(save_dir, "images"), cfg.debug.gif, cfg.debug.dur, cfg.debug.alpha, cfg.debug.color, 1.7)
+            patient.viz_data(osp.join(save_dir, "images"), cfg.debug.gif, cfg.debug.dur, cfg.debug.alpha, cfg.debug.color, cfg.debug.aspect_ratio)
 
    # Save metadata with shifts and original dimensions
     output_df = ds.df.copy()
