@@ -8,43 +8,8 @@ import torch.nn.functional as F
 
 from opticalFlow_cuda_ext import opticalFlow
 from svs.utils import dirs
+from svs.utils.flow_utils import get_interpolation_type, get_mesh_length
 from svs.modules.datasets import MRIBaseDataset, Patient, xyz_to_zyx, zyx_to_xyz, xyzt_to_zyxt, zyxt_to_xyzt
-
-
-def get_interpolation_type(inter_type_str: str, bound_type_str: str):
-    interpolation = None
-    if inter_type_str == "NEAREST":
-        interpolation = opticalFlow.InterpolationType.INTERPOLATE_NEAREST
-    elif inter_type_str == "LINEAR":
-        interpolation = opticalFlow.InterpolationType.INTERPOLATE_LINEAR
-    elif inter_type_str == "CUBIC_HERMITESPLINE":
-        interpolation = opticalFlow.InterpolationType.INTERPOLATE_CUBIC_HERMITESPLINE
-    else:
-        raise Exception("Wrong interpolation type in config file")
-
-    boundary = None
-    if bound_type_str == "NEAREST":
-        boundary = opticalFlow.BoundaryType.BOUNDARY_NEAREST
-    elif bound_type_str == "MIRROR":
-        boundary = opticalFlow.BoundaryType.BOUNDARY_MIRROR
-    elif bound_type_str == "REFLECT":
-        boundary = opticalFlow.BoundaryType.BOUNDARY_REFLECT
-    else:
-        raise Exception("wrong boundary type in configParser")
-
-    return interpolation, boundary
-
-
-def get_mesh_length(length_type, nz, ny, nx, lz, ly, lx):
-    if length_type == "numDofs":
-        LZ = nz - 1
-        LY = ny - 1
-        LX = nx - 1
-        return LZ, LY, LX
-    elif length_type == "fixed":
-        return lz, ly, lx
-    else:
-        raise Exception("Wrong length type in config file")
 
 
 def time_pading(maxt: int, img: torch.Tensor) -> torch.Tensor:
@@ -152,7 +117,7 @@ def run(config_dir='conf', config_name='preprocessing.yaml', base_dir=None):
         prol_patient.write_nifti(out_img_dir, out_seg_dir)
 
         if cfg.debug.viz:
-            patient.viz_data(osp.join(save_dir, "images"), cfg.debug.gif, cfg.debug.dur, cfg.debug.alpha, cfg.debug.color, 5.)
+            prol_patient.viz_data(osp.join(save_dir, "images"), cfg.debug.gif, cfg.debug.dur, cfg.debug.alpha, cfg.debug.color, 5.)
 
         xprolongfac[i] = nx_prol / nx
         yprolongfac[i] = ny_prol / ny

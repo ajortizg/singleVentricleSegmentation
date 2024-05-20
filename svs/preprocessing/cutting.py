@@ -118,7 +118,7 @@ def run(config_dir='conf', config_name='preprocessing.yaml', base_dir=None):
         cut_patient.write_nifti(out_img_dir, out_seg_dir)
 
         if cfg.debug.viz:
-            patient.viz_data(osp.join(save_dir, "images"), cfg.debug.gif, cfg.debug.dur, cfg.debug.alpha, cfg.debug.color, cfg.debug.aspect_ratio)
+            cut_patient.viz_data(osp.join(save_dir, "images"), cfg.debug.gif, cfg.debug.dur, cfg.debug.alpha, cfg.debug.color, cfg.debug.aspect_ratio)
 
    # Save metadata with shifts and original dimensions
     output_df = ds.df.copy()
