@@ -41,6 +41,7 @@ def run(config_dir='conf', config_name='preprocessing.yaml', base_dir=None):
     # Load configuration
     cfg = config_dict.ConfigDict(yaml.load(open(osp.join(config_dir, config_name), 'r'), Loader=yaml.FullLoader))
     save_dir = dirs.create_timestamped_dir(cfg.data.out_dir, "preprocessing_cut")
+    print(f'Save dir: {save_dir}')
 
     if base_dir is not None:
         cfg.data.base_dir = base_dir

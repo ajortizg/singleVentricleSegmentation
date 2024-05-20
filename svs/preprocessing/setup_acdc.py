@@ -34,6 +34,7 @@ def run(config_dir='conf', config_name='setup_acdc.yaml'):
     roi = cfg.label.roi
     tag = cfg.label.tag
     save_dir = dirs.create_timestamped_dir(cfg.data.save_dir, f'acdc_{roi}')
+    print(f'Save dir: {save_dir}')
     out_imgs_dir = dirs.create_subdir(save_dir, cfg.data.out_imgs_dir)
     out_segs_dir = dirs.create_subdir(save_dir, cfg.data.out_segs_dir)
 

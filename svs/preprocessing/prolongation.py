@@ -31,6 +31,7 @@ def run(config_dir='conf', config_name='preprocessing.yaml', base_dir=None):
 
     # Create output dirs
     save_dir = dirs.create_timestamped_dir(cfg.data.out_dir, 'preprocessing_prol')
+    print(f'Save dir: {save_dir}')
     out_img_dir = dirs.create_subdir(save_dir, cfg.data.imgs_dir)
     out_seg_dir = dirs.create_subdir(save_dir, cfg.data.segs_dir)
 
