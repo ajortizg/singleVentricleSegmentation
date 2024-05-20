@@ -45,4 +45,4 @@ dependencies:
       - tabulate
       - ml_collections
       # this package
-      - .
+      - -e .

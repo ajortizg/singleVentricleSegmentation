@@ -66,7 +66,7 @@ def run(config_dir='conf', config_name='preprocessing.yaml', base_dir=None):
         zmin_sys, zmax_sys, ymin_sys, ymax_sys, xmin_sys, xmax_sys = get_range_mask(patient.seg_sys.get_fdata())
 
         # Original shape of the 4D image
-        NX, NY, NZ, NT = patient.get_img_array().shape
+        NX, NY, NZ, NT = patient.img_array().shape
 
         # Extend range by tolerance values from the configuration
         x_tol = cfg.cutting.x_tol
@@ -97,28 +97,28 @@ def run(config_dir='conf', config_name='preprocessing.yaml', base_dir=None):
         )
 
         # Crop and save the image and segmentation masks
-        cut_patient.set_img_from_array(
-            x=patient.get_img_array()[xmin_total:xmax_total + 1, ymin_total:ymax_total + 1, zmin_total:zmax_total + 1, :],
+        cut_patient.img_from_array(
+            x=patient.img_array()[xmin_total:xmax_total + 1, ymin_total:ymax_total + 1, zmin_total:zmax_total + 1, :],
             affine=patient.img.affine.copy(),
             header=patient.img.header.copy(),
             update_shape=True
         )
-        cut_patient.set_seg_dia_from_array(
-            x=patient.get_seg_dia_array()[xmin_total:xmax_total + 1, ymin_total:ymax_total + 1, zmin_total:zmax_total + 1],
+        cut_patient.seg_dia_from_array(
+            x=patient.seg_dia_array()[xmin_total:xmax_total + 1, ymin_total:ymax_total + 1, zmin_total:zmax_total + 1],
             affine=patient.seg_dia.affine.copy(),
             header=patient.seg_dia.header.copy(),
             update_shape=True
         )
-        cut_patient.set_seg_sys_from_array(
-            x=patient.get_seg_sys_array()[xmin_total:xmax_total + 1, ymin_total:ymax_total + 1, zmin_total:zmax_total + 1],
+        cut_patient.seg_sys_from_array(
+            x=patient.seg_sys_array()[xmin_total:xmax_total + 1, ymin_total:ymax_total + 1, zmin_total:zmax_total + 1],
             affine=patient.seg_sys.affine.copy(),
             header=patient.seg_sys.header.copy(),
             update_shape=True
         )
-        cut_patient.save_nifti(out_img_dir, out_seg_dir)
+        cut_patient.write_nifti(out_img_dir, out_seg_dir)
 
         if cfg.debug.viz:
-            cut_patient.viz_data(osp.join(save_dir, "images"), cfg.debug.gif, cfg.debug.dur)
+            patient.viz_data(osp.join(save_dir, "images"), cfg.debug.gif, cfg.debug.dur, cfg.debug.alpha, cfg.debug.color, cfg.debug.aspect_ratio)
 
    # Save metadata with shifts and original dimensions
     output_df = ds.df.copy()

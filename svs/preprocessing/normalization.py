@@ -66,15 +66,15 @@ def run(config_dir='conf', config_name='preprocessing.yaml', base_dir=None):
         patient = ds[i]
 
         # Normalize image intensity values
-        norm_img_array = normalize(patient.get_img_array(), patient.get_seg_dia_array(), patient.get_seg_sys_array(), patient.tdia, patient.tsys)
+        norm_img_array = normalize(patient.img_array(), patient.seg_dia_array(), patient.seg_sys_array(), patient.tdia, patient.tsys)
 
         # Update patient image with normalized values
-        patient.set_img_from_array(norm_img_array, patient.img.affine.copy(), patient.img.header.copy(), update_shape=False)
+        patient.img_from_array(norm_img_array, patient.img.affine.copy(), patient.img.header.copy(), update_shape=False)
 
-        patient.save_nifti(out_img_dir, out_seg_dir)
+        patient.write_nifti(out_img_dir, out_seg_dir)
 
         if cfg.debug.viz:
-            patient.viz_data(osp.join(save_dir, 'images'), cfg.debug.gif, cfg.debug.dur, aspect_ratio=5.0)
+            patient.viz_data(osp.join(save_dir, "images"), cfg.debug.gif, cfg.debug.dur, cfg.debug.alpha, cfg.debug.color, 5.)
 
     # Save metadata to Excel file
     ds.df.to_excel(osp.join(save_dir, cfg.data.metadata_file), index=False)

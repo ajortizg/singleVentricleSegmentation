@@ -47,10 +47,10 @@ def run(config_dir='conf', config_name='setup_acdc.yaml'):
         patient = ds[i]
         patient.seg_dia = extract_label(patient.seg_dia, tag)
         patient.seg_sys = extract_label(patient.seg_sys, tag)
-        patient.save_nifti(out_imgs_dir, out_segs_dir)
+        patient.write_nifti(out_imgs_dir, out_segs_dir)
 
         if cfg.debug.viz:
-            patient.viz_data(osp.join(save_dir, "images"), cfg.debug.gif, cfg.debug.dur)
+            patient.viz_data(osp.join(save_dir, "images"), cfg.debug.gif, cfg.debug.dur, cfg.debug.alpha, cfg.debug.color, cfg.debug.aspect_ratio)
 
         df_dset = pd.concat([df_dset,  pd.DataFrame({'Name': patient.name, 'Systole': patient.tsys,
                             'Diastole': patient.tdia}, index=[0])], ignore_index=True)

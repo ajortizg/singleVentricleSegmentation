@@ -17,5 +17,11 @@ label:
 
 debug:
   viz: true
+  alpha: 0.3
+  color:
+    - 0
+    - 1
+    - 1
+  aspect_ratio: 1.7
   gif: true
   dur: 200

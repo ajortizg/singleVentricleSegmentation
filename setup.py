@@ -1,6 +1,7 @@
 import sys
 from setuptools import setup, find_packages
 from torch.utils.cpp_extension import BuildExtension, CUDAExtension, library_paths
+import os
 
 if sys.platform == 'win32':
     library_dirs = []
@@ -19,6 +20,10 @@ else:
 #     cmdclass={
 #         'build_ext': BuildExtension
 #     })
+
+output_dir = 'opticalFlow_cuda_ext'
+if not os.path.exists(output_dir):
+    os.makedirs(output_dir)
 
 setup(
     name='opticalFlow',
