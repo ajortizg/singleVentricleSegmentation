@@ -61,7 +61,7 @@ You can also preprocess the ACDC dataset by independently running each preproces
 
 This repository provides two methods for computing 3D optical flow using the TVL1-3D formulation: 
 1. Directly running the `scripts/flow.py` Python script.
-2. Using the `scripts/run_optical_flow.sh` bash script for parallel processing with multiple GPUs.
+2. Using the `scripts/parallel_flow.sh` bash script for parallel processing with multiple GPUs.
 
 ### Method 1: Using `scripts/flow.py`
 This method involves directly running the Python script to compute optical flow. This approach is straightforward and suitable for single or sequential processing.
@@ -72,17 +72,17 @@ This method involves directly running the Python script to compute optical flow.
     python scripts/flow.py
     ```
 
-### Method 2: Using `scripts/run_optical_flow.sh`
+### Method 2: Using `scripts/parallel_flow.sh`
 This method involves using a bash script to run the optical flow computation in parallel on multiple GPUs. This approach maximizes the use of available computational resources, allowing for faster processing.
 
 1. **Make the Script Executable**:
    ```bash
-   chmod +x scripts/run_optical_flow.sh
+   chmod +x scripts/parallel_flow.sh
    ```
 
 2. **Run the Script**:
    ```bash
-   ./scripts/run_optical_flow.sh
+   ./scripts/parallel_flow.sh
    ```
 
    - The script will automatically create a `results` directory if it doesn't exist.
