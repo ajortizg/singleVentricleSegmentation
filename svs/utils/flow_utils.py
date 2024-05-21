@@ -132,7 +132,7 @@ def apply_median_filter(u: torch.Tensor, ks: int, device: torch.device) -> torch
     return torch.from_numpy(uf).float().to(device)
 
 
-def compute_timepoints_and_indices(
+def compute_timepoints(
     dia_ts: int,
     sys_ts: int,
     seg_dia: Union[np.ndarray, torch.Tensor],
@@ -140,7 +140,7 @@ def compute_timepoints_and_indices(
     mode: Union[str, FlowDirection]
 ) -> Tuple[Tuple[int, int], Tuple[Union[np.ndarray, torch.Tensor], Union[np.ndarray, torch.Tensor]], list]:
     """
-    Determines the timepoints, corresponding segmentations, and indices for optical flow computation.
+    Determines the end timepoints, corresponding segmentations, and times for optical flow computation.
 
     Args:
         dia_ts (int): Timestamp for diastolic phase.
@@ -153,7 +153,7 @@ def compute_timepoints_and_indices(
         tuple: 
             timepoints (tuple): A tuple containing the initial and final timepoints.
             maskpoints (tuple): A tuple containing the corresponding segmentations for the timepoints.
-            indices (np.ndarray): An array of indices from initial to final timepoint, optionally reversed if mode is 'backward'.
+            times (list): A list of indices from initial to final timepoint, optionally reversed if mode is 'backward'.
     """
     if sys_ts < dia_ts:
         timepoints = (sys_ts, dia_ts)       # init, final timepoints
@@ -162,8 +162,8 @@ def compute_timepoints_and_indices(
         timepoints = (dia_ts, sys_ts)
         segmentations = (seg_dia, seg_sys)
 
-    indices = np.arange(timepoints[0], timepoints[1] + 1, 1)
+    times = np.arange(timepoints[0], timepoints[1] + 1, 1)
     if mode == FlowDirection.BACKWARD:
-        indices = np.flip(indices)
+        times = np.flip(times)
 
-    return (timepoints, segmentations, indices.tolist())
+    return (timepoints, segmentations, times.tolist())

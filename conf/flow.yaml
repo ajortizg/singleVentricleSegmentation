@@ -12,9 +12,7 @@ flow:
   mode: 'forward'             # Options: {forward, backward}
   # Any -1 indicates computation of the optical flow for the whole dataset.
   # (ACDC choose values between 0-100)
-  indices:  
-    - -1
-    - -1 
+  indices: (-1, -1)
 
   num_scales: 3               # Number of scales used in the pyramid
   max_warps: 15               # Maximum number of warping steps
