@@ -139,3 +139,5 @@ MiddleburyOpticalFlow
 
 #results folder
 results*
+
+opticalFlow_cuda_ext/
