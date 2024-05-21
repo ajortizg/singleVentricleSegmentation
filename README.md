@@ -58,15 +58,41 @@ You can also preprocess the ACDC dataset by independently running each preproces
     ```
 
 ## Optical Flow
-*Instructions for the optical flow will go here.*
 
-<!-- After preprocessing the data, compute the optical flow:
+This repository provides two methods for computing 3D optical flow using the TVL1-3D formulation: 
+1. Directly running the `scripts/flow.py` Python script.
+2. Using the `scripts/run_optical_flow.sh` bash script for parallel processing with multiple GPUs.
 
-```bash
-python TVL1OF/compute_flow.py
-```
+### Method 1: Using `scripts/flow.py`
+This method involves directly running the Python script to compute optical flow. This approach is straightforward and suitable for single or sequential processing.
+1. First, ensure the configuration file `conf/flow.yaml` is correctly set up with the necessary parameters.
 
-This will create a folder named `optical_flow` inside the `{root_dir}`. Configure the paths and settings in `parser/flow_compute.ini`. -->
+2. Then, run the script:
+    ```bash
+    python scripts/flow.py
+    ```
+
+### Method 2: Using `scripts/run_optical_flow.sh`
+This method involves using a bash script to run the optical flow computation in parallel on multiple GPUs. This approach maximizes the use of available computational resources, allowing for faster processing.
+
+1. **Make the Script Executable**:
+   ```bash
+   chmod +x scripts/run_optical_flow.sh
+   ```
+
+2. **Run the Script**:
+   ```bash
+   ./scripts/run_optical_flow.sh
+   ```
+
+   - The script will automatically create a `results` directory if it doesn't exist.
+   - It will start the forward and backward optical flow computations in parallel on different GPUs, logging the output to separate files.
+   - You can monitor the progress of each computation by checking the log files in the `results` directory. For example:
+        ```bash
+        tail -f results/fwd_0-25.log
+        ```
+        This command shows the last few lines of the log file and updates as new lines are added.
+
 
 ## Training the CNN
 
