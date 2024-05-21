@@ -1,7 +1,10 @@
+import numpy as np
+from svs.utils.enums import FlowDirection
 from scipy import ndimage
 import torch.nn.functional as F
 import torch
-from typing import Literal
+from typing import Literal, Union, Tuple
+
 from opticalFlow_cuda_ext import opticalFlow
 
 
@@ -127,3 +130,40 @@ def apply_median_filter(u: torch.Tensor, ks: int, device: torch.device) -> torch
     """
     uf = ndimage.median_filter(u.cpu().detach().numpy(), size=(ks, ks, ks, 1))
     return torch.from_numpy(uf).float().to(device)
+
+
+def compute_timepoints_and_indices(
+    dia_ts: int,
+    sys_ts: int,
+    seg_dia: Union[np.ndarray, torch.Tensor],
+    seg_sys: Union[np.ndarray, torch.Tensor],
+    mode: Union[str, FlowDirection]
+) -> Tuple[Tuple[int, int], Tuple[Union[np.ndarray, torch.Tensor], Union[np.ndarray, torch.Tensor]], list]:
+    """
+    Determines the timepoints, corresponding segmentations, and indices for optical flow computation.
+
+    Args:
+        dia_ts (int): Timestamp for diastolic phase.
+        sys_ts (int): Timestamp for systolic phase.
+        seg_dia (np.ndarray or torch.Tensor): Segmentation for diastolic phase.
+        seg_sys (np.ndarray or torch.Tensor): Segmentation for systolic phase.
+        mode (str or FlowDirection): Direction of optical flow computation. Can be 'forward' or 'backward'.
+
+    Returns:
+        tuple: 
+            timepoints (tuple): A tuple containing the initial and final timepoints.
+            maskpoints (tuple): A tuple containing the corresponding segmentations for the timepoints.
+            indices (np.ndarray): An array of indices from initial to final timepoint, optionally reversed if mode is 'backward'.
+    """
+    if sys_ts < dia_ts:
+        timepoints = (sys_ts, dia_ts)       # init, final timepoints
+        segmentations = (seg_sys, seg_dia)
+    else:
+        timepoints = (dia_ts, sys_ts)
+        segmentations = (seg_dia, seg_sys)
+
+    indices = np.arange(timepoints[0], timepoints[1] + 1, 1)
+    if mode == FlowDirection.BACKWARD:
+        indices = np.flip(indices)
+
+    return (timepoints, segmentations, indices.tolist())

@@ -1,0 +1,59 @@
+data:
+  # Input data will be loaded from this dir
+  base_dir: 'data/refactor_prep/acdc_lv'
+  imgs_dir: 'NIFTI_4D_Datasets'
+  segs_dir: 'NIFTI_Single_Ventricle_Segmentations'
+  metadata_file: 'Segmentation_volumes.xlsx'
+
+  # Output data will be save in this dir
+  out_dir: 'results'
+
+flow:
+  mode: 'forward'             # Options: {forward, backward}
+  # Any -1 indicates computation of the optical flow for the whole dataset.
+  # (ACDC choose values between 0-100)
+  indices:  
+    - -1
+    - -1 
+
+  num_scales: 3               # Number of scales used in the pyramid
+  max_warps: 15               # Maximum number of warping steps
+  max_outer_iterations: 300 
+  weight_matching: 1.0        # Weight for the data matching term
+  weight_tv: 0.025            # Weight for the total variation regularization term
+  
+  primal_dual:
+    type: 2     # Options: {1, 2}
+    params:
+      - 0.5     # sigma
+      - 0.5     # tau
+      - 0.25    # theta
+      - 1.0     # gamma
+  
+  # Anisotropic diffusion regularization
+  anisotropic_diff:
+    enabled: true
+    params:
+      - 5.0       # alpha
+      - 0.5       # beta
+
+  # Gaussian blurring to the input images
+  gaussian_blur:
+    enabled: true
+    sigma: 1.0
+  
+  # Mediang filtering to the optical flow estimation
+  median_filter:
+    enabled: true
+    kernel: 3
+
+  interpolation:
+    type: 'CUBIC_HERMITESPLINE' # Options: {NEAREST, LINEAR, CUBIC_HERMITESPLINE}
+    boundary: "MIRROR"          # Options: {NEAREST, MIRROR, REFLECT}
+
+  mesh:
+    type: "numDofs"             # Options: {numDofs, fixed}
+    length:
+      - 1   # lx
+      - 1   # ly
+      - 1   # lz

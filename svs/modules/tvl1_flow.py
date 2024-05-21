@@ -5,7 +5,7 @@ import os
 import math
 import numpy as np
 import torch
-from typing import Literal
+from typing import Literal, Tuple
 
 from svs.utils.flow_utils import get_interpolation_type, get_mesh_length, apply_gaussian_blur3d
 
@@ -19,21 +19,15 @@ class TVL13DOpticalFlow:
         weight_matching: float,
         weight_tv: float,
         primaldual_algorithm_type: Literal[1, 2],
-        sigma: float,
-        tau: float,
-        theta: float,
-        gamma: float,
+        primaldual_algorithm_params: Tuple[float, float, float, float],
         use_anisotropic_diff: bool,
-        anisotropic_diff_alpha: float,
-        anistropic_diff_beta: float,
+        anisotropic_diff_params: Tuple[float, float],
         use_gaussian_blur: bool,
         gaussian_blur_sigma: float,
         interpolation_type: Literal['NEAREST', 'LINEAR', 'CUBIC_HERMITESPLINE'],
         boundary_type: Literal['NEAREST', 'MIRROR', 'REFLECT'],
         length_type: Literal['numDofs', 'fixed'],
-        length_x: int,
-        length_y: int,
-        length_z: int,
+        length: Tuple[int, int, int],
         device: torch.device
     ):
         """
@@ -46,21 +40,14 @@ class TVL13DOpticalFlow:
             weight_matching (float): Weight of the data term in the TV-L1 energy functional. It controls the influence of matching the target image to the warped source image.
             weight_tv (float): Weight of the TV (Total Variation) regularization term in the energy functional. It controls the smoothness of the computed optical flow field.
             primaldual_algorithm_type (Literal[1, 2]): Type of primal-dual algorithm (1 or 2).
-            sigma (float): Sigma parameter for optimization.
-            tau (float): Tau parameter for optimization.
-            theta (float): Theta parameter for optimization.
-            gamma (float): Gamma parameter for optimization.
+            primaldual_algorithm_params (List[float, float, float, float]): sigma, tau, theta and gamma.
             use_anisotropic_diff (bool): Indicates whether to apply anisotropic diffusion regularization to the gradient field. Anisotropic diffusion can enhance edge preservation in the computed optical flow.
-            anisotropic_diff_alpha (float): Alpha parameter for anisotropic diffusion.
-            anisotropic_diff_beta (float): Beta parameter for anisotropic diffusion.
+            anisotropic_diff_params (List[float, float]): Alpha, beta parameters for anistropic diffusion.
             use_gaussian_blur (bool): Indicates whether to apply Gaussian blurring to the input images before computing optical flow. Gaussian blurring can help in reducing noise and artifacts in the images.
             gaussian_blur_sigma (float): Sigma parameter for Gaussian blur.
             interpolation_type (Literal['NEAREST', 'LINEAR', 'CUBIC_HERMITESPLINE']): Interpolation type.
             boundary_type (Literal['NEAREST', 'MIRROR', 'REFLECT']): Boundary type.
             length_type (Literal['numDofs', 'fixed']): Length type.
-            length_x (int): Length in x-dimension.
-            length_y (int): Length in y-dimension.
-            length_z (int): Length in z-dimension.
             device (torch.device): Torch device.
         """
         self.num_scales = num_scales
@@ -69,19 +56,13 @@ class TVL13DOpticalFlow:
         self.weight_matching = weight_matching
         self.weight_tv = weight_tv
         self.primaldual_algorithm_type = primaldual_algorithm_type
-        self.sigma = sigma
-        self.tau = tau
-        self.theta = theta
-        self.gamma = gamma
+        self.sigma, self.tau, self.theta, self.gamma = primaldual_algorithm_params
         self.use_anisotropic_diff = use_anisotropic_diff
-        self.anisotropic_diff_alpha = anisotropic_diff_alpha
-        self.anistropic_diff_beta = anistropic_diff_beta
+        self.anisotropic_diff_alpha, self.anistropic_diff_beta = anisotropic_diff_params
         self.use_gaussian_blur = use_gaussian_blur
         self.gaussian_blur_sigma = gaussian_blur_sigma
         self.length_type = length_type
-        self.length_x = length_x
-        self.length_y = length_y
-        self.length_z = length_z
+        self.length_x, self.length_y, self.length_z = length
         self.interpolation_type, self.boundary_type = get_interpolation_type(interpolation_type, boundary_type)
         self.device = device
 
@@ -113,7 +94,8 @@ class TVL13DOpticalFlow:
         NZ_restr, NY_restr, NX_restr = NZ, NY, NX
         for s in range(1, self.num_scales):
             NZ_restr, NY_restr, NX_restr = math.ceil(0.5 * NZ_restr), math.ceil(0.5 * NY_restr), math.ceil(0.5 * NX_restr)
-            LZ_restr, LY_restr, LX_restr = get_mesh_length(self.config, NZ_restr, NY_restr, NX_restr, self.length_z, self.length_y, self.length_x)
+            LZ_restr, LY_restr, LX_restr = get_mesh_length(self.length_type, NZ_restr, NY_restr, NX_restr,
+                                                           self.length_z, self.length_y, self.length_x)
             mesh_infos.append(opticalFlow.MeshInfo3D(NZ_restr, NY_restr, NX_restr, LZ_restr, LY_restr, LX_restr))
 
         # lists for pyramid
@@ -137,7 +119,7 @@ class TVL13DOpticalFlow:
 
         return I0s, I1s, us, ps, mesh_infos
 
-    def compute(self, I0, I1, u, p):
+    def compute(self, I0, I1, u, p) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Computes TV-L1 Optical Flow.
 
