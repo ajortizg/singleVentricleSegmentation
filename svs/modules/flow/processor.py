@@ -5,7 +5,7 @@ from tqdm import tqdm
 from ml_collections import config_dict
 from typing import List
 
-from svs.modules.datasets import MRIBaseDataset, xyzt_to_tzyx
+from svs.modules.datasets import MRIDataset, xyzt_to_tzyx
 from svs.utils import dirs, flow_utils
 from svs.modules.flow.tvl13d import TVL13DOpticalFlow
 
@@ -33,14 +33,14 @@ class OpticalFlowProcessor:
         if self.device.type != 'cuda':
             raise RuntimeError("Optical flow computation requires a CUDA device.")
 
-    def _initialize_dataset(self) -> MRIBaseDataset:
+    def _initialize_dataset(self) -> MRIDataset:
         """
         Initializes the MRI dataset.
 
         Returns:
             MRIBaseDataset: The initialized MRI dataset.
         """
-        return MRIBaseDataset(self.cfg.data.base_dir, self.cfg.data.imgs_dir, self.cfg.data.segs_dir, self.cfg.data.metadata_file)
+        return MRIDataset(self.cfg.data.base_dir, self.cfg.data.imgs_dir, self.cfg.data.segs_dir, self.cfg.data.metadata_file)
 
     def _initialize_optflow(self) -> TVL13DOpticalFlow:
         """

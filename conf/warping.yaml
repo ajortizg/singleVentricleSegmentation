@@ -1,0 +1,37 @@
+data:
+  # Input data will be loaded from this dir
+  base_dir: 'data/refactor_prep/acdc_lv'
+  imgs_dir: 'NIFTI_4D_Datasets'
+  segs_dir: 'NIFTI_Single_Ventricle_Segmentations'
+  metadata_file: 'Segmentation_volumes.xlsx'
+  
+  # Optical flow dirs
+  flow_subdir:
+    forward: 'forward'
+    backward: 'backward'
+
+  # Output data will be save in this dir
+  out_dir: 'results'
+
+warping:
+  interpolation:
+    type: 'CUBIC_HERMITESPLINE' # Options: {NEAREST, LINEAR, CUBIC_HERMITESPLINE}
+    boundary: "MIRROR"          # Options: {NEAREST, MIRROR, REFLECT}
+
+  mesh:
+    type: "numDofs"             # Options: {numDofs, fixed}
+    length:
+      - 1   # lx
+      - 1   # ly
+      - 1   # lz
+
+debug:
+  viz: true
+  alpha: 0.3
+  color:
+    - 0
+    - 1
+    - 1
+  aspect_ratio: 1.7
+  gif: true
+  dur: 200

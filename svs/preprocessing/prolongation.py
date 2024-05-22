@@ -9,7 +9,7 @@ import torch.nn.functional as F
 from opticalFlow_cuda_ext import opticalFlow
 from svs.utils import dirs
 from svs.utils.flow_utils import get_interpolation_type, get_mesh_length
-from svs.modules.datasets import MRIBaseDataset, Patient, xyz_to_zyx, zyx_to_xyz, xyzt_to_zyxt, zyxt_to_xyzt
+from svs.modules.datasets import MRIDataset, Patient, xyz_to_zyx, zyx_to_xyz, xyzt_to_zyxt, zyxt_to_xyzt
 
 
 def time_pading(maxt: int, img: torch.Tensor) -> torch.Tensor:
@@ -46,7 +46,7 @@ def run(config_dir='conf', config_name='preprocessing.yaml', base_dir=None):
 
     if base_dir is not None:
         cfg.data.base_dir = base_dir
-    ds = MRIBaseDataset(cfg.data.base_dir, cfg.data.imgs_dir, cfg.data.segs_dir, cfg.data.metadata_file)
+    ds = MRIDataset(cfg.data.base_dir, cfg.data.imgs_dir, cfg.data.segs_dir, cfg.data.metadata_file)
 
     # Generate columns for prolongation factors
     xprolongfac = np.zeros(len(ds))

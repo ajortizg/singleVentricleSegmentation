@@ -3,15 +3,16 @@ import numpy as np
 import nibabel as nib
 import os.path as osp
 import pandas as pd
-from typing import Optional
+from typing import Optional, Union, Tuple
 from torch.utils.data import Dataset
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from PIL import Image
 import glob
 from natsort import natsorted
 
 from svs.utils import dirs
 from svs.utils import plots
+from svs.utils.enums import FlowDirection
 
 
 xyzt_to_zyxt = (2, 1, 0, 3)
@@ -143,7 +144,7 @@ class Patient:
                            save_all=True, duration=dur, loop=0)
 
 
-class MRIBaseDataset(Dataset):
+class MRIDataset(Dataset):
     def __init__(self, base_dir, imgs_dir, segs_dir, metadata_file):
         """
         Initializes the MRIBaseDataset instance.
@@ -157,6 +158,7 @@ class MRIBaseDataset(Dataset):
         self.imgs_dir = osp.join(base_dir, imgs_dir)
         self.segs_dir = osp.join(base_dir, segs_dir)
         self.df = pd.read_excel(osp.join(base_dir, metadata_file))
+        self.base_dir = base_dir
 
     def __len__(self):
         return len(self.df)
@@ -218,3 +220,57 @@ class RawACDCDadataset(Dataset):
             tdia = int(f.readline().replace(' ', '').replace('\n', '').split(':')[1])
             tsys = int(f.readline().replace(' ', '').replace('\n', '').split(':')[1])
         return tdia, tsys
+
+
+@dataclass
+class FlowPatient(Patient):
+    """
+    Data class representing a patient with additional flow data.
+    """
+    forward_flow: np.ndarray = field(default_factory=lambda: np.array([]))  # (t, 3, x, y, z)
+    backward_flow: np.ndarray = field(default_factory=lambda: np.array([]))
+
+
+class FlowDataset(MRIDataset):
+    """
+    Dataset with additional optical flow data
+    """
+
+    def __init__(self, base_dir, imgs_dir, segs_dir, metadata_file, forward_flow_subdir: str = 'forward', backward_flow_subdir: str = 'backward'):
+        super().__init__(base_dir, imgs_dir, segs_dir, metadata_file)
+        self.forward_flow_subdir = forward_flow_subdir
+        self.backward_flow_subdir = backward_flow_subdir
+
+    def __getitem__(self, idx: int) -> FlowPatient:
+        patient = super().__getitem__(idx)
+
+        # Read optical flow
+        forward_flow = self._load_flow(patient.name, FlowDirection.FORWARD, self.forward_flow_subdir)
+        backward_flow = self._load_flow(patient.name, FlowDirection.BACKWARD, self.backward_flow_subdir)
+
+        return FlowPatient(name=patient.name, tsys=patient.tsys, tdia=patient.tdia,
+                           init_ts=patient.init_ts, final_ts=patient.final_ts,
+                           img=patient.img, seg_dia=patient.seg_dia, seg_sys=patient.seg_sys,
+                           forward_flow=forward_flow, backward_flow=backward_flow)
+
+    def _load_flow(self, patient_name: str, direction: Union[str, FlowDirection], flow_subdir: str) -> np.ndarray:
+        """
+        Loads the optical flow data for the specified patient and direction.
+
+        Args:
+            patient_name (str): Name of the patient.
+            direction (Union[str, FlowDirection]): Direction of the flow ('forward' or 'backward').
+            flow_subdir (str): Sub-directory containing the flow data.
+
+        Returns:
+            np.ndarray: The optical flow data as a NumPy array with shape (t, 3, x, y, z).
+        """
+        return np.load(osp.join(self.base_dir, flow_subdir, f'{patient_name}_{direction}_flow.npy'))
+
+        # def _maybe_split(self, mode: Union[str, FlowDatasetMode]):
+        #     if isinstance(mode, str):
+        #         mode = look_up_option("forward", FlowDatasetMode)
+
+        #     if mode != FlowDatasetMode.COMPLETE:
+        #         self.df = self.df[self.df['Split'] == mode]
+        #         self.df.reset_index(inplace=True, drop=True)

@@ -5,7 +5,7 @@ import os.path as osp
 import numpy as np
 import shutil
 
-from svs.modules.datasets import MRIBaseDataset
+from svs.modules.datasets import MRIDataset
 from svs.utils import dirs
 
 
@@ -21,7 +21,7 @@ def run(config_dir='conf', config_name='preprocessing.yaml', base_dir=None):
 
     if base_dir is not None:
         cfg.data.base_dir = base_dir
-    ds = MRIBaseDataset(cfg.data.base_dir, cfg.data.imgs_dir, cfg.data.segs_dir, cfg.data.metadata_file)
+    ds = MRIDataset(cfg.data.base_dir, cfg.data.imgs_dir, cfg.data.segs_dir, cfg.data.metadata_file)
     df = ds.df.copy()
 
     val_idxs = np.random.choice(np.arange(len(ds)), cfg.split.val_size, replace=False)

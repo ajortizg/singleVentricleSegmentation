@@ -6,7 +6,7 @@ import math
 import yaml
 
 from svs.utils import dirs
-from svs.modules.datasets import MRIBaseDataset
+from svs.modules.datasets import MRIDataset
 
 
 def normalize(x: np.ndarray, seg_dia: np.ndarray, seg_sys: np.ndarray, tdia: int, tsys: int) -> np.ndarray:
@@ -61,7 +61,7 @@ def run(config_dir='conf', config_name='preprocessing.yaml', base_dir=None):
 
     if base_dir is not None:
         cfg.data.base_dir = base_dir
-    ds = MRIBaseDataset(cfg.data.base_dir, cfg.data.imgs_dir, cfg.data.segs_dir, cfg.data.metadata_file)
+    ds = MRIDataset(cfg.data.base_dir, cfg.data.imgs_dir, cfg.data.segs_dir, cfg.data.metadata_file)
 
     for i in tqdm(range(len(ds))):
         patient = ds[i]
