@@ -5,10 +5,10 @@ data:
   segs_dir: 'NIFTI_Single_Ventricle_Segmentations'
   metadata_file: 'Segmentation_volumes.xlsx'
   
-  # Optical flow dirs
+  # Optical flow subdirs
   flow_subdir:
-    forward: 'forward'
-    backward: 'backward'
+    forward: 'optical_flow/forward'
+    backward: 'optical_flow/backward'
 
   # Output data will be save in this dir
   out_dir: 'results'
@@ -27,11 +27,8 @@ warping:
 
 debug:
   viz: true
-  alpha: 0.3
-  color:
-    - 0
-    - 1
-    - 1
-  aspect_ratio: 1.7
+  forward_color: [0, 0, 1]  # blue
+  backward_color: [1, 0, 0] # red
+  aspect_ratio: 5.0
   gif: true
   dur: 200

@@ -3,7 +3,7 @@ import numpy as np
 import nibabel as nib
 import os.path as osp
 import pandas as pd
-from typing import Optional, Union, Tuple
+from typing import Optional, Union
 from torch.utils.data import Dataset
 from dataclasses import dataclass, field
 from PIL import Image
@@ -17,9 +17,15 @@ from svs.utils.enums import FlowDirection
 
 xyzt_to_zyxt = (2, 1, 0, 3)
 zyxt_to_xyzt = (2, 1, 0, 3)
+
 xyz_to_zyx = (2, 1, 0)
 zyx_to_xyz = (2, 1, 0)
+
 xyzt_to_tzyx = (3, 2, 1, 0)
+
+# Optical flow axes reordering
+t3xyz_to_t3zyx = (0, 1, 4, 3, 2)
+t3xyz_to_tzyx3 = (0, 4, 3, 2, 1)
 
 
 @dataclass

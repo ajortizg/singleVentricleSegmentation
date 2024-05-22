@@ -1,6 +1,6 @@
 data:
   # Input data will be loaded from this dir
-  base_dir: 'data/refactor_prep/acdc_lv'
+  base_dir: 'data/monai_prep/acdc_lv'
   imgs_dir: 'NIFTI_4D_Datasets'
   segs_dir: 'NIFTI_Single_Ventricle_Segmentations'
   metadata_file: 'Segmentation_volumes.xlsx'

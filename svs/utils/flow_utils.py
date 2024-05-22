@@ -61,10 +61,10 @@ def get_mesh_length(length_type: Literal['numDofs', 'fixed'], nz: int, ny: int, 
         Exception: If an invalid length type is provided.
     """
     if length_type == "numDofs":
-        LZ = nz - 1
-        LY = ny - 1
-        LX = nx - 1
-        return LZ, LY, LX
+        lz = nz - 1
+        ly = ny - 1
+        lx = nx - 1
+        return lz, ly, lx
     elif length_type == "fixed":
         return lz, ly, lx
     else:

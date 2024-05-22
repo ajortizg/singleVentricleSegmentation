@@ -7,7 +7,7 @@ import matplotlib
 import os.path as osp
 import torch
 import os
-from typing import Optional, Union
+from typing import Optional, List
 
 # Use 'Agg' backend for matplotlib to work in environments without a display
 matplotlib.use('Agg')
@@ -15,11 +15,11 @@ plt.rcParams["savefig.bbox"] = 'tight'
 
 
 def write_image_mask_overlay(
-    img3d: Union[np.ndarray, torch.Tensor],
-    mask3d: Optional[Union[np.ndarray, torch.Tensor]],
+    img3d: np.ndarray | torch.Tensor,
+    mask3d: Optional[np.ndarray | torch.Tensor | List[np.ndarray] | List[torch.Tensor]],
     filename: str,
-    alpha: float,
-    color: list = [1, 1, 0],
+    alpha: float | List[float],
+    color: List[float] | List[List[float]] = [1., 1., 0.],
     aspect_ratio: float = 1.7
 ):
     """
@@ -28,25 +28,40 @@ def write_image_mask_overlay(
 
     Args:
         img3d (Union[np.ndarray, torch.Tensor]): 3D array of images (can be numpy array or torch tensor).
-        mask3d (Optional[Union[np.ndarray, torch.Tensor]]): 3D array of masks (can be numpy array or torch tensor). Can be None.
+        mask3d (Optional[Union[np.ndarray, torch.Tensor, List[np.ndarray], List[torch.Tensor]]]): 
+            3D array of masks (can be numpy array or torch tensor) or a list of 3D arrays.
+            Can be None.
         filename (str): The name of the file to save the image as.
-        save_dir (str): Directory where the file will be saved.
-        alpha (float): Transparency level for the mask overlay (between 0 and 1).
-        color (list, optional): RGB color values for the overlay mask.
+        alpha (Union[float, List[float]]): Transparency level(s) for the mask overlay (between 0 and 1).
+        color (Union[List[float], List[List[float]]], optional): RGB color values or list of RGB color values for the overlay mask(s).
         aspect_ratio (float, optional): Aspect ratio to determine the layout of subplots.
 
-    Returns:
-        None
+
     """
     # Convert torch Tensors to numpy arrays if needed
     if isinstance(img3d, torch.Tensor):
         img3d = img3d.cpu().detach().numpy()
     img3d = img3d.astype(np.float32)
 
-    if isinstance(mask3d, torch.Tensor):
-        mask3d = mask3d.cpu().detach().numpy()
+    # Ensure mask3d is a list of boolean numpy arrays
     if mask3d is not None:
-        mask3d = mask3d.astype(bool)
+        if isinstance(mask3d, list):
+            for i in range(len(mask3d)):
+                if isinstance(mask3d[i], torch.Tensor):
+                    mask3d[i] = mask3d[i].cpu().detach().numpy()
+                mask3d[i] = mask3d[i].astype(bool)
+        else:
+            if isinstance(mask3d, torch.Tensor):
+                mask3d = mask3d.cpu().detach().numpy()
+            mask3d = mask3d.astype(bool)
+            mask3d = [mask3d]
+
+    # Ensure alpha and color are lists
+    if not isinstance(alpha, list):
+        alpha = [alpha]
+        color = [color]
+    
+    assert len(mask3d) == len(alpha) == len(color), 'Lengths of mask3d, alpha and color do not match'
 
     # Determine the number of columns and rows for the subplots
     NZ = img3d.shape[0]
@@ -63,8 +78,9 @@ def write_image_mask_overlay(
             img = cv2.cvtColor(img3d[z], cv2.COLOR_GRAY2BGR)
             img = cv2.normalize(img, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
             if mask3d is not None:
-                mask = mask3d[z]
-                img = overlay(img, mask, alpha, color)
+                for i in range(len(mask3d)):
+                    mask = mask3d[i][z]
+                    img = overlay(img, mask, alpha[i], color[i])
             ax.imshow(img)
             ax.set_title(f'layer {z}')
             ax.axis('off')
