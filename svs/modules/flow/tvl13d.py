@@ -66,7 +66,7 @@ class TVL13DOpticalFlow:
         self.interpolation_type, self.boundary_type = get_interpolation_type(interpolation_type, boundary_type)
         self.device = device
 
-    def generate_pyramid(self, I0, I1, u, p):
+    def generate_pyramid(self, I0: torch.Tensor, I1: torch.Tensor, u: torch.Tensor, p: torch.Tensor):
         """
         Generates pyramid for the input images and variables.
 
@@ -119,7 +119,7 @@ class TVL13DOpticalFlow:
 
         return I0s, I1s, us, ps, mesh_infos
 
-    def compute(self, I0, I1, u, p) -> Tuple[torch.Tensor, torch.Tensor]:
+    def compute(self, I0: torch.Tensor, I1: torch.Tensor, u: torch.Tensor, p: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Computes TV-L1 Optical Flow.
 
@@ -161,7 +161,7 @@ class TVL13DOpticalFlow:
 
         return us[0], ps[0]
 
-    def step(self, s, I0, I1, u, p, meshInfo):
+    def step(self, s: int, I0: torch.Tensor, I1: torch.Tensor, u: torch.Tensor, p: torch.Tensor, meshInfo):
         """
         Performs a single step in the TV-L1 Optical Flow computation.
 
