@@ -93,6 +93,9 @@ This method involves using a bash script to run the optical flow computation in 
         ```
         This command shows the last few lines of the log file and updates as new lines are added.
 
+## Warping optical flow
+The optical flow algorithm's performance can be assessed by propagating the ground truth masks at ED and ES cardiac phases. This can be done by running `scripts/warp.py`. The configuration parameters can be set using `conf/warping.yaml`. The results should like this animation.
+![Alt text](docs/animation.gif)
 
 ## Training the CNN
 

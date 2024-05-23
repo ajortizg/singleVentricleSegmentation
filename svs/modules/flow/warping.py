@@ -1,12 +1,12 @@
 import torch
 from natsort import natsorted
-from glob import glob
+import glob
 import os.path as osp
 from tqdm import tqdm
 from ml_collections import config_dict
 import pandas as pd
 from PIL import Image
-from typing import List, Tuple
+from typing import Tuple
 from monai.metrics.meandice import compute_dice
 from monai.metrics.hausdorff_distance import compute_hausdorff_distance
 from tabulate import tabulate
@@ -117,7 +117,6 @@ class OpticalFlowWarper:
         backward_flow = F.to_float_tensor(F.reorder_axes(t3xyz_to_tzyx3, patient.backward_flow)).to(self.device).to(self.device)
 
         _, (initial_mask, final_mask), _ = flow_utils.compute_timepoints(patient.tdia, patient.tsys, seg_dia, seg_sys, FlowDirection.FORWARD)
-        # *_, btimes = flow_utils.compute_timepoints(patient.tdia, patient.tsys, None, None, FlowDirection.BACKWARD)
 
         # Propagate masks
         forward_masks, backward_masks = self._propagate(initial_mask, final_mask, forward_flow, backward_flow)
@@ -210,7 +209,7 @@ class OpticalFlowWarper:
             img3d = img4d[times_fwd[t]]
 
             if t == 0:
-                # Groundtruth mi and estimated mask
+                # Groundtruth and estimated mask
                 masks = [forward_masks[t], F.erode(forward_masks[t]), F.erode(backward_masks[t])]
                 alphas = [0.2, 1.0, 1.0]
                 colors = [fcolor, fcolor, bcolor]
