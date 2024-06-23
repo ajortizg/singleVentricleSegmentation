@@ -2,28 +2,22 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from configparser import ConfigParser
 
 
 class UNet(nn.Module):
-    def __init__(self, config: ConfigParser):
-        """
-        Initializes the UNet model based on the provided configuration.
-
-        Args:
-            config (ConfigParser): Configuration parser containing model parameters.
-        """
+    def __init__(
+        self,
+        num_layers,
+        num_classes,
+        input_channels,
+        features_start,
+        trilinear,
+        padding,
+        kernel_size,
+        act,
+        slope
+    ):
         super(UNet, self).__init__()
-        num_layers = config.getint('PARAMETERS', 'NUM_LAYERS')
-        num_classes = config.getint('PARAMETERS', 'NUM_CLASSES')
-        input_channels = config.getint('PARAMETERS', 'INPUT_CHANNELS')
-        features_start = config.getint('PARAMETERS', 'FEATURES_START')
-        trilinear = config.getboolean('PARAMETERS', 'TRILINEAR')
-        padding = config.getint('PARAMETERS', 'PADDING')
-        kstr = config.get('PARAMETERS', 'KERNEL_SIZE')
-        kernel_size = tuple(map(int, kstr.split(',')))
-        act = config.get('PARAMETERS', 'ACTIVATION')
-        slope = config.getfloat('PARAMETERS', 'ACTIVATION_SLOPE')
 
         if num_layers < 1:
             raise ValueError(
