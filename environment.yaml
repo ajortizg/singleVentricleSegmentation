@@ -44,5 +44,7 @@ dependencies:
       - batchgenerators
       - tabulate
       - ml_collections
+      - hydra-core
+      - hydra-joblib-launcher
       # this package
       - -e .

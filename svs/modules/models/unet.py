@@ -1,0 +1,191 @@
+"""Adapted from <https://github.com/annikabrundyn> and <https://github.com/akshaykvnit>"""
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from configparser import ConfigParser
+
+
+class UNet(nn.Module):
+    def __init__(self, config: ConfigParser):
+        """
+        Initializes the UNet model based on the provided configuration.
+
+        Args:
+            config (ConfigParser): Configuration parser containing model parameters.
+        """
+        super(UNet, self).__init__()
+        num_layers = config.getint('PARAMETERS', 'NUM_LAYERS')
+        num_classes = config.getint('PARAMETERS', 'NUM_CLASSES')
+        input_channels = config.getint('PARAMETERS', 'INPUT_CHANNELS')
+        features_start = config.getint('PARAMETERS', 'FEATURES_START')
+        trilinear = config.getboolean('PARAMETERS', 'TRILINEAR')
+        padding = config.getint('PARAMETERS', 'PADDING')
+        kstr = config.get('PARAMETERS', 'KERNEL_SIZE')
+        kernel_size = tuple(map(int, kstr.split(',')))
+        act = config.get('PARAMETERS', 'ACTIVATION')
+        slope = config.getfloat('PARAMETERS', 'ACTIVATION_SLOPE')
+
+        if num_layers < 1:
+            raise ValueError(
+                f"Num_layers = {num_layers}, expected: num_layers > 0")
+
+        self.num_layers = num_layers
+        layers = [DoubleConv3d(input_channels, features_start, kernel_size, padding, act, slope)]
+        feats = features_start
+
+        for _ in range(num_layers - 1):
+            layers.append(Down3d(feats, feats * 2, kernel_size, padding, act, slope))
+            feats *= 2
+
+        for _ in range(num_layers - 1):
+            layers.append(Up3d(feats, feats // 2, trilinear, kernel_size, padding, act, slope))
+            feats //= 2
+
+        layers.append(nn.Conv3d(feats, num_classes, kernel_size=1))
+        self.layers = nn.ModuleList(layers)
+
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Forward pass of the UNet model.
+
+        Args:
+            x (torch.Tensor): Input tensor.
+
+        Returns:
+            tuple: Output tensor and an additional output tensor for the residual connection.
+        """
+        identity = x[:, 1:]
+
+        xi = [self.layers[0](x)]
+        # Down path
+        for layer in self.layers[1: self.num_layers]:
+            xi.append(layer(xi[-1]))
+
+        # Up path
+        for i, layer in enumerate(self.layers[self.num_layers: -1]):
+            xi[-1] = layer(xi[-1], xi[-2 - i])
+
+        output = self.layers[-1](xi[-1])
+
+        return output + identity, output
+
+
+class DoubleConv3d(nn.Module):
+    def __init__(self, in_ch: int, out_ch: int, kernel_size=(3, 3, 3), padding=1, act='relu', slope=0.2):
+        """
+        Initializes the DoubleConv3d block.
+
+        Args:
+            in_ch (int): Number of input channels.
+            out_ch (int): Number of output channels.
+            kernel_size (tuple[int, int, int]): Kernel size for convolution layers.
+            padding (int): Padding for convolution layers.
+            act (str): Activation function.
+            slope (float): Slope for leaky ReLU activation.
+        """
+        super(DoubleConv3d, self).__init__()
+        self.net = nn.Sequential(nn.Conv3d(in_ch, out_ch, kernel_size=kernel_size, padding=padding),
+                                 nn.InstanceNorm3d(out_ch),
+                                 self.activation(act, slope),
+                                 nn.Conv3d(out_ch, out_ch, kernel_size=kernel_size, padding=padding),
+                                 nn.InstanceNorm3d(out_ch),
+                                 self.activation(act, slope))
+
+    def activation(self, act: str, slope: float):
+        """
+        Returns the activation function based on the given name and slope.
+
+        Args:
+            act (str): Activation function name.
+            slope (float): Slope for leaky ReLU.
+
+        Returns:
+            nn.Module: Activation function.
+        """
+        act_fn = nn.Module
+        if act == 'relu':
+            act_fn = nn.ReLU()
+        elif act == 'leaky_relu':
+            act_fn = nn.LeakyReLU(negative_slope=slope)
+        elif act == 'prelu':
+            act_fn = nn.PReLU(num_parameters=1)
+        return act_fn
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.net(x)
+
+
+class Down3d(nn.Module):
+    def __init__(self, in_ch: int, out_ch: int, kernel_size=(3, 3, 3), padding=1, act='relu', slope=0.2):
+        """
+        Initializes the Down3d block.
+
+        Args:
+            in_ch (int): Number of input channels.
+            out_ch (int): Number of output channels.
+            kernel_size (tuple[int, int, int]): Kernel size for convolution layers.
+            padding (int): Padding for convolution layers.
+            act (str): Activation function.
+            slope (float): Slope for leaky ReLU activation.
+        """
+        super(Down3d, self).__init__()
+        self.net = nn.Sequential(
+            nn.MaxPool3d(kernel_size=2, stride=2),
+            DoubleConv3d(in_ch, out_ch, kernel_size, padding, act, slope)
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.net(x)
+
+
+class Up3d(nn.Module):
+    """Upsampling (by either trilinear interpolation or transpose convolutions) followed by concatenation of feature
+    map from contracting path, followed by DoubleConv3D."""
+
+    def __init__(self, in_ch: int, out_ch: int, trilinear: bool = False, kernel_size=(3, 3), padding=1, act='relu', slope=0.2):
+        """
+        Initializes the Up3d block.
+
+        Args:
+            in_ch (int): Number of input channels.
+            out_ch (int): Number of output channels.
+            trilinear (bool): Whether to use trilinear interpolation for upsampling.
+            kernel_size (tuple[int, int, int]): Kernel size for convolution layers.
+            padding (int): Padding for convolution layers.
+            act (str): Activation function.
+            slope (float): Slope for leaky ReLU activation.
+        """
+        super(Up3d, self).__init__()
+        self.upsample = None
+        if trilinear:
+            self.upsample = nn.Sequential(nn.Upsample(scale_factor=2, mode="trilinear", align_corners=True),
+                                          nn.Conv3d(in_ch, in_ch // 2, kernel_size=1))
+        else:
+            self.upsample = nn.ConvTranspose3d(in_ch, in_ch // 2, kernel_size=2, stride=2)
+
+        self.conv = DoubleConv3d(in_ch, out_ch, kernel_size=kernel_size, padding=padding, act=act, slope=slope)
+
+    def forward(self, x1: torch.Tensor, x2: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass for Up3d block.
+
+        Args:
+            x1 (torch.Tensor): Input tensor from the previous layer.
+            x2 (torch.Tensor): Tensor to concatenate with after upsampling.
+
+        Returns:
+            torch.Tensor: Output tensor.
+        """
+        x1 = self.upsample(x1)
+
+        # Pad x1 to the size of x2
+        diff_d = x2.shape[2] - x1.shape[2]
+        diff_h = x2.shape[3] - x1.shape[3]
+        diff_w = x2.shape[4] - x1.shape[4]
+
+        x1 = F.pad(x1, [diff_w // 2, diff_w - diff_w // 2,
+                        diff_h // 2, diff_h - diff_h // 2,
+                        diff_d // 2, diff_d - diff_d // 2])
+        # Concatenate along the channels axis
+        x = torch.cat([x2, x1], dim=1)
+        return self.conv(x)
