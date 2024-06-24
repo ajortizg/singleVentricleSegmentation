@@ -1,4 +1,5 @@
 """Adapted from <https://github.com/annikabrundyn> and <https://github.com/akshaykvnit>"""
+from typing import Tuple
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -7,15 +8,13 @@ import torch.nn.functional as F
 class UNet(nn.Module):
     def __init__(
         self,
-        num_layers,
-        num_classes,
-        input_channels,
-        features_start,
-        trilinear,
-        padding,
-        kernel_size,
-        act,
-        slope
+        num_layers: int,
+        num_classes: int,
+        input_channels: int,
+        features_start: int,
+        trilinear: bool = False,
+        padding: int = 1,
+        kernel_size: Tuple[int, int, int] = (3, 3, 3)
     ):
         super(UNet, self).__init__()
 
@@ -24,30 +23,21 @@ class UNet(nn.Module):
                 f"Num_layers = {num_layers}, expected: num_layers > 0")
 
         self.num_layers = num_layers
-        layers = [DoubleConv3d(input_channels, features_start, kernel_size, padding, act, slope)]
+        layers = [DoubleConv3d(input_channels, features_start, kernel_size, padding)]
         feats = features_start
 
         for _ in range(num_layers - 1):
-            layers.append(Down3d(feats, feats * 2, kernel_size, padding, act, slope))
+            layers.append(Down3d(feats, feats * 2, kernel_size, padding))
             feats *= 2
 
         for _ in range(num_layers - 1):
-            layers.append(Up3d(feats, feats // 2, trilinear, kernel_size, padding, act, slope))
+            layers.append(Up3d(feats, feats // 2, trilinear, kernel_size, padding))
             feats //= 2
 
         layers.append(nn.Conv3d(feats, num_classes, kernel_size=1))
         self.layers = nn.ModuleList(layers)
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Forward pass of the UNet model.
-
-        Args:
-            x (torch.Tensor): Input tensor.
-
-        Returns:
-            tuple: Output tensor and an additional output tensor for the residual connection.
-        """
         identity = x[:, 1:]
 
         xi = [self.layers[0](x)]
@@ -61,71 +51,43 @@ class UNet(nn.Module):
 
         output = self.layers[-1](xi[-1])
 
-        return output + identity, output
+        return output + identity
 
 
 class DoubleConv3d(nn.Module):
-    def __init__(self, in_ch: int, out_ch: int, kernel_size=(3, 3, 3), padding=1, act='relu', slope=0.2):
-        """
-        Initializes the DoubleConv3d block.
-
-        Args:
-            in_ch (int): Number of input channels.
-            out_ch (int): Number of output channels.
-            kernel_size (tuple[int, int, int]): Kernel size for convolution layers.
-            padding (int): Padding for convolution layers.
-            act (str): Activation function.
-            slope (float): Slope for leaky ReLU activation.
-        """
+    def __init__(
+        self,
+        in_ch: int,
+        out_ch: int,
+        kernel_size: Tuple[int, int, int] = (3, 3, 3),
+        padding: int = 1
+    ):
         super(DoubleConv3d, self).__init__()
-        self.net = nn.Sequential(nn.Conv3d(in_ch, out_ch, kernel_size=kernel_size, padding=padding),
-                                 nn.InstanceNorm3d(out_ch),
-                                 self.activation(act, slope),
-                                 nn.Conv3d(out_ch, out_ch, kernel_size=kernel_size, padding=padding),
-                                 nn.InstanceNorm3d(out_ch),
-                                 self.activation(act, slope))
-
-    def activation(self, act: str, slope: float):
-        """
-        Returns the activation function based on the given name and slope.
-
-        Args:
-            act (str): Activation function name.
-            slope (float): Slope for leaky ReLU.
-
-        Returns:
-            nn.Module: Activation function.
-        """
-        act_fn = nn.Module
-        if act == 'relu':
-            act_fn = nn.ReLU()
-        elif act == 'leaky_relu':
-            act_fn = nn.LeakyReLU(negative_slope=slope)
-        elif act == 'prelu':
-            act_fn = nn.PReLU(num_parameters=1)
-        return act_fn
+        self.net = nn.Sequential(
+            nn.Conv3d(in_ch, out_ch, kernel_size=kernel_size, padding=padding),
+            nn.InstanceNorm3d(out_ch),
+            nn.LeakyReLU(negative_slope=0.1),
+            nn.Conv3d(out_ch, out_ch, kernel_size=kernel_size, padding=padding),
+            nn.InstanceNorm3d(out_ch),
+            nn.LeakyReLU(negative_slope=0.1)
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.net(x)
 
 
 class Down3d(nn.Module):
-    def __init__(self, in_ch: int, out_ch: int, kernel_size=(3, 3, 3), padding=1, act='relu', slope=0.2):
-        """
-        Initializes the Down3d block.
-
-        Args:
-            in_ch (int): Number of input channels.
-            out_ch (int): Number of output channels.
-            kernel_size (tuple[int, int, int]): Kernel size for convolution layers.
-            padding (int): Padding for convolution layers.
-            act (str): Activation function.
-            slope (float): Slope for leaky ReLU activation.
-        """
+    def __init__(
+        self,
+        in_ch: int,
+        out_ch: int,
+        kernel_size: Tuple[int, int, int] = (3, 3, 3),
+        padding: int = 1
+    ):
         super(Down3d, self).__init__()
         self.net = nn.Sequential(
             nn.MaxPool3d(kernel_size=2, stride=2),
-            DoubleConv3d(in_ch, out_ch, kernel_size, padding, act, slope)
+            DoubleConv3d(in_ch, out_ch, kernel_size, padding)
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -133,43 +95,35 @@ class Down3d(nn.Module):
 
 
 class Up3d(nn.Module):
-    """Upsampling (by either trilinear interpolation or transpose convolutions) followed by concatenation of feature
-    map from contracting path, followed by DoubleConv3D."""
+    """
+    Upsampling (by either trilinear interpolation or transpose convolutions) followed by concatenation of feature
+    map from contracting path, followed by DoubleConv3D.
+    """
 
-    def __init__(self, in_ch: int, out_ch: int, trilinear: bool = False, kernel_size=(3, 3), padding=1, act='relu', slope=0.2):
-        """
-        Initializes the Up3d block.
-
-        Args:
-            in_ch (int): Number of input channels.
-            out_ch (int): Number of output channels.
-            trilinear (bool): Whether to use trilinear interpolation for upsampling.
-            kernel_size (tuple[int, int, int]): Kernel size for convolution layers.
-            padding (int): Padding for convolution layers.
-            act (str): Activation function.
-            slope (float): Slope for leaky ReLU activation.
-        """
+    def __init__(
+        self,
+        in_ch: int,
+        out_ch: int,
+        trilinear: bool = False,
+        kernel_size: Tuple[int, int, int] = (3, 3, 3),
+        padding: int = 1
+    ):
         super(Up3d, self).__init__()
         self.upsample = None
         if trilinear:
-            self.upsample = nn.Sequential(nn.Upsample(scale_factor=2, mode="trilinear", align_corners=True),
-                                          nn.Conv3d(in_ch, in_ch // 2, kernel_size=1))
+            self.upsample = nn.Sequential(
+                nn.Upsample(
+                    scale_factor=2,
+                    mode="trilinear",
+                    align_corners=True
+                ),
+                nn.Conv3d(in_ch, in_ch // 2, kernel_size=1))
         else:
             self.upsample = nn.ConvTranspose3d(in_ch, in_ch // 2, kernel_size=2, stride=2)
 
-        self.conv = DoubleConv3d(in_ch, out_ch, kernel_size=kernel_size, padding=padding, act=act, slope=slope)
+        self.conv = DoubleConv3d(in_ch, out_ch, kernel_size=kernel_size, padding=padding)
 
     def forward(self, x1: torch.Tensor, x2: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass for Up3d block.
-
-        Args:
-            x1 (torch.Tensor): Input tensor from the previous layer.
-            x2 (torch.Tensor): Tensor to concatenate with after upsampling.
-
-        Returns:
-            torch.Tensor: Output tensor.
-        """
         x1 = self.upsample(x1)
 
         # Pad x1 to the size of x2
