@@ -38,6 +38,7 @@ dependencies:
       - tqdm
       - openpyxl
       - torchsummary
+      - seaborn
       - elasticdeform
       - monai
       - intensity-normalization

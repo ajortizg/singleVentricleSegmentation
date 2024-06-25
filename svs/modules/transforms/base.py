@@ -1,3 +1,4 @@
+import torch
 import numpy as np
 from abc import ABCMeta, abstractmethod
 from typing import Iterable, Any, Dict, Optional
@@ -102,5 +103,16 @@ class DoNothing(BaseTransform):
     def __call__(self, data: Dict[str, Any]) -> Dict[str, Any]:
         return data
 
-    def _transform_impl(self, x: Any, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def _transform_impl(self, x: Any, metadata: Optional[Dict[str, Any]] = None):
         return x
+
+
+class ToTensor(BaseTransform):
+    def __init__(self, keys: Iterable[str]):
+        super(ToTensor, self).__init__(keys)
+
+    def __call__(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        return super().apply_transform(data)
+
+    def _transform_impl(self, x: Any, metadata: Optional[Dict[str, Any]] = None):
+        return torch.from_numpy(x)

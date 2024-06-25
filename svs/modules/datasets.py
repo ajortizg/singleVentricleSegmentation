@@ -4,14 +4,16 @@ import nibabel as nib
 import os.path as osp
 import pandas as pd
 from typing import Optional, Union, Any, List, Dict
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 from dataclasses import dataclass, field
 from PIL import Image
+import logging
 import glob
 from natsort import natsorted
 from collections import defaultdict
 import torch.nn.functional as F
 import torch
+import lightning as pl
 
 from svs.utils import dirs, plots
 from svs.utils.constants import *
@@ -298,9 +300,9 @@ class NNDataset(FlowDataset):
         segs_dir: str,
         metadata_file: str,
         split: NNDatasetMode | str,
+        forward_flow_subdir: str,
+        backward_flow_subdir: str,
         transforms: Any = None,
-        forward_flow_subdir: str = "forward",
-        backward_flow_subdir: str = "backward",
     ):
         super().__init__(base_dir, imgs_dir, segs_dir, metadata_file, forward_flow_subdir, backward_flow_subdir)
 
@@ -317,13 +319,13 @@ class NNDataset(FlowDataset):
         (ti, tf), (mi, mf), _ = compute_timepoints(patient.tdia, patient.tsys, patient.seg_dia_array(), patient.seg_sys_array(), FlowDirection.FORWARD)
         data = {
             PATIENT_NAME_KEY: patient.name,
-            IMAGE_KEY: patient.img_array(),
-            MI_KEY: mi,
-            TI_KEY: ti,
-            MF_KEY: mf,
-            TF_KEY: tf,
-            FORWARD_FLOW_KEY: patient.forward_flow,
-            BACKWARD_FLOW_KEY: patient.backward_flow
+            IMAGE_KEY: torch.from_numpy(patient.img_array()),
+            MI_KEY: torch.from_numpy(mi),
+            TI_KEY: torch.tensor(ti, dtype=torch.int),
+            MF_KEY: torch.from_numpy(mf),
+            TF_KEY: torch.tensor(tf, dtype=torch.int),
+            FORWARD_FLOW_KEY: torch.from_numpy(patient.forward_flow),
+            BACKWARD_FLOW_KEY: torch.from_numpy(patient.backward_flow)
         }
 
         # Apply transformations to data
@@ -368,7 +370,7 @@ class NNDataset(FlowDataset):
 
         # Keep non-tensor values as lists
         for key in collated_batch.keys():
-            if not isinstance(collated_batch[key][0], str):
+            if isinstance(collated_batch[key][0], torch.Tensor):
                 collated_batch[key] = torch.stack(collated_batch[key], dim=0)
 
         # Create time sequences
@@ -385,8 +387,42 @@ class NNDataset(FlowDataset):
             prev_time = times_bwd[-1] - 1
             times_bwd.append(torch.where(prev_time < ti, ti, prev_time))
 
-        # TODO: stack at dim=0? 0 is for batch dim
-        collated_batch[FORWARD_TS_KEY] = torch.stack(times_fwd, dim=0)
-        collated_batch[BACKWARD_TS_KEY] = torch.stack(times_bwd, dim=0)
+        collated_batch[FORWARD_TS_KEY] = torch.stack(times_fwd, dim=1)
+        collated_batch[BACKWARD_TS_KEY] = torch.stack(times_bwd, dim=1)
 
         return collated_batch
+
+
+class LitNNDataset(pl.LightningDataModule):
+    def __init__(
+        self,
+        num_workers: int,
+        batch_size: int,
+        train_config: Dict,
+        val_config: Dict
+    ):
+        super().__init__()
+        self.num_workers = num_workers
+        self.batch_size = batch_size
+        self.ds_trn = NNDataset(**train_config)
+        self.ds_val = NNDataset(**val_config)
+
+    def train_dataloader(self):
+        return DataLoader(
+            self.ds_trn,
+            num_workers=self.num_workers,
+            batch_size=self.batch_size,
+            shuffle=True,
+            drop_last=False,
+            collate_fn=NNDataset.collate_fn
+        )
+
+    def val_dataloader(self):
+        return DataLoader(
+            self.ds_val,
+            num_workers=self.num_workers,
+            batch_size=1,
+            shuffle=False,
+            drop_last=False,
+            collate_fn=NNDataset.collate_fn
+        )

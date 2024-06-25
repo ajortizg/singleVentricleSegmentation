@@ -5,14 +5,13 @@ data:
   num_workers: 8
   batch_size: 4
   train_config:
-    base_dir: ''
+    base_dir: '../data/refactor_prep/acdc_lv'
     imgs_dir: 'NIFTI_4D_Datasets'
     segs_dir: 'NIFTI_Single_Ventricle_Segmentations'
     metadata_file: 'Segmentation_volumes.xlsx'
     split: 'train'
-    forward_flow_subdir: 'forward'
-    backward_flow_subdir: 'backward'
-    transforms: ${transforms.train} 
+    forward_flow_subdir: 'optical_flow/forward'
+    backward_flow_subdir: 'optical_flow/backward'
   val_config:
     base_dir: ${data.train_config.base_dir}
     imgs_dir: ${data.train_config.imgs_dir}
@@ -21,7 +20,6 @@ data:
     split: 'val'
     forward_flow_subdir: ${data.train_config.forward_flow_subdir}
     backward_flow_subdir: ${data.train_config.backward_flow_subdir}
-    transforms: ${transforms.val}
 
 defaults:
   - _self_
