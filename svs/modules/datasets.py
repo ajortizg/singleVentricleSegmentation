@@ -336,7 +336,7 @@ class NNDataset(FlowDataset):
         """
         Custom collate function to handle variable-length sequences in the batch.
 
-        This function pads sequences to the maximum length in the batch for optical flow,
+        This function pads tensors to the maximum length in the batch for optical flow,
         and calculates time sequences based on initial and final timestamps.
 
         Parameters:

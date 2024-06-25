@@ -3,6 +3,7 @@ from typing import Tuple
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import logging
 
 
 class UNet(nn.Module):
@@ -19,8 +20,7 @@ class UNet(nn.Module):
         super(UNet, self).__init__()
 
         if num_layers < 1:
-            raise ValueError(
-                f"Num_layers = {num_layers}, expected: num_layers > 0")
+            raise ValueError(f"Num_layers = {num_layers}, expected: num_layers > 0")
 
         self.num_layers = num_layers
         layers = [DoubleConv3d(input_channels, features_start, kernel_size, padding)]

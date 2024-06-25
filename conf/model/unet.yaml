@@ -1,0 +1,13 @@
+_target_: 'svs.models.lit_unet.LitUNet'
+epochs: 1000
+lr: 1e-3
+betas: [0.9, 0.999]
+weight_decay:  1e-4
+model_kwargs:
+  num_layers: 4
+  num_classes: 1
+  input_channels: 2
+  features_start: 16
+  trilinear: false
+  padding: 1
+  kernel_size: [3, 3, 3]
