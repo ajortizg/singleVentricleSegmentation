@@ -1,4 +1,3 @@
-from svs.utils.flow_utils import compute_timepoints
 import os
 import numpy as np
 import nibabel as nib
@@ -17,6 +16,7 @@ import torch
 from svs.utils import dirs, plots
 from svs.utils.constants import *
 from svs.utils.enums import FlowDirection, NNDatasetMode
+from svs.utils.flow_utils import compute_timepoints
 
 
 xyzt_to_zyxt = (2, 1, 0, 3)
@@ -314,15 +314,14 @@ class NNDataset(FlowDataset):
 
         # Group patient data into a dict
         # Array shape format is [X, Y, Z, [T]]. For optical flow [T, 3, X, Y, Z]
+        (ti, tf), (mi, mf), _ = compute_timepoints(patient.tdia, patient.tsys, patient.seg_dia_array(), patient.seg_sys_array(), FlowDirection.FORWARD)
         data = {
             PATIENT_NAME_KEY: patient.name,
             IMAGE_KEY: patient.img_array(),
-            ES_SEG_KEY: patient.seg_sys_array(),
-            ES_TIME_KEY: patient.tsys,
-            ED_SEG_KEY: patient.seg_dia_array(),
-            ED_TIME_KEY: patient.tdia,
-            TI_KEY: patient.init_ts,
-            TF_KEY: patient.final_ts,
+            MI_KEY: mi,
+            TI_KEY: ti,
+            MF_KEY: mf,
+            TF_KEY: tf,
             FORWARD_FLOW_KEY: patient.forward_flow,
             BACKWARD_FLOW_KEY: patient.backward_flow
         }
@@ -336,6 +335,9 @@ class NNDataset(FlowDataset):
     def collate_fn(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         Custom collate function to handle variable-length sequences in the batch.
+
+        This function pads sequences to the maximum length in the batch for optical flow,
+        and calculates time sequences based on initial and final timestamps.
 
         Parameters:
             batch (List[Dict]): List of samples from the dataset.
@@ -383,6 +385,7 @@ class NNDataset(FlowDataset):
             prev_time = times_bwd[-1] - 1
             times_bwd.append(torch.where(prev_time < ti, ti, prev_time))
 
+        # TODO: stack at dim=0? 0 is for batch dim
         collated_batch[FORWARD_TS_KEY] = torch.stack(times_fwd, dim=0)
         collated_batch[BACKWARD_TS_KEY] = torch.stack(times_bwd, dim=0)
 

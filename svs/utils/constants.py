@@ -1,11 +1,11 @@
 # Dataset constants
 PATIENT_NAME_KEY = "patient"
 IMAGE_KEY = "image"
-ES_SEG_KEY = "es_seg"
-ED_SEG_KEY = "ed_seg"
-ES_TIME_KEY = "es_time"
+# ES_SEG_KEY = "es_seg"
+# ED_SEG_KEY = "ed_seg"
+# ES_TIME_KEY = "es_time"
 ES_INDEX = 0
-ED_TIME_KEY = "ed_time"
+# ED_TIME_KEY = "ed_time"
 ED_INDEX = 1
 FORWARD_FLOW_KEY = "fwd_flow"
 BACKWARD_FLOW_KEY = "bwd_flow"
