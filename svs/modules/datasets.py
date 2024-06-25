@@ -1,18 +1,22 @@
+from svs.utils.flow_utils import compute_timepoints
 import os
 import numpy as np
 import nibabel as nib
 import os.path as osp
 import pandas as pd
-from typing import Optional, Union
+from typing import Optional, Union, Any, List, Dict
 from torch.utils.data import Dataset
 from dataclasses import dataclass, field
 from PIL import Image
 import glob
 from natsort import natsorted
+from collections import defaultdict
+import torch.nn.functional as F
+import torch
 
-from svs.utils import dirs
-from svs.utils import plots
-from svs.utils.enums import FlowDirection
+from svs.utils import dirs, plots
+from svs.utils.constants import *
+from svs.utils.enums import FlowDirection, NNDatasetMode
 
 
 xyzt_to_zyxt = (2, 1, 0, 3)
@@ -50,13 +54,13 @@ class Patient:
 
     def seg_dia_array(self) -> np.ndarray:
         """
-        Returns the diastole segmentation mask data as a NumPy array with shape [x,y,z]
+        Returns the end-diastole segmentation mask data as a NumPy array with shape [x,y,z]
         """
         return self.seg_dia.get_fdata() if self.seg_dia else np.array([])
 
     def seg_sys_array(self) -> np.ndarray:
         """
-        Returns the systole segmentation mask data as a NumPy array with shape [x,y,z]
+        Returns the end-systole segmentation mask data as a NumPy array with shape [x,y,z]
         """
         return self.seg_sys.get_fdata() if self.seg_sys else np.array([])
 
@@ -117,7 +121,7 @@ class Patient:
             out_seg_dir (str): Directory to save the segmentation masks.
         """
         out_patient_dir = dirs.create_subdir(out_seg_dir, self.name)
-        nib.save(self.img, osp.join(out_img_dir, f'{self.name}.nii.gz'))
+        nib.save(self.img, osp.join(out_img_dir, f"{self.name}.nii.gz"))
         nib.save(self.seg_dia, osp.join(out_patient_dir,  f"{self.name}_Diastole_Labelmap.nii.gz"))
         nib.save(self.seg_sys, osp.join(out_patient_dir, f"{self.name}_Systole_Labelmap.nii.gz"))
 
@@ -141,17 +145,17 @@ class Patient:
             else:
                 seg = None
 
-            plots.write_image_mask_overlay(img[t], seg, osp.join(save_dir, f'{self.name}_{t}.png'), alpha, color, aspect_ratio)
+            plots.write_image_mask_overlay(img[t], seg, osp.join(save_dir, f"{self.name}_{t}.png"), alpha, color, aspect_ratio)
 
         if gif:
-            frames = [Image.open(image) for image in natsorted(glob.glob(f'{save_dir}/*.png'))]
+            frames = [Image.open(image) for image in natsorted(glob.glob(f"{save_dir}/*.png"))]
             frame_one = frames[0]
-            frame_one.save(osp.join(save_dir, 'animation.gif'), format='GIF', append_images=frames,
+            frame_one.save(osp.join(save_dir, "animation.gif"), format="GIF", append_images=frames,
                            save_all=True, duration=dur, loop=0)
 
 
 class MRIDataset(Dataset):
-    def __init__(self, base_dir, imgs_dir, segs_dir, metadata_file):
+    def __init__(self, base_dir: str, imgs_dir: str, segs_dir: str, metadata_file: str):
         """
         Initializes the MRIBaseDataset instance.
 
@@ -176,17 +180,17 @@ class MRIDataset(Dataset):
         tdia = row["Diastole"]
 
         # Load 4D image [x,y,z,t]
-        img = nib.load(osp.join(self.imgs_dir, f'{name}.nii.gz'))
+        img = nib.load(osp.join(self.imgs_dir, f"{name}.nii.gz"))
 
         # Load segmentation masks [x,y,z]
-        seg_dia = nib.load(osp.join(self.segs_dir, name, f'{name}_Diastole_Labelmap.nii.gz'))
-        seg_sys = nib.load(osp.join(self.segs_dir, name,   f'{name}_Systole_Labelmap.nii.gz'))
+        seg_dia = nib.load(osp.join(self.segs_dir, name, f"{name}_Diastole_Labelmap.nii.gz"))
+        seg_sys = nib.load(osp.join(self.segs_dir, name, f"{name}_Systole_Labelmap.nii.gz"))
 
         return Patient(name, tsys, tdia,  min(tdia, tsys), max(tdia, tsys), img, seg_dia, seg_sys)
 
 
 class RawACDCDadataset(Dataset):
-    def __init__(self, base_dir):
+    def __init__(self, base_dir: str):
         """
         Initializes the dataset by listing all patient directories.
 
@@ -204,11 +208,11 @@ class RawACDCDadataset(Dataset):
         tdia, tsys = self.extract_diastole_systole_times(patient_dir)
 
         # Load 4D image [x,y,z,t]
-        img = nib.load(osp.join(patient_dir, f'{name}_4d.nii.gz'))
+        img = nib.load(osp.join(patient_dir, f"{name}_4d.nii.gz"))
 
         # Load segmentation masks [x,y,z]
-        seg_dia = nib.load(osp.join(patient_dir,  f'{name}_frame{tdia:02d}_gt.nii.gz'))
-        seg_sys = nib.load(osp.join(patient_dir, f'{name}_frame{tsys:02d}_gt.nii.gz'))
+        seg_dia = nib.load(osp.join(patient_dir,  f"{name}_frame{tdia:02d}_gt.nii.gz"))
+        seg_sys = nib.load(osp.join(patient_dir, f"{name}_frame{tsys:02d}_gt.nii.gz"))
 
         return Patient(name, tsys, tdia,  min(tdia, tsys), max(tdia, tsys), img, seg_dia, seg_sys)
 
@@ -222,7 +226,7 @@ class RawACDCDadataset(Dataset):
         Returns:
             Tuple[int, int]: The diastole and systole times.
         """
-        with open(osp.join(data_dir, 'Info.cfg'), 'r') as f:
+        with open(osp.join(data_dir, "Info.cfg"), "r") as f:
             tdia = int(f.readline().replace(' ', '').replace('\n', '').split(':')[1])
             tsys = int(f.readline().replace(' ', '').replace('\n', '').split(':')[1])
         return tdia, tsys
@@ -242,7 +246,15 @@ class FlowDataset(MRIDataset):
     Dataset with additional optical flow data
     """
 
-    def __init__(self, base_dir, imgs_dir, segs_dir, metadata_file, forward_flow_subdir: str = 'forward', backward_flow_subdir: str = 'backward'):
+    def __init__(
+        self,
+        base_dir: str,
+        imgs_dir: str,
+        segs_dir: str,
+        metadata_file: str,
+        forward_flow_subdir: str = 'forward',
+        backward_flow_subdir: str = 'backward'
+    ):
         super().__init__(base_dir, imgs_dir, segs_dir, metadata_file)
         self.forward_flow_subdir = forward_flow_subdir
         self.backward_flow_subdir = backward_flow_subdir
@@ -271,12 +283,107 @@ class FlowDataset(MRIDataset):
         Returns:
             np.ndarray: The optical flow data as a NumPy array with shape (t, 3, x, y, z).
         """
-        return np.load(osp.join(self.base_dir, flow_subdir, f'{patient_name}_{direction}_flow.npy'))
+        return np.load(osp.join(self.base_dir, flow_subdir, f"{patient_name}_{direction}_flow.npy"))
 
-        # def _maybe_split(self, mode: Union[str, FlowDatasetMode]):
-        #     if isinstance(mode, str):
-        #         mode = look_up_option("forward", FlowDatasetMode)
 
-        #     if mode != FlowDatasetMode.COMPLETE:
-        #         self.df = self.df[self.df['Split'] == mode]
-        #         self.df.reset_index(inplace=True, drop=True)
+class NNDataset(FlowDataset):
+    """
+    Dataset used for Neural Network (NN) training.
+    """
+
+    def __init__(
+        self,
+        base_dir: str,
+        imgs_dir: str,
+        segs_dir: str,
+        metadata_file: str,
+        split: NNDatasetMode | str,
+        transforms: Any = None,
+        forward_flow_subdir: str = "forward",
+        backward_flow_subdir: str = "backward",
+    ):
+        super().__init__(base_dir, imgs_dir, segs_dir, metadata_file, forward_flow_subdir, backward_flow_subdir)
+
+        self.df = self.df[self.df["Split"] == split]
+        self.df.reset_index(inplace=True, drop=True)
+
+        self.transforms = transforms
+
+    def __getitem__(self, idx: int):
+        patient = super().__getitem__(idx)
+
+        # Group patient data into a dict
+        # Array shape format is [X, Y, Z, [T]]. For optical flow [T, 3, X, Y, Z]
+        data = {
+            PATIENT_NAME_KEY: patient.name,
+            IMAGE_KEY: patient.img_array(),
+            ES_SEG_KEY: patient.seg_sys_array(),
+            ES_TIME_KEY: patient.tsys,
+            ED_SEG_KEY: patient.seg_dia_array(),
+            ED_TIME_KEY: patient.tdia,
+            TI_KEY: patient.init_ts,
+            TF_KEY: patient.final_ts,
+            FORWARD_FLOW_KEY: patient.forward_flow,
+            BACKWARD_FLOW_KEY: patient.backward_flow
+        }
+
+        # Apply transformations to data
+        if self.transforms is not None:
+            data = self.transforms(data)
+        return data
+
+    @staticmethod
+    def collate_fn(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Custom collate function to handle variable-length sequences in the batch.
+
+        Parameters:
+            batch (List[Dict]): List of samples from the dataset.
+
+        Returns:
+            Dict: Collated batch with padded sequences.
+        """
+        # Find the maximum time dimension "t" in the batch
+        max_t = max(sample[FORWARD_FLOW_KEY].shape[0] for sample in batch)
+
+        collated_batch = defaultdict(list)
+
+        for sample in batch:
+            pad_t = None
+            for key, value in sample.items():
+                if key in [FORWARD_FLOW_KEY, BACKWARD_FLOW_KEY]:
+                    pad_t = max_t - value.shape[0]
+                    collated_batch[key].append(F.pad(value, (0, 0,
+                                                             0, 0,
+                                                             0, 0,
+                                                             0, 0,
+                                                             0, pad_t)))
+                else:
+                    collated_batch[key].append(value)
+
+            if pad_t is not None:
+                collated_batch[OFFSET_KEY].append(pad_t)
+
+        # Keep non-tensor values as lists
+        for key in collated_batch.keys():
+            if not isinstance(collated_batch[key][0], str):
+                collated_batch[key] = torch.stack(collated_batch[key], dim=0)
+
+        # Create time sequences
+        ti = collated_batch[TI_KEY]
+        tf = collated_batch[TF_KEY]
+        max_time_gap = (tf - ti).max().item()
+        times_fwd = [ti]
+        times_bwd = [tf]
+
+        for _ in range(max_time_gap):
+            next_time = times_fwd[-1] + 1
+            times_fwd.append(torch.where(next_time > tf, tf, next_time))
+
+            prev_time = times_bwd[-1] - 1
+            times_bwd.append(torch.where(prev_time < ti, ti, prev_time))
+
+        collated_batch[FORWARD_TS_KEY] = torch.stack(times_fwd, dim=0)
+        collated_batch[BACKWARD_TS_KEY] = torch.stack(times_bwd, dim=0)
+
+        return collated_batch

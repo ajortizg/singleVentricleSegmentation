@@ -7,10 +7,11 @@ class FlowDirection(StrEnum):
     BACKWARD = "backward"
 
 
-# class FlowDatasetMode(StrEnum):
-#     COMPLETE = 'complete'
-#     TRAINING = 'train'
-#     VALIDATION = 'val'
+class NNDatasetMode(StrEnum):
+    COMPLETE = "complete"
+    TRAINING = "train"
+    VALIDATION = "val"
+    TEST = "test"
 
 # flow_dir = look_up_option("forward", FlowDirection)
 # print(flow_dir)

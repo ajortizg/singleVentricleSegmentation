@@ -28,6 +28,7 @@ dependencies:
    - einops
    - scikit-learn
    - scikit-image
+   - lightning
    - pip:
       - opencv-python
       - tensorboard
