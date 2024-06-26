@@ -1,5 +1,6 @@
+import elasticdeform as ed
 import torch
-from typing import Any, Dict, Iterable, Tuple
+from typing import Any, Dict, Iterable, Tuple, List
 import numpy as np
 import torch.nn.functional as F
 
@@ -13,9 +14,9 @@ class RandomRotate(BaseTransform):
         self,
         keys: Iterable[str],
         p: float,
-        spatial_size: Iterable[int],
+        deform_shape: Iterable[int],
         rot_ranges: Iterable[Iterable[float]],
-        boundaries: Dict[str, str],
+        boundary: str,
         modes: Dict[str, str],
         **kwargs
     ):
@@ -26,23 +27,23 @@ class RandomRotate(BaseTransform):
         Args:
             keys (Iterable[str]): Keys to apply the transformation.
             p (float): Probability of applying the rotation.
-            spatial_size (Iterable[int]): Spatial size of the volume (Z, Y, X).
-            rot_ranges (Iterable[Iterable[float]]): Rotation ranges for each axis (X, Y, Z) in degrees.
-            boundaries (Iterable[str]): Boundary modes for grid_sample (e.g., 'zeros', 'border', 'reflection').
+            deform_shape (Iterable[int]): Spatial size of the volume (Z, Y, X).
+            rot_ranges (Iterable[Iterable[float]]): Rotation ranges for each deform_axis (X, Y, Z) in degrees.
+            boundary (str): Boundary modes for grid_sample (e.g., 'zeros', 'border', 'reflection').
             modes (Iterable[str]): Interpolation modes for grid_sample (e.g., 'bilinear', 'nearest').
             kwargs: Additional keyword arguments for torch.nn.functional.grid_sample
         """
         super().__init__(keys)
 
-        assert len(spatial_size) == 3, "Spatial size must have exactly 3 elements."
+        assert len(deform_shape) == 3, "Spatial size must have exactly 3 elements."
         assert len(rot_ranges) == 3, "Rotation ranges must have exactly 3 elements."
 
         self.p = p
-        self.spatial_size = spatial_size
+        self.deform_shape = deform_shape
         self.range_x = rot_ranges[0]
         self.range_y = rot_ranges[1]
         self.range_z = rot_ranges[2]
-        self.boundaries = boundaries
+        self.boundary = boundary
         self.modes = modes
         self.kwargs = kwargs
 
@@ -68,8 +69,6 @@ class RandomRotate(BaseTransform):
                 - masks         (C, Z, Y, X)
                 - optical flow  (T, 3, Z, Y, X)
         """
-        mode = self.modes[key]
-        boundary = self.boundaries[key]
         add_batch_dim = x.ndim == 4 and key in MASKS_KEYS
 
         if add_batch_dim:
@@ -78,8 +77,8 @@ class RandomRotate(BaseTransform):
         x_r = F.grid_sample(
             x,
             self.rotated_grid.repeat((x.shape[0], *[1]*self.rotated_grid.ndim)),
-            mode=mode,
-            padding_mode=boundary,
+            mode=self.modes[key],
+            padding_mode=self.boundary,
             **self.kwargs
         )
 
@@ -98,11 +97,11 @@ class RandomRotate(BaseTransform):
         Returns:
             torch.Tensor: Identity grid with shape (Z, Y, X, 3).
         """
-        space = [torch.linspace(-1, 1, s) for s in self.spatial_size[::-1]]
+        space = [torch.linspace(-1, 1, s) for s in self.deform_shape[::-1]]
         grid = torch.meshgrid(space, indexing="ij")
         grid = torch.stack(grid, -1)
-        spatial_dims = list(range(len(self.spatial_size)))
-        grid = grid.permute((*spatial_dims[::-1], len(self.spatial_size)))
+        spatial_dims = list(range(len(self.deform_shape)))
+        grid = grid.permute((*spatial_dims[::-1], len(self.deform_shape)))
         return grid
 
     def sample_rotation_matrix(self) -> torch.Tensor:
@@ -129,17 +128,17 @@ class RandomRotate(BaseTransform):
 
 
 class RandomFlip(BaseTransform):
-    def __init__(self, keys: Iterable[str], p: float, axis: int):
+    def __init__(self, keys: Iterable[str], p: float, deform_axis: int):
         """
         Args:
-            axis (int): 2, 3, 4 for depth, vertical and horizontal flips
+            deform_axis (int): 2, 3, 4 for depth, vertical and horizontal flips
         """
         super().__init__(keys)
 
-        assert axis in {2, 3, 4}, "Axis must be 2, 3 or 4"
+        assert deform_axis in {2, 3, 4}, "Axis must be 2, 3 or 4"
 
         self.p = p
-        self.axis = axis
+        self.deform_axis = deform_axis
 
     def __call__(self, data: Dict[str, Any]) -> Dict[str, Any]:
         if np.random.uniform() < self.p:
@@ -152,7 +151,7 @@ class RandomFlip(BaseTransform):
         if add_batch_dim:
             x = torch.unsqueeze(x, dim=0)  # Add dummy batch dim for masks
 
-        x_f = torch.flip(x, dims=(self.axis,))
+        x_f = torch.flip(x, dims=(self.deform_axis,))
 
         if key in FLOWS_KEYS:
             x_f = self.flow_transform(x_f)
@@ -166,6 +165,70 @@ class RandomFlip(BaseTransform):
         Args:
             flow (torch.Tensor): Tensor with shape(T, 3, Z, Y, X)
         """
-        index = {2: 2, 3: 1, 4: 0}[self.axis]
+        index = {2: 2, 3: 1, 4: 0}[self.deform_axis]
         flow[:, index] *= -1
         return flow
+
+
+class ElasticDeformation(BaseTransform):
+    def __init__(
+        self,
+        keys: Iterable[str],
+        p: float,
+        deform_shape: Iterable[int],
+        deform_axis: Iterable[int],
+        sigma_range: Iterable[float],
+        points: int,
+        boundary: str,
+        order: Dict[str, int]
+    ):
+        """
+        Args:
+            boundary: ({nearest, wrap, reflect, mirror, constant})
+            order: {0, 1, 2, 3, 4}
+        """
+        super().__init__(keys)
+
+        assert len(deform_shape) in {1, 2, 3}, "deform_shape must have 1, 2, or 3 elements."
+        assert len(sigma_range) == 2, "sigma_range must have 2 elements."
+        assert len(deform_axis) in {1, 2, 3}, "deform_axis must contain 1, 2, or 3 elements."
+        assert len(deform_axis) == len(deform_shape), "deform_axis and deform_shape must have the same length."
+
+        self.p = p
+        self.deform_shape = deform_shape
+        self.deform_axis = deform_axis
+        self.sigma_range = sigma_range
+        self.points = points
+        self.boundary = boundary
+        self.order = order
+
+    def __call__(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        if np.random.uniform() < self.p:
+            self.displacement = self.create_displacement()
+            data = super().apply_transform(data)
+        return data
+
+    def _transform_impl(self, x: torch.Tensor, key: str, metadata: Dict[str, Any] | None = None):
+        add_batch_dim = x.ndim == 4 and key in MASKS_KEYS
+
+        if add_batch_dim:
+            x = torch.unsqueeze(x, dim=0)  # Add dummy batch dim for masks
+
+        x_d = ed.deform_grid(
+            x.numpy(),
+            self.displacement,
+            order=self.order[key],
+            mode=self.boundary,
+            prefilter=False,
+            axis=self.deform_axis
+        )
+
+        x_d = torch.from_numpy(x_d).float()
+        if add_batch_dim:
+            x_d = torch.squeeze(x_d, dim=0)
+        return x_d
+
+    def create_displacement(self) -> np.ndarray:
+        points = [self.points] * len(self.deform_shape)
+        sigma = np.random.uniform(self.sigma_range[0], self.sigma_range[1])
+        return np.random.randn(len(self.deform_shape), *points) * sigma
