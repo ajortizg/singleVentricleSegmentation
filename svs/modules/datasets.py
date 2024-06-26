@@ -28,10 +28,12 @@ xyz_to_zyx = (2, 1, 0)
 zyx_to_xyz = (2, 1, 0)
 
 xyzt_to_tzyx = (3, 2, 1, 0)
+tzyx_to_xyzt = (3, 2, 1, 0)
 
 # Optical flow axes reordering
 t3xyz_to_t3zyx = (0, 1, 4, 3, 2)
 t3xyz_to_tzyx3 = (0, 4, 3, 2, 1)
+t3zyx_to_t3xyz = (0, 1, 4, 3, 2)
 
 
 @dataclass
@@ -306,8 +308,9 @@ class NNDataset(FlowDataset):
     ):
         super().__init__(base_dir, imgs_dir, segs_dir, metadata_file, forward_flow_subdir, backward_flow_subdir)
 
-        self.df = self.df[self.df["Split"] == split]
-        self.df.reset_index(inplace=True, drop=True)
+        if split != NNDatasetMode.COMPLETE:
+            self.df = self.df[self.df["Split"] == split]
+            self.df.reset_index(inplace=True, drop=True)
 
         self.transforms = transforms
 
@@ -316,7 +319,14 @@ class NNDataset(FlowDataset):
 
         # Group patient data into a dict
         # Array shape format is [X, Y, Z, [T]]. For optical flow [T, 3, X, Y, Z]
-        (ti, tf), (mi, mf), _ = compute_timepoints(patient.tdia, patient.tsys, patient.seg_dia_array(), patient.seg_sys_array(), FlowDirection.FORWARD)
+        (ti, tf), (mi, mf), _ = compute_timepoints(
+            patient.tdia,
+            patient.tsys,
+            patient.seg_dia_array(),
+            patient.seg_sys_array(),
+            FlowDirection.FORWARD
+        )
+
         data = {
             PATIENT_NAME_KEY: patient.name,
             IMAGE_KEY: torch.from_numpy(patient.img_array()),
@@ -324,8 +334,12 @@ class NNDataset(FlowDataset):
             TI_KEY: torch.tensor(ti, dtype=torch.int),
             MF_KEY: torch.from_numpy(mf),
             TF_KEY: torch.tensor(tf, dtype=torch.int),
-            FORWARD_FLOW_KEY: torch.from_numpy(patient.forward_flow),
-            BACKWARD_FLOW_KEY: torch.from_numpy(patient.backward_flow)
+            FWD_FLOW_KEY: torch.from_numpy(patient.forward_flow),
+            BWD_FLOW_KEY: torch.from_numpy(patient.backward_flow),
+            TED_KEY: torch.tensor(patient.tdia, dtype=torch.int),
+            TES_KEY: torch.tensor(patient.tsys, dtype=torch.int),
+            MED_KEY: torch.tensor(patient.seg_dia_array()),
+            MES_KEY: torch.tensor(patient.seg_sys_array())
         }
 
         # Apply transformations to data
@@ -348,14 +362,14 @@ class NNDataset(FlowDataset):
             Dict: Collated batch with padded sequences.
         """
         # Find the maximum time dimension "t" in the batch
-        max_t = max(sample[FORWARD_FLOW_KEY].shape[0] for sample in batch)
+        max_t = max(sample[FWD_FLOW_KEY].shape[0] for sample in batch)
 
         collated_batch = defaultdict(list)
 
         for sample in batch:
             pad_t = None
             for key, value in sample.items():
-                if key in [FORWARD_FLOW_KEY, BACKWARD_FLOW_KEY]:
+                if key in [FWD_FLOW_KEY, BWD_FLOW_KEY]:
                     pad_t = max_t - value.shape[0]
                     collated_batch[key].append(F.pad(value, (0, 0,
                                                              0, 0,
@@ -387,8 +401,8 @@ class NNDataset(FlowDataset):
             prev_time = times_bwd[-1] - 1
             times_bwd.append(torch.where(prev_time < ti, ti, prev_time))
 
-        collated_batch[FORWARD_TS_KEY] = torch.stack(times_fwd, dim=1)
-        collated_batch[BACKWARD_TS_KEY] = torch.stack(times_bwd, dim=1)
+        collated_batch[FWD_TS_KEY] = torch.stack(times_fwd, dim=1)
+        collated_batch[BWD_TS_KEY] = torch.stack(times_bwd, dim=1)
 
         return collated_batch
 

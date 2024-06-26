@@ -6,45 +6,60 @@ from tqdm import tqdm
 from ml_collections import config_dict
 import pandas as pd
 from PIL import Image
-from typing import Tuple
+from typing import Tuple, Any, Dict
 from monai.metrics.meandice import compute_dice
 from monai.metrics.hausdorff_distance import compute_hausdorff_distance
 from tabulate import tabulate
 
-from svs.modules.datasets import FlowDataset, xyzt_to_tzyx, xyz_to_zyx, t3xyz_to_tzyx3, FlowPatient
+from svs.modules.datasets import (
+    FlowDataset,
+    xyzt_to_tzyx,
+    xyz_to_zyx,
+    t3xyz_to_tzyx3,
+    t3xyz_to_t3zyx,
+    t3zyx_to_t3xyz,
+    tzyx_to_xyzt,
+    zyx_to_xyz,
+    zyx_to_xyz,
+    FlowPatient,
+    NNDataset
+)
 from svs.utils import dirs, flow_utils, plots
-from svs.utils.enums import FlowDirection
+from svs.utils.enums import FlowDirection, NNDatasetMode
 from opticalFlow_cuda_ext import opticalFlow
 import svs.modules.transforms.functional as F
+import svs.modules.transforms as T
+from svs.utils.constants import *
 
 
 class Warp:
-    """
-    A class to perform 3D warping of volumetric data using optical flow.
-    """
+    """A class to perform 3D warping of volumetric data using optical flow."""
 
-    def __init__(self, interpolation_type: str, boundary_type: str, mesh_length_type: str, lenghts: Tuple[int, int, int]):
+    def __init__(
+        self,
+        interpolation_type: str,
+        boundary_type: str,
+        mesh_length_type: str,
+        lenghts: Tuple[int, int, int]
+    ):
         self.interpolation, self.boundary = flow_utils.get_interpolation_type(interpolation_type, boundary_type)
         self.mesh_length_type = mesh_length_type
-        self.lz, self.ly, self.lx = lenghts
+        self.LZ, self.LY, self.LX = lenghts
 
     def __call__(self, x: torch.Tensor, u: torch.Tensor) -> torch.Tensor:
         """
-        Warps the input volume using the given flow field.
+        Warps the input volume using the specified flow field.
 
         Args:
-            x (torch.Tensor): The 5D tensor representing the volume to be warped, with shape (batch_size, channels, depth, height, width).
-            flow (torch.Tensor): The 5D tensor representing the flow field, with shape (batch_size, depth, height, width, 3). Consistent with pytorch grid_sample
-            depth (int): The depth of the volume.
-            height (int): The height of the volume.
-            width (int): The width of the volume.
+            x (torch.Tensor): The volume to be warped, shape (BS, C, Z, Y, X).
+            u (torch.Tensor): The flow field, shape (BS, Z, Y, X, 3).
 
         Returns:
             torch.Tensor: The warped volume.
         """
-        nz, ny, nx = x.shape[2:]
-        lz, ly, lx = flow_utils.get_mesh_length(self.mesh_length_type, nz, ny, nx, self.lz, self.ly, self.lx)
-        mesh_info = opticalFlow.MeshInfo3D(nz, ny, nx, lz, ly, lx)
+        NZ, NY, NX = x.shape[2:]
+        LZ, LY, LX = flow_utils.get_mesh_length(self.mesh_length_type, NZ, NY, NX, self.LZ, self.LY, self.LX)
+        mesh_info = opticalFlow.MeshInfo3D(NZ, NY, NX, LZ, LY, LX)
         warp_op = opticalFlow.WarpingCNN3D(mesh_info, self.interpolation, self.boundary)
         x_w = warp_op.forward(x.contiguous(), u.contiguous())
         return x_w
@@ -52,34 +67,39 @@ class Warp:
 
 class OpticalFlowWarper:
     def __init__(self, config: config_dict.ConfigDict):
-        """
-        Initializes the OpticalFlowWarper with the provided configuration.
-
-        Args:
-            config (config_dict.ConfigDict): Configuration dictionary for optical flow processing.
-        """
         self.cfg = config
         self.save_dir = dirs.create_timestamped_dir(self.cfg.data.out_dir, 'warp')
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self._check_device()
-        self.dataset = self._initialize_dataset()
-        self.warp = self._initialize_warp()
+        self.check_device()
+        self.dataset = self.initialize_dataset()
+        self.warp = self.initialize_warp()
 
-    def _check_device(self):
-        """
-        Checks if the CUDA device is available. Raises an error if not.
-        """
+    def check_device(self):
+        """Checks if the CUDA device is available. Raises an error if not."""
         print(f'Warping\nSave dir: {self.save_dir}\nDevice: {self.device}')
         if self.device.type != 'cuda':
             raise RuntimeError("Optical flow computation requires a CUDA device.")
 
-    def _initialize_dataset(self) -> FlowDataset:
-        return FlowDataset(self.cfg.data.base_dir, self.cfg.data.imgs_dir, self.cfg.data.segs_dir, self.cfg.data.metadata_file,
-                           self.cfg.data.flow_subdir.forward, self.cfg.data.flow_subdir.backward)
+    def initialize_dataset(self) -> FlowDataset:
+        return FlowDataset(
+            self.cfg.data.base_dir,
+            self.cfg.data.imgs_dir,
+            self.cfg.data.segs_dir,
+            self.cfg.data.metadata_file,
+            self.cfg.data.flow_subdir.forward,
+            self.cfg.data.flow_subdir.backward
+        )
 
-    def _initialize_warp(self) -> Warp:
-        return Warp(self.cfg.warping.interpolation.type, self.cfg.warping.interpolation.boundary,
-                    self.cfg.warping.mesh.type, self.cfg.warping.mesh.length)
+    def initialize_warp(self) -> Warp:
+        return Warp(
+            self.cfg.warping.interpolation.type,
+            self.cfg.warping.interpolation.boundary,
+            self.cfg.warping.mesh.type,
+            self.cfg.warping.mesh.length
+        )
+
+    def get_patient(self, idx: int) -> FlowPatient:
+        return self.dataset[idx]
 
     def process(self):
         """
@@ -89,8 +109,9 @@ class OpticalFlowWarper:
         report = pd.DataFrame(columns=['Patient', 'Dice_bwd', 'Dice_fwd', 'HD_bwd', 'HD_fwd'])
 
         for i in range(len(self.dataset)):
-            metrics = self._process_patient(self.dataset[i], pbar)
-            report.loc[len(report)] = [self.dataset[i].name, metrics[0], metrics[1], metrics[2], metrics[3]]
+            patient = self.get_patient(i)
+            metrics = self._process_patient(patient, pbar)
+            report.loc[len(report)] = [patient.name, metrics[0], metrics[1], metrics[2], metrics[3]]
 
         report.loc[len(report)] = ['Mean', report['Dice_bwd'].mean(), report['Dice_fwd'].mean(), report['HD_bwd'].mean(), report['HD_fwd'].mean()]
 
@@ -111,15 +132,23 @@ class OpticalFlowWarper:
             pbar (tqdm): The progress bar object.
         """
         # Prepare data
-        seg_dia = F.to_float_tensor(F.add_leading_dims(2, F.reorder_axes(xyz_to_zyx, patient.seg_dia_array()))).to(self.device)
-        seg_sys = F.to_float_tensor(F.add_leading_dims(2, F.reorder_axes(xyz_to_zyx, patient.seg_sys_array()))).to(self.device)
-        forward_flow = F.to_float_tensor(F.reorder_axes(t3xyz_to_tzyx3, patient.forward_flow)).to(self.device)
-        backward_flow = F.to_float_tensor(F.reorder_axes(t3xyz_to_tzyx3, patient.backward_flow)).to(self.device).to(self.device)
+        pdata = self.prepare_data(patient)
 
-        _, (initial_mask, final_mask), _ = flow_utils.compute_timepoints(patient.tdia, patient.tsys, seg_dia, seg_sys, FlowDirection.FORWARD)
+        _, (initial_mask, final_mask), _ = flow_utils.compute_timepoints(
+            patient.tdia,
+            patient.tsys,
+            pdata[MED_KEY],
+            pdata[MES_KEY],
+            FlowDirection.FORWARD
+        )
 
         # Propagate masks
-        forward_masks, backward_masks = self._propagate(initial_mask, final_mask, forward_flow, backward_flow)
+        forward_masks, backward_masks = self._propagate(
+            initial_mask,
+            final_mask,
+            pdata[FWD_FLOW_KEY],
+            pdata[BWD_FLOW_KEY]
+        )
         metrics = self._compute_metrics(forward_masks, backward_masks)
 
         # Visualize results
@@ -128,6 +157,50 @@ class OpticalFlowWarper:
 
         pbar.update(1)
         return metrics
+
+    def prepare_data(self, patient: FlowPatient) -> Dict[str, Any]:
+        """
+        Expected data:
+            segs: numpy arrays, shape (X, Y, Z)
+            flow: numpy arrays, shape (T, 3, X, Y, Z)
+        """
+        seg_dia = F.to_float_tensor(
+            F.add_leading_dims(
+                2,
+                F.reorder_axes(
+                    xyz_to_zyx,
+                    patient.seg_dia_array()
+                )
+            )
+        ).to(self.device)
+        seg_sys = F.to_float_tensor(
+            F.add_leading_dims(
+                2,
+                F.reorder_axes(
+                    xyz_to_zyx,
+                    patient.seg_sys_array()
+                )
+            )
+        ).to(self.device)
+        forward_flow = F.to_float_tensor(
+            F.reorder_axes(
+                t3xyz_to_tzyx3,
+                patient.forward_flow
+            )
+        ).to(self.device)
+        backward_flow = F.to_float_tensor(
+            F.reorder_axes(
+                t3xyz_to_tzyx3,
+                patient.backward_flow
+            )
+        ).to(self.device)
+
+        return {
+            MED_KEY: seg_dia,
+            MES_KEY: seg_sys,
+            FWD_FLOW_KEY: forward_flow,
+            BWD_FLOW_KEY: backward_flow
+        }
 
     def _propagate(self, initial_mask: torch.Tensor, final_mask: torch.Tensor, forward_flow: torch.Tensor,
                    backward_flow: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -144,13 +217,24 @@ class OpticalFlowWarper:
             Tuple[torch.Tensor, torch.Tensor]: Warped masks for forward and backward flows.
         """
         assert forward_flow.shape[0] == backward_flow.shape[0], "Forward and backward flow have different timesteps"
+
         forward_masks = [initial_mask]
         backward_masks = [final_mask]
         num_timesteps = forward_flow.shape[0]
 
         for t in range(num_timesteps):
-            forward_masks.append(self.warp(forward_masks[-1], F.add_dim_at(0, forward_flow[t])))
-            backward_masks.append(self.warp(backward_masks[-1], F.add_dim_at(0, backward_flow[t])))
+            forward_masks.append(
+                self.warp(
+                    forward_masks[-1],
+                    F.add_dim_at(0, forward_flow[t])
+                )
+            )
+            backward_masks.append(
+                self.warp(
+                    backward_masks[-1],
+                    F.add_dim_at(0, backward_flow[t])
+                )
+            )
 
         backward_masks.reverse()  # mi_est -> mf
 
@@ -237,3 +321,81 @@ class OpticalFlowWarper:
         """
         with open(osp.join(self.save_dir, "config.json"), "w") as f:
             f.write(self.cfg.to_json(indent=4))
+
+
+class TransformsWarper(OpticalFlowWarper):
+    def __init__(self, config: config_dict.ConfigDict):
+        super().__init__(config)
+
+    def initialize_dataset(self) -> NNDataset:
+        transforms = T.Compose([
+            # Reorder axes for tensors
+            T.EnsureFloat(keys=[IMAGE_KEY, MED_KEY, MES_KEY, FWD_FLOW_KEY, BWD_FLOW_KEY]),
+            T.ReorderAxes(keys=[IMAGE_KEY], axes=xyzt_to_tzyx),
+            T.ReorderAxes(keys=[MED_KEY, MES_KEY], axes=xyz_to_zyx),
+            T.ReorderAxes(keys=[FWD_FLOW_KEY, BWD_FLOW_KEY], axes=t3xyz_to_t3zyx),
+            # Add channel dimension
+            T.AddDimAt(keys=[MES_KEY, MED_KEY], axis=0),
+            T.AddDimAt(keys=[IMAGE_KEY], axis=1),
+            T.RandomRotate(
+                keys=[IMAGE_KEY, MED_KEY, MES_KEY, FWD_FLOW_KEY, BWD_FLOW_KEY],
+                p=1.0,
+                spatial_size=(80, 80, 80),
+                rot_ranges=[(0, 360), (0, 360), (0, 360)],
+                boundaries={IMAGE_KEY: "zeros", MED_KEY: "zeros", MES_KEY: "zeros", FWD_FLOW_KEY: "zeros", BWD_FLOW_KEY: "zeros"},
+                modes={IMAGE_KEY: "bilinear", MED_KEY: "nearest", MES_KEY: "nearest", FWD_FLOW_KEY: "bilinear", BWD_FLOW_KEY: "bilinear"},
+                align_corners=False
+            )
+        ])
+
+        return NNDataset(
+            self.cfg.data.base_dir,
+            self.cfg.data.imgs_dir,
+            self.cfg.data.segs_dir,
+            self.cfg.data.metadata_file,
+            NNDatasetMode.COMPLETE,
+            self.cfg.data.flow_subdir.forward,
+            self.cfg.data.flow_subdir.backward,
+            transforms
+        )
+
+    def get_patient(self, idx: int) -> FlowPatient:
+        data = self.dataset[idx]
+
+        patient = FlowPatient(
+            name=data[PATIENT_NAME_KEY],
+            tsys=data[TES_KEY].item(),
+            tdia=data[TED_KEY].item(),
+            init_ts=data[TI_KEY].item(),
+            final_ts=data[TF_KEY].item(),
+            img=None,
+            seg_dia=None,
+            seg_sys=None,
+            # Flow shape is (T, 3, Z, Y, X). It nees to be reodered to (T, 3, X, Y, Z).
+            forward_flow=F.reorder_axes(t3zyx_to_t3xyz, data[FWD_FLOW_KEY].numpy()),
+            backward_flow=F.reorder_axes(t3zyx_to_t3xyz, data[BWD_FLOW_KEY].numpy())
+        )
+
+        # Image shape is (T, C, Z, Y, X). Channel dim must be removed. Then, axis need to be reordered as (X, Y, Z, T).
+        patient.img_from_array(
+            x=F.reorder_axes(tzyx_to_xyzt, F.remove_dim_at(1, data[IMAGE_KEY].numpy())),
+            affine=None,
+            header=None,
+            update_shape=False
+        )
+
+        # Masks shapes are (C, Z, Y, X). Channel dim must be removed. Then, axis need to be reordered as (X, Y, Z).
+        patient.seg_dia_from_array(
+            x=F.reorder_axes(zyx_to_xyz, F.remove_dim_at(0, data[MED_KEY].numpy())),
+            affine=None,
+            header=None,
+            update_shape=False
+        )
+        patient.seg_sys_from_array(
+            x=F.reorder_axes(zyx_to_xyz, F.remove_dim_at(0, data[MES_KEY].numpy())),
+            affine=None,
+            header=None,
+            update_shape=False
+        )
+
+        return patient

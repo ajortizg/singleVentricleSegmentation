@@ -53,6 +53,16 @@ def add_dim_at(axis: int, x: np.ndarray | torch.Tensor) -> np.ndarray | torch.Te
     return x
 
 
+def remove_dim_at(axis: int, x: np.ndarray | torch.Tensor) -> np.ndarray | torch.Tensor:
+    if isinstance(x, np.ndarray):
+        x = np.squeeze(x, axis=axis)
+    elif isinstance(x, torch.Tensor):
+        x = x.squeeze(axis)
+    else:
+        raise TypeError("Only np.ndarray and torch.Tensor are supported types by remove_dim_at")
+    return x
+
+
 def reorder_axes(axes: Tuple[int], x: np.ndarray | torch.Tensor) -> np.ndarray | torch.Tensor:
     """
     Reorders the axes of the input array or tensor.
@@ -114,3 +124,40 @@ def erode(x: np.ndarray | torch.Tensor, iters: int = 1) -> np.ndarray:
     # x_e = binary_erosion(x, iterations=iters)
     # borders = x & ~x_e  # Calculate the borders by subtracting the eroded volume from the original volume
     # return borders.astype(np.uint8)
+
+
+def rotx(deg):
+    rad = np.deg2rad(deg)
+    return np.array([
+        [1, 0, 0],
+        [0, np.cos(rad), -np.sin(rad)],
+        [0, np.sin(rad), np.cos(rad)],
+    ])
+
+
+def roty(deg):
+    rad = np.deg2rad(deg)
+    return np.array([
+        [np.cos(rad), 0, np.sin(rad)],
+        [0, 1, 0],
+        [-np.sin(rad), 0, np.cos(rad)]
+    ])
+
+
+def rotz(deg):
+    rad = np.deg2rad(deg)
+    return np.array([
+        [np.cos(rad), -np.sin(rad), 0],
+        [np.sin(rad), np.cos(rad), 0],
+        [0, 0, 1],
+    ])
+
+
+def ensure_float(x: np.ndarray | torch.Tensor) -> np.ndarray | torch.Tensor:
+    if isinstance(x, np.ndarray):
+        x = x.astype(np.float32)
+    elif isinstance(x, torch.Tensor):
+        x = x.float()
+    else:
+        raise TypeError("Only np.ndarray and torch.Tensor are supported types by ensure_float_type")
+    return x

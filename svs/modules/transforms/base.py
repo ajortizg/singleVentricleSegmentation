@@ -1,16 +1,22 @@
 import torch
 import numpy as np
 from abc import ABCMeta, abstractmethod
-from typing import Iterable, Any, Dict, Optional
+from typing import Iterable, Any, Dict, Optional, Tuple
 
 from svs.utils.constants import *
+from svs.modules.transforms.functional import (
+    add_dim_at,
+    reorder_axes,
+    remove_dim_at,
+    ensure_float
+)
 
 
 class BaseTransform(object, metaclass=ABCMeta):
     """
     Base class for data transformation.
 
-    This class provides an interface for implementing data transformations 
+    This class provides an interface for implementing data transformations
     that can be applied to specified keys within a data dictionary.
     """
 
@@ -27,8 +33,6 @@ class BaseTransform(object, metaclass=ABCMeta):
 
     def apply_transform(self, data: Dict[str, Any]) -> Dict[str, Any]:
         for key in self.keys:
-            # Set current key and data
-            self.cur_key = key
             x = data[key]
 
             # Get the metada if available
@@ -36,16 +40,16 @@ class BaseTransform(object, metaclass=ABCMeta):
             metadata = data[metadata_key] if metadata_key in data else None
 
             # Apply transformation
-            x_new = self._transform_impl(x, metadata)
+            x_new = self._transform_impl(x, key, metadata)
             data[key] = x_new
         return data
 
-    @abstractmethod
+    @ abstractmethod
     def __call__(self, data: Dict[str, Any]) -> Dict[str, Any]:
         pass
 
-    @abstractmethod
-    def _transform_impl(self, x: Any, metadata: Optional[Dict[str, Any]] = None):
+    @ abstractmethod
+    def _transform_impl(self, x: Any, key: str, metadata: Optional[Dict[str, Any]] = None):
         pass
 
     def class_name(self):
@@ -103,7 +107,7 @@ class DoNothing(BaseTransform):
     def __call__(self, data: Dict[str, Any]) -> Dict[str, Any]:
         return data
 
-    def _transform_impl(self, x: Any, metadata: Optional[Dict[str, Any]] = None):
+    def _transform_impl(self, x: Any, key: str, metadata: Optional[Dict[str, Any]] = None):
         return x
 
 
@@ -114,5 +118,52 @@ class ToTensor(BaseTransform):
     def __call__(self, data: Dict[str, Any]) -> Dict[str, Any]:
         return super().apply_transform(data)
 
-    def _transform_impl(self, x: Any, metadata: Optional[Dict[str, Any]] = None):
+    def _transform_impl(self, x: Any, key: str, metadata: Optional[Dict[str, Any]] = None):
         return torch.from_numpy(x)
+
+
+class AddDimAt(BaseTransform):
+    def __init__(self, keys: Iterable[str], axis: int):
+        super().__init__(keys)
+        self.axis = axis
+
+    def __call__(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        return super().apply_transform(data)
+
+    def _transform_impl(self, x: Any, key: str, metadata: Optional[Dict[str, Any]] = None):
+        return add_dim_at(self.axis, x)
+
+
+class RemoveDimAt(BaseTransform):
+    def __init__(self, keys: Iterable[str], axis: int):
+        super().__init__(keys)
+        self.axis = axis
+
+    def __call__(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        return super().apply_transform(data)
+
+    def _transform_impl(self, x: Any, key: str, metadata: Optional[Dict[str, Any]] = None):
+        return remove_dim_at(self.axis, x)
+
+
+class ReorderAxes(BaseTransform):
+    def __init__(self, keys: Iterable[str], axes: Tuple[int]):
+        super().__init__(keys)
+        self.axes = axes
+
+    def __call__(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        return super().apply_transform(data)
+
+    def _transform_impl(self, x: Any, key: str, metadata: Optional[Dict[str, Any]] = None):
+        return reorder_axes(self.axes, x)
+
+
+class EnsureFloat(BaseTransform):
+    def __init__(self, keys: Iterable[str]):
+        super().__init__(keys)
+
+    def __call__(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        return super().apply_transform(data)
+
+    def _transform_impl(self, x: Any, key: str, metadata: Optional[Dict[str, Any]] = None):
+        return ensure_float(x)

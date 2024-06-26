@@ -1,18 +1,22 @@
 # Dataset constants
 PATIENT_NAME_KEY = "patient"
 IMAGE_KEY = "image"
-ES_INDEX = 0
-ED_INDEX = 1
-FORWARD_FLOW_KEY = "fwd_flow"
-BACKWARD_FLOW_KEY = "bwd_flow"
 TI_KEY = "ti"
 TF_KEY = "tf"
+TED_KEY = "ed_time"
+TES_KEY = "es_time"
 MI_KEY = "mi"
 MF_KEY = "mf"
+MES_KEY = "mes"
+MED_KEY = "med"
 OFFSET_KEY = "offset"
-FORWARD_TS_KEY = "fwd_times"
-BACKWARD_TS_KEY = "bwd_times"
+FWD_TS_KEY = "fwd_times"
+BWD_TS_KEY = "bwd_times"
 
-# Used in transforms
 METADATA_SUBFIX = '_meta'
 FLOW_SUBFIX = '_flow'
+FWD_FLOW_KEY = "fwd" + FLOW_SUBFIX
+BWD_FLOW_KEY = "bwd" + FLOW_SUBFIX
+
+MASKS_KEYS = {MI_KEY, MF_KEY, MED_KEY, MES_KEY}
+FLOWS_KEYS = {FWD_FLOW_KEY, BWD_FLOW_KEY}
