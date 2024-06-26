@@ -49,12 +49,12 @@ class RandomRotate(BaseTransform):
         self.identity_grid = self.get_identity_grid()
 
     def __call__(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        if np.random.rand() < self.p:
+        if np.random.uniform() < self.p:
             # The same rotation is appled to all data
             self.R = self.sample_rotation_matrix()
             self.rotated_grid = torch.matmul(self.identity_grid, self.R).float()
-
-            return super().apply_transform(data)
+            data = super().apply_transform(data)
+        return data
 
     def _transform_impl(self, x: torch.Tensor, key: str, metadata: Dict[str, Any] | None = None) -> torch.Tensor:
         """
@@ -126,3 +126,46 @@ class RandomRotate(BaseTransform):
         """
         flow_r = torch.einsum('ij,tjxyz->tixyz', self.R, flow)
         return flow_r
+
+
+class RandomFlip(BaseTransform):
+    def __init__(self, keys: Iterable[str], p: float, axis: int):
+        """
+        Args:
+            axis (int): 2, 3, 4 for depth, vertical and horizontal flips
+        """
+        super().__init__(keys)
+
+        assert axis in {2, 3, 4}, "Axis must be 2, 3 or 4"
+
+        self.p = p
+        self.axis = axis
+
+    def __call__(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        if np.random.uniform() < self.p:
+            data = super().apply_transform(data)
+        return data
+
+    def _transform_impl(self, x: torch.Tensor, key: str, metadata: Dict[str, Any] | None = None) -> torch.Tensor:
+        add_batch_dim = x.ndim == 4 and key in MASKS_KEYS
+
+        if add_batch_dim:
+            x = torch.unsqueeze(x, dim=0)  # Add dummy batch dim for masks
+
+        x_f = torch.flip(x, dims=(self.axis,))
+
+        if key in FLOWS_KEYS:
+            x_f = self.flow_transform(x_f)
+        if add_batch_dim:
+            x_f = torch.squeeze(x_f, dim=0)
+
+        return x_f
+
+    def flow_transform(self, flow: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            flow (torch.Tensor): Tensor with shape(T, 3, Z, Y, X)
+        """
+        index = {2: 2, 3: 1, 4: 0}[self.axis]
+        flow[:, index] *= -1
+        return flow

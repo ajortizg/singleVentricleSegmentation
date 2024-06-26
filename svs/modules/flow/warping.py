@@ -345,6 +345,21 @@ class TransformsWarper(OpticalFlowWarper):
                 boundaries={IMAGE_KEY: "zeros", MED_KEY: "zeros", MES_KEY: "zeros", FWD_FLOW_KEY: "zeros", BWD_FLOW_KEY: "zeros"},
                 modes={IMAGE_KEY: "bilinear", MED_KEY: "nearest", MES_KEY: "nearest", FWD_FLOW_KEY: "bilinear", BWD_FLOW_KEY: "bilinear"},
                 align_corners=False
+            ),
+            T.RandomFlip(
+                keys=[IMAGE_KEY, MED_KEY, MES_KEY, FWD_FLOW_KEY, BWD_FLOW_KEY],
+                p=0.5,
+                axis=2
+            ),
+            T.RandomFlip(
+                keys=[IMAGE_KEY, MED_KEY, MES_KEY, FWD_FLOW_KEY, BWD_FLOW_KEY],
+                p=0.5,
+                axis=3
+            ),
+            T.RandomFlip(
+                keys=[IMAGE_KEY, MED_KEY, MES_KEY, FWD_FLOW_KEY, BWD_FLOW_KEY],
+                p=0.5,
+                axis=4
             )
         ])
 

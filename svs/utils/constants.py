@@ -1,4 +1,3 @@
-# Dataset constants
 PATIENT_NAME_KEY = "patient"
 IMAGE_KEY = "image"
 TI_KEY = "ti"
