@@ -374,7 +374,9 @@ class TransformsWarper(OpticalFlowWarper):
             # T.AdditiveGaussianNoise(keys=[IMAGE_KEY], p=1.0, mu=0.0, sigma_range=(0.0, 0.1)),
             # T.GammaCorrection(keys=[IMAGE_KEY], p=1.0, gamma_range=(0.8, 1.2), invert_image=False, retain_stats=True),
             # T.ContrastAugmentation(keys=[IMAGE_KEY], p=1.0, contrast_range=(0.8, 1.2), preserve_range=True)
-            T.MultiplicativeScaling(keys=[IMAGE_KEY], p=1.0, scale_range=(0.9, 1.1))
+            # T.MultiplicativeScaling(keys=[IMAGE_KEY], p=1.0, scale_range=(0.9, 1.1))
+            # T.AdditiveScaling([IMAGE_KEY], 1.0, 0.0, 0.5)
+            T.GaussianBlur([IMAGE_KEY], 1.0, (0.5, 1.0))
         ])
 
         return NNDataset(

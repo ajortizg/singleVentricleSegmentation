@@ -1,3 +1,4 @@
+from scipy import ndimage
 import numpy as np
 import torch
 from typing import Iterable, Dict, Any, Tuple
@@ -185,3 +186,38 @@ class MultiplicativeScaling(BaseTransform):
         sigma = np.random.uniform(self.scale_range[0], self.scale_range[1])
         x *= sigma
         return x
+
+
+class AdditiveScaling(BaseTransform):
+    def __init__(self, keys: Iterable[str], p: float, mean: float, std: float):
+        super().__init__(keys)
+        self.p = p
+        self.mean = mean
+        self.std = std
+
+    def __call__(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        if np.random.uniform() < self.p:
+            data = super().apply_transform(data)
+        return data
+
+    def _transform_impl(self, x: torch.Tensor, key: str, metadata: Dict[str, Any] | None = None) -> torch.Tensor:
+        sigma = np.random.normal(self.mean, self.std)
+        x += sigma
+        return x
+
+
+class GaussianBlur(BaseTransform):
+    def __init__(self, keys: Iterable[str], p: float, sigma_range: Tuple[float, float]):
+        super().__init__(keys)
+        self.p = p
+        self.sigma_range = sigma_range
+
+    def __call__(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        if np.random.uniform() < self.p:
+            data = super().apply_transform(data)
+        return data
+
+    def _transform_impl(self, x: torch.Tensor, key: str, metadata: Dict[str, Any] | None = None) -> torch.Tensor:
+        sigma = np.random.uniform(self.sigma_range[0], self.sigma_range[1])
+        x = ndimage.gaussian_filter(x.numpy(), sigma, order=0)
+        return torch.from_numpy(x).float()
