@@ -51,7 +51,7 @@ class UNet(nn.Module):
 
         output = self.layers[-1](xi[-1])
 
-        return output + identity
+        return output + identity, output
 
 
 class DoubleConv3d(nn.Module):

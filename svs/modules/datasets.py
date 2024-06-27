@@ -317,8 +317,6 @@ class NNDataset(FlowDataset):
     def __getitem__(self, idx: int):
         patient = super().__getitem__(idx)
 
-        # Group patient data into a dict
-        # Array shape format is [X, Y, Z, [T]]. For optical flow [T, 3, X, Y, Z]
         (ti, tf), (mi, mf), _ = compute_timepoints(
             patient.tdia,
             patient.tsys,
@@ -327,6 +325,8 @@ class NNDataset(FlowDataset):
             FlowDirection.FORWARD
         )
 
+        # Group patient data into a dict
+        # Array shape format is [X, Y, Z, [T]]. For optical flow [T, 3, X, Y, Z]
         data = {
             PATIENT_NAME_KEY: patient.name,
             IMAGE_KEY: torch.from_numpy(patient.img_array()),
