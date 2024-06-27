@@ -360,7 +360,7 @@ class TransformsWarper(OpticalFlowWarper):
             #     keys=[IMAGE_KEY, MED_KEY, MES_KEY, FWD_FLOW_KEY, BWD_FLOW_KEY],
             #     p=0.5,
             #     axis=4
-            # )
+            # ),
             # T.ElasticDeformation(
             #     keys=[IMAGE_KEY, MED_KEY, MES_KEY, FWD_FLOW_KEY, BWD_FLOW_KEY],
             #     p=1.0,
@@ -370,9 +370,11 @@ class TransformsWarper(OpticalFlowWarper):
             #     points=8,
             #     boundary="constant",
             #     order={IMAGE_KEY: 3, MED_KEY: 0, MES_KEY: 0, FWD_FLOW_KEY: 3, BWD_FLOW_KEY: 3}
-            # )
-            # T.AdditiveGaussianNoise(keys=[IMAGE_KEY], p=1.0, mu=0.0, sigma_range=(0.0, 0.1))
-            T.GammaCorrection(keys=[IMAGE_KEY], p=1.0, gamma_range=(0.8, 1.2), invert_image=False, retain_stats=True)
+            # ),
+            # T.AdditiveGaussianNoise(keys=[IMAGE_KEY], p=1.0, mu=0.0, sigma_range=(0.0, 0.1)),
+            # T.GammaCorrection(keys=[IMAGE_KEY], p=1.0, gamma_range=(0.8, 1.2), invert_image=False, retain_stats=True),
+            # T.ContrastAugmentation(keys=[IMAGE_KEY], p=1.0, contrast_range=(0.8, 1.2), preserve_range=True)
+            T.MultiplicativeScaling(keys=[IMAGE_KEY], p=1.0, scale_range=(0.9, 1.1))
         ])
 
         return NNDataset(
