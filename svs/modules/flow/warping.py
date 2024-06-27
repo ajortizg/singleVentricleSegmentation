@@ -337,46 +337,76 @@ class TransformsWarper(OpticalFlowWarper):
             # Add channel dimension
             T.AddDimAt(keys=[MES_KEY, MED_KEY], axis=0),
             T.AddDimAt(keys=[IMAGE_KEY], axis=1),
-            # T.RandomRotate(
-            #     keys=[IMAGE_KEY, MED_KEY, MES_KEY, FWD_FLOW_KEY, BWD_FLOW_KEY],
-            #     p=1.0,
-            #     spatial_size=(80, 80, 80),
-            #     rot_ranges=[(0, 360), (0, 360), (0, 360)],
-            #     boundaries={IMAGE_KEY: "zeros", MED_KEY: "zeros", MES_KEY: "zeros", FWD_FLOW_KEY: "zeros", BWD_FLOW_KEY: "zeros"},
-            #     modes={IMAGE_KEY: "bilinear", MED_KEY: "nearest", MES_KEY: "nearest", FWD_FLOW_KEY: "bilinear", BWD_FLOW_KEY: "bilinear"},
-            #     align_corners=False
-            # ),
-            # T.RandomFlip(
-            #     keys=[IMAGE_KEY, MED_KEY, MES_KEY, FWD_FLOW_KEY, BWD_FLOW_KEY],
-            #     p=0.5,
-            #     axis=2
-            # ),
-            # T.RandomFlip(
-            #     keys=[IMAGE_KEY, MED_KEY, MES_KEY, FWD_FLOW_KEY, BWD_FLOW_KEY],
-            #     p=0.5,
-            #     axis=3
-            # ),
-            # T.RandomFlip(
-            #     keys=[IMAGE_KEY, MED_KEY, MES_KEY, FWD_FLOW_KEY, BWD_FLOW_KEY],
-            #     p=0.5,
-            #     axis=4
-            # ),
-            # T.ElasticDeformation(
-            #     keys=[IMAGE_KEY, MED_KEY, MES_KEY, FWD_FLOW_KEY, BWD_FLOW_KEY],
-            #     p=1.0,
-            #     deform_shape=(80, 80),
-            #     deform_axis=(3, 4),
-            #     sigma_range=(0.5, 2.0),
-            #     points=8,
-            #     boundary="constant",
-            #     order={IMAGE_KEY: 3, MED_KEY: 0, MES_KEY: 0, FWD_FLOW_KEY: 3, BWD_FLOW_KEY: 3}
-            # ),
-            # T.AdditiveGaussianNoise(keys=[IMAGE_KEY], p=1.0, mu=0.0, sigma_range=(0.0, 0.1)),
-            # T.GammaCorrection(keys=[IMAGE_KEY], p=1.0, gamma_range=(0.8, 1.2), invert_image=False, retain_stats=True),
-            # T.ContrastAugmentation(keys=[IMAGE_KEY], p=1.0, contrast_range=(0.8, 1.2), preserve_range=True)
-            # T.MultiplicativeScaling(keys=[IMAGE_KEY], p=1.0, scale_range=(0.9, 1.1))
-            # T.AdditiveScaling([IMAGE_KEY], 1.0, 0.0, 0.5)
-            T.GaussianBlur([IMAGE_KEY], 1.0, (0.5, 1.0))
+            # Spatial transformations
+            T.RandomRotate(
+                keys=[IMAGE_KEY, MED_KEY, MES_KEY, FWD_FLOW_KEY, BWD_FLOW_KEY],
+                p=0.5,
+                spatial_shape=(80, 80, 80),
+                rot_ranges=[(0, 360), (0, 360), (0, 360)],
+                boundary="zeros",
+                modes={IMAGE_KEY: "bilinear", MED_KEY: "nearest", MES_KEY: "nearest", FWD_FLOW_KEY: "bilinear", BWD_FLOW_KEY: "bilinear"},
+                align_corners=False
+            ),
+            T.RandomFlip(
+                keys=[IMAGE_KEY, MED_KEY, MES_KEY, FWD_FLOW_KEY, BWD_FLOW_KEY],
+                p=0.5,
+                axis=2
+            ),
+            T.RandomFlip(
+                keys=[IMAGE_KEY, MED_KEY, MES_KEY, FWD_FLOW_KEY, BWD_FLOW_KEY],
+                p=0.5,
+                axis=3
+            ),
+            T.RandomFlip(
+                keys=[IMAGE_KEY, MED_KEY, MES_KEY, FWD_FLOW_KEY, BWD_FLOW_KEY],
+                p=0.5,
+                axis=4
+            ),
+            T.ElasticDeformation(
+                keys=[IMAGE_KEY, MED_KEY, MES_KEY, FWD_FLOW_KEY, BWD_FLOW_KEY],
+                p=0.5,
+                deform_shape=(80, 80, 80),
+                deform_axis=(2, 3, 4),
+                sigma_range=(0.5, 2.0),
+                points=8,
+                boundary="constant",
+                order={IMAGE_KEY: 3, MED_KEY: 0, MES_KEY: 0, FWD_FLOW_KEY: 3, BWD_FLOW_KEY: 3}
+            ),
+            # Intensity transformations
+            T.GammaCorrection(
+                keys=[IMAGE_KEY],
+                p=0.5,
+                gamma_range=(0.8, 1.2),
+                invert_image=False,
+                retain_stats=True
+            ),
+            T.ContrastAugmentation(
+                keys=[IMAGE_KEY],
+                p=0.5,
+                contrast_range=(0.8, 1.2),
+                preserve_range=True
+            ),
+            T.MultiplicativeScaling(
+                keys=[IMAGE_KEY],
+                p=0.5,
+                scale_range=(0.9, 1.1)
+            ),
+            T.AdditiveScaling(
+                keys=[IMAGE_KEY],
+                p=0.5,
+                mean=0.0,
+                std=0.5
+            ),
+            T.GaussianBlur(
+                keys=[IMAGE_KEY],
+                p=0.5,
+                sigma_range=(0.5, 1.0)
+            ),
+            T.AdditiveGaussianNoise(
+                keys=[IMAGE_KEY],
+                p=1.0, mu=0.0,
+                sigma_range=(0.0, 0.1)
+            )
         ])
 
         return NNDataset(

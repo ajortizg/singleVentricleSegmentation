@@ -14,7 +14,7 @@ class RandomRotate(BaseTransform):
         self,
         keys: Iterable[str],
         p: float,
-        deform_shape: Iterable[int],
+        spatial_shape: Iterable[int],
         rot_ranges: Iterable[Iterable[float]],
         boundary: str,
         modes: Dict[str, str],
@@ -27,7 +27,7 @@ class RandomRotate(BaseTransform):
         Args:
             keys (Iterable[str]): Keys to apply the transformation.
             p (float): Probability of applying the rotation.
-            deform_shape (Iterable[int]): Spatial size of the volume (Z, Y, X).
+            spatial_shape (Iterable[int]): Spatial size of the volume (Z, Y, X).
             rot_ranges (Iterable[Iterable[float]]): Rotation ranges for each deform_axis (X, Y, Z) in degrees.
             boundary (str): Boundary modes for grid_sample (e.g., 'zeros', 'border', 'reflection').
             modes (Iterable[str]): Interpolation modes for grid_sample (e.g., 'bilinear', 'nearest').
@@ -35,11 +35,11 @@ class RandomRotate(BaseTransform):
         """
         super().__init__(keys)
 
-        assert len(deform_shape) == 3, "Spatial size must have exactly 3 elements."
+        assert len(spatial_shape) == 3, "Spatial shape must have exactly 3 elements."
         assert len(rot_ranges) == 3, "Rotation ranges must have exactly 3 elements."
 
         self.p = p
-        self.deform_shape = deform_shape
+        self.deform_shape = spatial_shape
         self.range_x = rot_ranges[0]
         self.range_y = rot_ranges[1]
         self.range_z = rot_ranges[2]
@@ -128,17 +128,17 @@ class RandomRotate(BaseTransform):
 
 
 class RandomFlip(BaseTransform):
-    def __init__(self, keys: Iterable[str], p: float, deform_axis: int):
+    def __init__(self, keys: Iterable[str], p: float, axis: int):
         """
         Args:
-            deform_axis (int): 2, 3, 4 for depth, vertical and horizontal flips
+            axis (int): 2, 3, 4 for depth, vertical and horizontal flips.
         """
         super().__init__(keys)
 
-        assert deform_axis in {2, 3, 4}, "Axis must be 2, 3 or 4"
+        assert axis in {2, 3, 4}, "Axis must be 2, 3 or 4"
 
         self.p = p
-        self.deform_axis = deform_axis
+        self.axis = axis
 
     def __call__(self, data: Dict[str, Any]) -> Dict[str, Any]:
         if np.random.uniform() < self.p:
@@ -151,7 +151,7 @@ class RandomFlip(BaseTransform):
         if add_batch_dim:
             x = torch.unsqueeze(x, dim=0)  # Add dummy batch dim for masks
 
-        x_f = torch.flip(x, dims=(self.deform_axis,))
+        x_f = torch.flip(x, dims=(self.axis,))
 
         if key in FLOWS_KEYS:
             x_f = self.flow_transform(x_f)
@@ -165,7 +165,7 @@ class RandomFlip(BaseTransform):
         Args:
             flow (torch.Tensor): Tensor with shape(T, 3, Z, Y, X)
         """
-        index = {2: 2, 3: 1, 4: 0}[self.deform_axis]
+        index = {2: 2, 3: 1, 4: 0}[self.axis]
         flow[:, index] *= -1
         return flow
 
