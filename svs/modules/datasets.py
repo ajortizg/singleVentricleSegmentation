@@ -412,14 +412,21 @@ class LitNNDataset(pl.LightningDataModule):
         self,
         num_workers: int,
         batch_size: int,
-        train_config: Dict,
-        val_config: Dict
+        train_config: Dict[str, Any],
+        val_config: Dict[str, Any]
     ):
         super().__init__()
         self.num_workers = num_workers
         self.batch_size = batch_size
-        self.ds_trn = NNDataset(**train_config)
-        self.ds_val = NNDataset(**val_config)
+        self.train_config = train_config
+        self.val_config = val_config
+
+    def setup(self, stage: str):
+        if stage == "fit":
+            self.ds_trn = NNDataset(**self.train_config)
+            self.ds_val = NNDataset(**self.val_config)
+        elif stage in {"test", "predict"}:
+            raise NotImplementedError(f"LitNNDataset.setup {stage} functionality not implemented yet.")
 
     def train_dataloader(self):
         return DataLoader(
@@ -440,3 +447,9 @@ class LitNNDataset(pl.LightningDataModule):
             drop_last=False,
             collate_fn=NNDataset.collate_fn
         )
+
+    def transfer_batch_to_device(self, batch: Dict[str, Any], device: torch.device, idx: int) -> Dict[str, Any]:
+        for k in [IMAGE_KEY, MI_KEY, MF_KEY, FWD_FLOW_KEY, BWD_FLOW_KEY]:
+            assert isinstance(batch[k], torch.Tensor), f"transfer_batch_to_device failed because {k} is not a torch Tensor."
+            batch[k] = batch[k].to(device)
+        return batch
