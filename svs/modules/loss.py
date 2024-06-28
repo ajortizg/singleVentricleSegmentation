@@ -42,7 +42,7 @@ class PropagationLoss(nn.Module):
 
         for b in range(bs):
             # Self-supervised term
-            mt = mts[b, 1:times_tildes - offsets[b]]
+            mt = mts[b, 1:times_tildes - offsets[b] - 1]
             mtt = mtts[b, 1 + offsets[b]:-1]
             unsup_term += self.mse_fn(mt, mtt) / kl[b]
 

@@ -34,6 +34,7 @@ tzyx_to_xyzt = (3, 2, 1, 0)
 t3xyz_to_t3zyx = (0, 1, 4, 3, 2)
 t3xyz_to_tzyx3 = (0, 4, 3, 2, 1)
 t3zyx_to_t3xyz = (0, 1, 4, 3, 2)
+t3zyx_to_tzyx3 = (0, 2, 3, 4, 1)
 
 
 @dataclass

@@ -97,9 +97,9 @@ class LitUNet(pl.LightningModule):
         mf = batch[MF_KEY]              # (B, C, Z, Y, X)
         fflow = batch[FWD_FLOW_KEY]     # (B, T, Z, Y, X, 3)
         bflow = batch[BWD_FLOW_KEY]     # (B, T, Z, Y, X, 3)
-        fts = batch[FWD_TS_KEY]
-        bts = batch[BWD_TS_KEY]
-        return img, mi, mf, fflow, bflow, fts, bts
+        ftimes = batch[FWD_TS_KEY]
+        btimes = batch[BWD_TS_KEY]
+        return img, mi, mf, fflow, bflow, ftimes, btimes
 
     def propagation_step(
         self,
@@ -130,8 +130,7 @@ class LitUNet(pl.LightningModule):
         # Log metrics for each training_step
         self.log_dict(
             {f"loss_trn/{k}": v for k, v in loss.items()},
-            prog_bar=True,
-            on_step=True,
+            prog_bar=False,
             on_epoch=True,
             logger=True,
             batch_size=len(batch[OFFSET_KEY])
@@ -142,7 +141,7 @@ class LitUNet(pl.LightningModule):
 
     def on_train_epoch_end(self):
         for i in range(2):
-            self.log_dict(self.metrics["trn"][i].compute(), prog_bar=False)
+            self.log_dict(self.metrics["trn"][i].compute())
             self.metrics["trn"][i].reset()
 
     def validation_step(self, batch, batch_idx):
@@ -153,6 +152,7 @@ class LitUNet(pl.LightningModule):
             {f"loss_val/{k}": v for k, v in loss.items()},
             prog_bar=False,
             on_epoch=True,
+            logger=True,
             batch_size=len(batch[OFFSET_KEY])
         )
         self.update_metrics("val", y, batch[OFFSET_KEY])
@@ -167,7 +167,7 @@ class LitUNet(pl.LightningModule):
     @torch.no_grad()
     def update_metrics(self, key: str, y: Tuple[torch.Tensor], offsets: torch.Tensor):
         mts, mtts, *_ = y
-        batch_indices = mts.shape[0]
+        batch_indices = torch.arange(mts.shape[0])
 
         mi = mts[batch_indices, 0]
         mitt = mtts[batch_indices, offsets[batch_indices]]

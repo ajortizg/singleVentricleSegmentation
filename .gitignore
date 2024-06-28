@@ -139,5 +139,6 @@ MiddleburyOpticalFlow
 
 #results folder
 results*
+tb_logs/
 
 opticalFlow_cuda_ext/
