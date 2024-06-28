@@ -1,11 +1,18 @@
+hydra:
+  run:
+    dir: outputs/${hydra.job.name}/${now:%Y-%m-%d_%H-%M-%S}
+  sweep:
+    dir: outputs/${hydra.job.name}/${now:%Y-%m-%d_%H-%M-%S}
+    subdir: ${hydra.job.num}
+
 gpu: [0]
 
 data:
   _target_: 'svs.modules.datasets.LitNNDataset'
-  num_workers: 8
-  batch_size: 4
+  num_workers: 16
+  batch_size: 2
   train_config:
-    base_dir: '../data/refactor_prep/acdc_lv'
+    base_dir: 'data/refactor_prep/acdc_lv'
     imgs_dir: 'NIFTI_4D_Datasets'
     segs_dir: 'NIFTI_Single_Ventricle_Segmentations'
     metadata_file: 'Segmentation_volumes.xlsx'
@@ -24,5 +31,5 @@ data:
 defaults:
   - _self_
   - model: unet
-  - transforms: transforms
+  - transforms: custom
   - override hydra/job_logging: custom

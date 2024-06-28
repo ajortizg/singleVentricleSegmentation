@@ -422,11 +422,19 @@ class LitNNDataset(pl.LightningDataModule):
         self.batch_size = batch_size
         self.train_config = train_config
         self.val_config = val_config
+        self.train_transforms = None
+        self.val_transforms = None
+
+    def set_train_transforms(self, transforms):
+        self.train_transforms = transforms
+
+    def set_val_transforms(self, transforms):
+        self.val_transforms = transforms
 
     def setup(self, stage: str):
         if stage == "fit":
-            self.ds_trn = NNDataset(**self.train_config)
-            self.ds_val = NNDataset(**self.val_config)
+            self.ds_trn = NNDataset(transforms=self.train_transforms, **self.train_config)
+            self.ds_val = NNDataset(transforms=self.val_transforms, **self.val_config)
         elif stage in {"test", "predict"}:
             raise NotImplementedError(f"LitNNDataset.setup {stage} functionality not implemented yet.")
 

@@ -29,7 +29,6 @@ class BaseTransform(object, metaclass=ABCMeta):
             keys (Iterable[str]): List of keys in the data dictionary to which the transformation will be applied.
         """
         self.keys = keys
-        self.cur_key = None
 
     def apply_transform(self, data: Dict[str, Any]) -> Dict[str, Any]:
         for key in self.keys:

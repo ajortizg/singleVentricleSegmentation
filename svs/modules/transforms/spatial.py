@@ -3,6 +3,7 @@ import torch
 from typing import Any, Dict, Iterable, Tuple, List
 import numpy as np
 import torch.nn.functional as F
+import omegaconf
 
 from svs.modules.transforms.base import BaseTransform
 from svs.modules.transforms.functional import rotx, roty, rotz
@@ -193,6 +194,11 @@ class ElasticDeformation(BaseTransform):
         assert len(sigma_range) == 2, "sigma_range must have 2 elements."
         assert len(deform_axis) in {1, 2, 3}, "deform_axis must contain 1, 2, or 3 elements."
         assert len(deform_axis) == len(deform_shape), "deform_axis and deform_shape must have the same length."
+
+        if isinstance(deform_shape, (list, omegaconf.listconfig.ListConfig)):
+            deform_shape = tuple(deform_shape)
+        if isinstance(deform_axis, (list, omegaconf.listconfig.ListConfig)):
+            deform_axis = tuple(deform_axis)
 
         self.p = p
         self.deform_shape = deform_shape

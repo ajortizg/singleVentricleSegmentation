@@ -1,13 +1,20 @@
 _target_: 'svs.models.lit_unet.LitUNet'
 epochs: 1000
+lambda_u: 1.0
+gamma_p: 0.1
 lr: 1e-3
 betas: [0.9, 0.999]
-weight_decay:  1e-4
+weight_decay:  1e-5
 model_kwargs:
   num_layers: 4
   num_classes: 1
   input_channels: 2
-  features_start: 16
+  features_start: 8
   trilinear: false
   padding: 1
   kernel_size: [3, 3, 3]
+warp_kwargs:
+  interpolation_type: 'LINEAR'
+  boundary_type: 'MIRROR'
+  mesh_length_type: 'numDofs'
+  lenghts: [1, 1, 1]

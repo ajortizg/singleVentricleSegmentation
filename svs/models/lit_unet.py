@@ -140,9 +140,7 @@ class LitUNet(pl.LightningModule):
         return loss[TOTAL_LOSS_KEY]
 
     def on_train_epoch_end(self):
-        for i in range(2):
-            self.log_dict(self.metrics["trn"][i].compute())
-            self.metrics["trn"][i].reset()
+        self.compute_and_log_mean_metrics("trn")
 
     def validation_step(self, batch, batch_idx):
         loss, y = self.forward_and_loss(batch, batch_idx)
@@ -160,9 +158,24 @@ class LitUNet(pl.LightningModule):
         return loss[TOTAL_LOSS_KEY]
 
     def on_validation_epoch_end(self):
+        self.compute_and_log_mean_metrics("val")
+
+    def compute_and_log_mean_metrics(self, stage: str):
+        metrics_list = []
         for i in range(2):
-            self.log_dict(self.metrics["val"][i].compute())
-            self.metrics["val"][i].reset()
+            metrics = self.metrics[stage][i].compute()
+            metrics_list.append(metrics)
+            self.log_dict(metrics)
+            self.metrics[stage][i].reset()
+
+        self.log_mean_metrics(metrics_list, stage)
+
+    def log_mean_metrics(self, metrics_list: list,  stage: str):
+        mean_metrics = {
+            f"{metric}_{stage}/mean": 0.5 * (metrics_list[0][f"{metric}_{stage}/b"] + metrics_list[1][f"{metric}_{stage}/f"])
+            for metric in ["dice", "hsdf"]
+        }
+        self.log_dict(mean_metrics)
 
     @torch.no_grad()
     def update_metrics(self, key: str, y: Tuple[torch.Tensor], offsets: torch.Tensor):
