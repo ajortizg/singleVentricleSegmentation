@@ -1,6 +1,8 @@
 import torch
 from torch import nn
-from typing import Iterable
+from typing import Dict
+
+from svs.utils.constants import *
 
 
 class PropagationLoss(nn.Module):
@@ -16,14 +18,8 @@ class PropagationLoss(nn.Module):
         self.gamma_p = gamma_p
         self.mse_fn = nn.MSELoss(reduction="sum")
 
-    def forward(
-        self,
-        mts: torch.Tensor,
-        mtts: torch.Tensor,
-        mhs: torch.Tensor,
-        mhhs: torch.Tensor,
-        offsets: torch.Tensor
-    ) -> Iterable[torch.Tensor]:
+    def forward(self, y: tuple[torch.Tensor], offsets: torch.Tensor) -> Dict[str, torch.Tensor]:
+        mts, mtts, mhs, mhhs = y
         bs = mts.shape[0]
         batch_indices = torch.arange(bs)
 
@@ -60,4 +56,9 @@ class PropagationLoss(nn.Module):
         pen_term *= (self.gamma_p / bs)
         loss = sup_term + unsup_term + pen_term
 
-        return loss, sup_term, unsup_term, pen_term
+        return {
+            TOTAL_LOSS_KEY: loss,
+            SUPERVISED_LOSS_KEY: sup_term,
+            UNSUPERVISED_LOSS_KEY: unsup_term,
+            PENALIZATION_LOSS_KEY: pen_term
+        }

@@ -1,14 +1,13 @@
 from typing import Tuple, Dict, Any, Iterable
 import lightning as pl
 import torch
-from monai.metrics.meandice import compute_dice
-from monai.metrics.hausdorff_distance import compute_hausdorff_distance
-
+import torchmetrics
 
 from svs.models.unet import UNet
 from svs.modules.flow.warping import Warp
 from svs.modules.loss import PropagationLoss
 from svs.utils.constants import *
+from svs.modules.metrics import Dice, Hausdorff
 
 
 class LitUNet(pl.LightningModule):
@@ -43,10 +42,22 @@ class LitUNet(pl.LightningModule):
         self.warp = Warp(**warp_kwargs)
         self.loss_fn = PropagationLoss(lambda_u, gamma_p)
 
+        self.setup_metrics()
         self.epochs = epochs
         self.lr = lr
         self.weight_decay = weight_decay
         self.betas = betas
+
+    def setup_metrics(self):
+        _metrics = torchmetrics.MetricCollection({
+            "dice": Dice(),
+            "hdff": Hausdorff()
+        })
+
+        self.metrics = torch.nn.ModuleDict(dict(
+            trn=torch.nn.ModuleList([_metrics.clone(postfix=f"_trn/{direction}") for direction in ["b", "f"]]),
+            val=torch.nn.ModuleList([_metrics.clone(postfix=f"_val/{direction}") for direction in ["b", "f"]])
+        ))
 
     def configure_optimizers(self, lr: float = None):
         lr = lr or self.lr
@@ -108,29 +119,66 @@ class LitUNet(pl.LightningModule):
 
         return next_mask, mh
 
-    def forward_and_loss(self, batch, batch_idx) -> Tuple[Tuple[torch.Tensor]]:
+    def forward_and_loss(self, batch, batch_idx) -> Tuple[Dict[str, torch.Tensor], Tuple[torch.Tensor]]:
         y = self(batch)
-
-        offsets = torch.tensor(batch[OFFSET_KEY]).to(torch.long)
-        loss = self.loss_fn(y[0], y[1], y[2], y[3], offsets)
-
+        loss = self.loss_fn(y, batch[OFFSET_KEY])
         return loss, y
 
     def training_step(self, batch, batch_idx):
+        # TODO: put this in a transform
+        batch[OFFSET_KEY] = torch.tensor(batch[OFFSET_KEY]).to(torch.long)
+
         loss, y = self.forward_and_loss(batch, batch_idx)
 
         # Log metrics for each training_step
-        for i in range(len(loss)):
-            self.log("train_loss_{i}", loss[i], on_step=True, on_epoch=True, prog_bar=True, logger=True)
-            self.log_dict()
+        self.log_dict(
+            {f"loss_trn/{k}": v for k, v in loss.items()},
+            prog_bar=True,
+            on_step=True,
+            on_epoch=True,
+            logger=True,
+            batch_size=len(batch[OFFSET_KEY])
+        )
+        self.update_metrics("trn", y, batch[OFFSET_KEY])
 
-        return loss[0]
+        return loss[TOTAL_LOSS_KEY]
+
+    def on_train_epoch_end(self):
+        for i in range(2):
+            self.log_dict(self.metrics["trn"][i].compute(), prog_bar=False)
+            self.metrics["trn"][i].reset()
 
     def validation_step(self, batch, batch_idx):
+        batch[OFFSET_KEY] = torch.tensor(batch[OFFSET_KEY]).to(torch.long)
+
         loss, y = self.forward_and_loss(batch, batch_idx)
 
-        # # Plot loss in tensorboard
-        # for i, (train, val) in enumerate(
-        #     zip(self.mean_epoch_stat['train_loss'][-1],
-        #         self.mean_epoch_stat['val_loss'][-1])):
-        #     self.writer.add_scalars(f'loss/l{i}', {'train': train, 'val': val}, e)
+        # Log metrics for each validation step
+        self.log_dict(
+            {f"loss_val/{k}": v for k, v in loss.items()},
+            prog_bar=False,
+            on_epoch=True,
+            batch_size=len(batch[OFFSET_KEY])
+        )
+        self.update_metrics("val", y, batch[OFFSET_KEY])
+
+        return loss[TOTAL_LOSS_KEY]
+
+    def on_validation_epoch_end(self):
+        for i in range(2):
+            self.log_dict(self.metrics["val"][i].compute())
+            self.metrics["val"][i].reset()
+
+    @torch.no_grad()
+    def update_metrics(self, key: str, y: Tuple[torch.Tensor], offsets: torch.Tensor):
+        mts, mtts, *_ = y
+        batch_indices = mts.shape[0]
+
+        mi = mts[batch_indices, 0]
+        mitt = mtts[batch_indices, offsets[batch_indices]]
+        mf = mtts[batch_indices, -1]
+        mft = mts[batch_indices, -offsets[batch_indices] - 1]
+
+        for i, (y, y_hat) in enumerate(zip([mi, mf], [mitt, mft])):
+            y_hat = torch.where(y_hat > 0.5, 1.0, 0.0)
+            self.metrics[key][i].update(y_hat, y)
