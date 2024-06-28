@@ -51,7 +51,7 @@ class LitUNet(pl.LightningModule):
     def setup_metrics(self):
         _metrics = torchmetrics.MetricCollection({
             "dice": Dice(),
-            "hdff": Hausdorff()
+            "hsdf": Hausdorff()
         })
 
         self.metrics = torch.nn.ModuleDict(dict(
@@ -125,9 +125,6 @@ class LitUNet(pl.LightningModule):
         return loss, y
 
     def training_step(self, batch, batch_idx):
-        # TODO: put this in a transform
-        batch[OFFSET_KEY] = torch.tensor(batch[OFFSET_KEY]).to(torch.long)
-
         loss, y = self.forward_and_loss(batch, batch_idx)
 
         # Log metrics for each training_step
@@ -149,8 +146,6 @@ class LitUNet(pl.LightningModule):
             self.metrics["trn"][i].reset()
 
     def validation_step(self, batch, batch_idx):
-        batch[OFFSET_KEY] = torch.tensor(batch[OFFSET_KEY]).to(torch.long)
-
         loss, y = self.forward_and_loss(batch, batch_idx)
 
         # Log metrics for each validation step

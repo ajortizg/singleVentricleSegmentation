@@ -112,14 +112,21 @@ class DoNothing(BaseTransform):
 
 
 class ToTensor(BaseTransform):
-    def __init__(self, keys: Iterable[str]):
+    def __init__(self, keys: Iterable[str], dtype=None):
         super(ToTensor, self).__init__(keys)
+        self.dtype = dtype
 
     def __call__(self, data: Dict[str, Any]) -> Dict[str, Any]:
         return super().apply_transform(data)
 
     def _transform_impl(self, x: Any, key: str, metadata: Optional[Dict[str, Any]] = None):
-        return torch.from_numpy(x)
+        if isinstance(x, np.ndarray):
+            y = torch.from_numpy(x)
+        elif (isinstance(x, (list, tuple))):
+            y = torch.tensor(x)
+        else:
+            raise TypeError(f"type of x ({type(x)}) is not supported.")
+        return y.to(self.dtype) if self.dtype is not None else y
 
 
 class AddDimAt(BaseTransform):

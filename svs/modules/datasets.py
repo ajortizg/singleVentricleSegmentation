@@ -403,6 +403,7 @@ class NNDataset(FlowDataset):
 
         collated_batch[FWD_TS_KEY] = torch.stack(times_fwd, dim=1)
         collated_batch[BWD_TS_KEY] = torch.stack(times_bwd, dim=1)
+        collated_batch[OFFSET_KEY] = torch.tensor(collated_batch[OFFSET_KEY]).to(torch.long)
 
         return collated_batch
 
