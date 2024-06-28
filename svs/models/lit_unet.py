@@ -1,6 +1,9 @@
 from typing import Tuple, Dict, Any, Iterable
 import lightning as pl
 import torch
+from monai.metrics.meandice import compute_dice
+from monai.metrics.hausdorff_distance import compute_hausdorff_distance
+
 
 from svs.models.unet import UNet
 from svs.modules.flow.warping import Warp
@@ -67,7 +70,7 @@ class LitUNet(pl.LightningModule):
         mtts = torch.empty_like(mts)
         mtts[:, -1] = mf
 
-        # CNN outputs without residual connection, used in loss function
+        # CNN outputs without residual connection, used in the loss computation
         mhs = torch.empty(size=(bs, ts, 1, nz, ny, nx), dtype=dtype, device=device)
         mhhs = torch.empty_like(mhs)
 
@@ -98,21 +101,36 @@ class LitUNet(pl.LightningModule):
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Performs a single propagation step (forward or backward)."""
         warped_mask = self.warp(mask, flow)
+
         # TODO: batch_indices is needed in fts?
         x = torch.cat((img[batch_indices, times[batch_indices, i + 1]], warped_mask), dim=1)
         next_mask, mh = self.model(x)
+
         return next_mask, mh
 
-    def forward_and_loss(self, batch, batch_idx) -> Iterable[torch.Tensor]:
+    def forward_and_loss(self, batch, batch_idx) -> Tuple[Tuple[torch.Tensor]]:
         y = self(batch)
 
         offsets = torch.tensor(batch[OFFSET_KEY]).to(torch.long)
-        return self.loss_fn(y[0], y[1], y[2], y[3], offsets)
+        loss = self.loss_fn(y[0], y[1], y[2], y[3], offsets)
+
+        return loss, y
 
     def training_step(self, batch, batch_idx):
-        mts, mtts, mhs, mhhs = self(batch)
-        # Log metrics for each training_step
-        self.log("train_loss", 0.0, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+        loss, y = self.forward_and_loss(batch, batch_idx)
 
-    def validation_step(self, *args: Any, **kwargs: Any):
-        return super().validation_step(*args, **kwargs)
+        # Log metrics for each training_step
+        for i in range(len(loss)):
+            self.log("train_loss_{i}", loss[i], on_step=True, on_epoch=True, prog_bar=True, logger=True)
+            self.log_dict()
+
+        return loss[0]
+
+    def validation_step(self, batch, batch_idx):
+        loss, y = self.forward_and_loss(batch, batch_idx)
+
+        # # Plot loss in tensorboard
+        # for i, (train, val) in enumerate(
+        #     zip(self.mean_epoch_stat['train_loss'][-1],
+        #         self.mean_epoch_stat['val_loss'][-1])):
+        #     self.writer.add_scalars(f'loss/l{i}', {'train': train, 'val': val}, e)

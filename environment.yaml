@@ -29,6 +29,7 @@ dependencies:
    - scikit-learn
    - scikit-image
    - lightning
+   - torchmetrics
    - pip:
       - opencv-python
       - tensorboard
