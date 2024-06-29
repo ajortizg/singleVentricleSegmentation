@@ -99,10 +99,4 @@ The optical flow algorithm's performance can be assessed by propagating the grou
 
 ## Training the CNN
 
-*Instructions for training the CNN will go here.*
-
-## Notes
-
-- Ensure that you have the necessary permissions to read and write to the specified directories.
-- Verify that all required dependencies are installed in your conda environment.
-- Adjust the configuration files as needed for your specific dataset and processing requirements.
+Run the `scripts/train.py` Python script. Training configuration parameters can be found in `conf/train.yaml`.

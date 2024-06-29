@@ -1,7 +1,7 @@
 rotation:
   p: 0.5
   spatial_shape: [80, 80, 80]
-  rot_ranges: [[0, 360], [0, 360], [0, 360]]
+  rot_ranges: [[-60, 60], [-60, 60], [0, 360]]
   boundary: 'zeros'
 flip_d:
   p: 0.5
@@ -13,7 +13,7 @@ flip_h:
   p: 0.5
   axis: 4
 elastic_deform:
-  p: 0.1
+  p: 0.05
   deform_shape: [80, 80, 80]
   deform_axis: [2, 3, 4]
   sigma_range: [0.5, 2.0]
@@ -25,20 +25,20 @@ gamma_correction:
   invert_image: false
   retain_stats: true
 contrast:
-  p: 0.5
+  p: 0.15
   contrast_range: [0.8, 1.2]
   preserve_range: true
 multiplicative_scaling:
-  p: 0.5
+  p: 0.3
   scale_range: [0.9, 1.1]
 additive_scaling:
-  p: 0.5
+  p: 0.0
   mean: 0.0
   std: 0.5
 gaussian_blur:
-  p: 0.5
+  p: 0.0
   sigma_range: [0.5, 1.0]  
 additive_gaussian_noise:
-  p: 1.0
+  p: 1.1
   mu: 0.0
-  sigma_range: [0.0, 0.1]
+  sigma_range: [0.0, 0.02]
