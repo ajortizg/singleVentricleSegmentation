@@ -1,5 +1,5 @@
 _target_: 'svs.models.lit_unet.LitUNet'
-epochs: 1000
+epochs: 10
 lambda_u: 1.0
 gamma_p: 0.1
 lr: 1e-3

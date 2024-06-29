@@ -4,20 +4,14 @@ from omegaconf import DictConfig
 import lightning as pl
 from lightning.pytorch.loggers import TensorBoardLogger
 
-from svs.modules.transforms_factory import TransformsFactory
-
 
 @hydra.main(config_path="../conf", config_name="train", version_base=None)
-def main(config: DictConfig):
+def main(cfg: DictConfig):
 
     pl.seed_everything(42, workers=True)
 
-    model = hydra.utils.instantiate(config["model"])
-    data = hydra.utils.instantiate(config["data"])
-
-    trs = TransformsFactory(config["transforms"])
-    data.set_train_transforms(trs.get_train_transforms())
-    data.set_val_transforms(trs.get_val_transforms())
+    model = hydra.utils.instantiate(cfg["model"])
+    data = hydra.utils.instantiate(cfg["data"])
 
     logger = TensorBoardLogger(
         osp.join(hydra.core.hydra_config.HydraConfig.get().runtime.output_dir, "tb_logs"),
@@ -29,7 +23,7 @@ def main(config: DictConfig):
         max_epochs=1000,
         min_epochs=1000,
         num_sanity_val_steps=-1,
-        devices=config["gpu"],
+        devices=cfg["gpu"],
         precision=32,
         logger=logger,
         log_every_n_steps=1,

@@ -27,6 +27,7 @@ data:
     split: 'val'
     forward_flow_subdir: ${data.train_config.forward_flow_subdir}
     backward_flow_subdir: ${data.train_config.backward_flow_subdir}
+  transforms_config: ${transforms}
 
 defaults:
   - _self_

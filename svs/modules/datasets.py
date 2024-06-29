@@ -19,7 +19,7 @@ from svs.utils import dirs, plots
 from svs.utils.constants import *
 from svs.utils.enums import FlowDirection, NNDatasetMode
 from svs.utils.flow_utils import compute_timepoints
-
+import svs.modules.transforms as T
 
 xyzt_to_zyxt = (2, 1, 0, 3)
 zyxt_to_xyzt = (2, 1, 0, 3)
@@ -415,21 +415,16 @@ class LitNNDataset(pl.LightningDataModule):
         num_workers: int,
         batch_size: int,
         train_config: Dict[str, Any],
-        val_config: Dict[str, Any]
+        val_config: Dict[str, Any],
+        transforms_config: Dict[str, Any]
     ):
         super().__init__()
         self.num_workers = num_workers
         self.batch_size = batch_size
         self.train_config = train_config
         self.val_config = val_config
-        self.train_transforms = None
-        self.val_transforms = None
-
-    def set_train_transforms(self, transforms):
-        self.train_transforms = transforms
-
-    def set_val_transforms(self, transforms):
-        self.val_transforms = transforms
+        self.set_train_transforms(transforms_config)
+        self.set_val_transforms()
 
     def setup(self, stage: str):
         if stage == "fit":
@@ -463,3 +458,88 @@ class LitNNDataset(pl.LightningDataModule):
             assert isinstance(batch[k], torch.Tensor), f"transfer_batch_to_device failed because {k} is not a torch Tensor."
             batch[k] = batch[k].to(device)
         return batch
+
+    def set_train_transforms(self, cfg: Dict[str, Any]):
+        self.train_transforms = T.Compose([
+            T.EnsureFloat(keys=[IMAGE_KEY, MI_KEY, MF_KEY, FWD_FLOW_KEY, BWD_FLOW_KEY]),
+
+            # Reorder axes for tensors
+            T.ReorderAxes(keys=[IMAGE_KEY], axes=xyzt_to_tzyx),
+            T.ReorderAxes(keys=[MI_KEY, MF_KEY], axes=xyz_to_zyx),
+            T.ReorderAxes(keys=[FWD_FLOW_KEY, BWD_FLOW_KEY], axes=t3xyz_to_t3zyx),
+
+            # Add channel dimension
+            T.AddDimAt(keys=[MI_KEY, MF_KEY], axis=0),
+            T.AddDimAt(keys=[IMAGE_KEY], axis=1),
+
+            # Spatial transformations
+            T.RandomRotate(
+                keys=[IMAGE_KEY, MI_KEY, MF_KEY, FWD_FLOW_KEY, BWD_FLOW_KEY],
+                modes={IMAGE_KEY: "bilinear", MI_KEY: "nearest", MF_KEY: "nearest", FWD_FLOW_KEY: "bilinear", BWD_FLOW_KEY: "bilinear"},
+                **cfg["rotation"],
+                align_corners=False
+            ),
+            T.RandomFlip(
+                keys=[IMAGE_KEY, MI_KEY, MF_KEY, FWD_FLOW_KEY, BWD_FLOW_KEY],
+                **cfg["flip_d"]
+            ),
+            T.RandomFlip(
+                keys=[IMAGE_KEY, MI_KEY, MF_KEY, FWD_FLOW_KEY, BWD_FLOW_KEY],
+                **cfg["flip_v"]
+            ),
+            T.RandomFlip(
+                keys=[IMAGE_KEY, MI_KEY, MF_KEY, FWD_FLOW_KEY, BWD_FLOW_KEY],
+                **cfg["flip_h"]
+            ),
+            T.ElasticDeformation(
+                keys=[IMAGE_KEY, MI_KEY, MF_KEY, FWD_FLOW_KEY, BWD_FLOW_KEY],
+                **cfg["elastic_deform"],
+                order={IMAGE_KEY: 3, MI_KEY: 0, MF_KEY: 0, FWD_FLOW_KEY: 3, BWD_FLOW_KEY: 3}
+            ),
+
+            # Intensity transformations
+            T.GammaCorrection(
+                keys=[IMAGE_KEY],
+                **cfg["gamma_correction"]
+            ),
+            T.ContrastAugmentation(
+                keys=[IMAGE_KEY],
+                **cfg["contrast"]
+            ),
+            T.MultiplicativeScaling(
+                keys=[IMAGE_KEY],
+                **cfg["multiplicative_scaling"]
+            ),
+            T.AdditiveScaling(
+                keys=[IMAGE_KEY],
+                **cfg["additive_scaling"]
+            ),
+            T.GaussianBlur(
+                keys=[IMAGE_KEY],
+                **cfg["gaussian_blur"]
+            ),
+            T.AdditiveGaussianNoise(
+                keys=[IMAGE_KEY],
+                **cfg["additive_gaussian_noise"]
+            ),
+
+            # Move flow channel to last dim
+            T.ReorderAxes(keys=[FWD_FLOW_KEY, BWD_FLOW_KEY], axes=t3zyx_to_tzyx3)
+        ])
+
+    def set_val_transforms(self):
+        self.val_transforms = T.Compose([
+            T.EnsureFloat(keys=[IMAGE_KEY, MI_KEY, MF_KEY, FWD_FLOW_KEY, BWD_FLOW_KEY]),
+
+            # Reorder axes for tensors
+            T.ReorderAxes(keys=[IMAGE_KEY], axes=xyzt_to_tzyx),
+            T.ReorderAxes(keys=[MI_KEY, MF_KEY], axes=xyz_to_zyx),
+            T.ReorderAxes(keys=[FWD_FLOW_KEY, BWD_FLOW_KEY], axes=t3xyz_to_t3zyx),
+
+            # Add channel dimension
+            T.AddDimAt(keys=[MI_KEY, MF_KEY], axis=0),
+            T.AddDimAt(keys=[IMAGE_KEY], axis=1),
+
+            # Move flow channel to last dim
+            T.ReorderAxes(keys=[FWD_FLOW_KEY, BWD_FLOW_KEY], axes=t3zyx_to_tzyx3)
+        ])
