@@ -38,8 +38,6 @@ def main(cfg: DictConfig):
 
     trainer.fit(model, data)
 
-    trainer.checkpoint_callback
-
     # best_ckpt = Path(checkpoint_cb.best_model_path)
     # print(f'Best model checkpoint: {best_ckpt.name}')
     # model = type(model).load_from_checkpoint(best_ckpt)
