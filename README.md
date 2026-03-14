@@ -38,7 +38,7 @@ The method is evaluated on two cardiac cine MRI datasets:
 1. **Clone the repository:**
 
     ```bash
-    git clone <repository-url>
+    git clone https://github.com/ajortizg/singleVentricleSegmentation.git
     cd singleVentricleSegmentation
     ```
 
