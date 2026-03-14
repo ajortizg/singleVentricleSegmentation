@@ -20,44 +20,6 @@ This method automates the propagation of arbitrary regions of interest (ROIs) al
 - **Multi-GPU Parallel Processing** — Optical flow computation distributed across GPUs for large datasets
 - **Modular Preprocessing** — Configurable pipeline: spatial cropping, isotropic resampling (80³), patient-wise nonlinear intensity normalization, and train/val splitting
 
-## Pipeline Overview
-
-```
-Cine MRI + Expert Masks at ED & ES
-    │
-    ▼
-┌─────────────────────────────────────────────┐
-│  Preprocessing                              │
-│  setup → crop → resample (80³) →            │
-│  normalize → train/val split                │
-└─────────────────┬───────────────────────────┘
-                  │
-                  ▼
-┌─────────────────────────────────────────────┐
-│  3D TV-L¹ Optical Flow (CUDA)              │
-│  Forward Φ(k,k+1) & Backward Φ(k+1,k)     │
-│  Anisotropic TV + primal-dual solver        │
-└─────────────────┬───────────────────────────┘
-                  │
-                  ▼
-┌─────────────────────────────────────────────┐
-│  Mask Propagation via Warping               │
-│  m→(k+1) = W(m→(k), Φ(k,k+1))             │
-│  m←(k)   = W(m←(k+1), Φ(k+1,k))           │
-└─────────────────┬───────────────────────────┘
-                  │
-                  ▼
-┌─────────────────────────────────────────────┐
-│  3D U-Net Refinement (PyTorch Lightning)    │
-│  m†(k) = m(k) + f_θ(m(k), i(k))           │
-│  Loss: supervised + self-supervised +       │
-│        penalization                         │
-└─────────────────┬───────────────────────────┘
-                  │
-                  ▼
-    Refined Segmentation Masks (all phases)
-```
-
 ## Datasets
 
 The method is evaluated on two cardiac cine MRI datasets:
