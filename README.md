@@ -1,102 +1,261 @@
-# Single Ventricle Segmentation
+# Optical Flow-Guided Cine MRI Segmentation with Learned Corrections
+
+[![Python 3.10](https://img.shields.io/badge/Python-3.10-blue.svg)](https://www.python.org/downloads/release/python-3100/)
+[![PyTorch 2.1](https://img.shields.io/badge/PyTorch-2.1-ee4c2c.svg)](https://pytorch.org/)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+
+Official implementation of **"Optical Flow-Guided Cine MRI Segmentation with Learned Corrections"** (IEEE Transactions on Medical Imaging).
+
+This method automates the propagation of arbitrary regions of interest (ROIs) along the cardiac cycle from expert annotations provided at two time points (typically end-systolic and end-diastolic phases). A 3D TV-$L^1$ optical flow algorithm computes the apparent motion between consecutive MRI frames in both forward and backward directions. The resulting bidirectional flow fields propagate the annotated masks across all cardiac phases, and a lightweight 3D U-Net refines these initial estimates using a novel loss function that enforces forward–backward consistency without requiring dense ground-truth labels.
+
+![Warped segmentation masks propagated through the cardiac cycle](docs/animation.gif)
+
+## Key Features
+
+- **Versatile ROI Segmentation** — Works with *any* anatomical structure (single ventricle, left/right ventricle, myocardium, etc.) given annotations at two time points
+- **3D TV-$L^1$ Optical Flow** — Anisotropic Huber-type TV regularization with multi-scale coarse-to-fine pyramid, solved via primal-dual proximal splitting, implemented as custom CUDA kernels
+- **Bidirectional Propagation** — Forward (ED→ES) and backward (ES→ED) mask warping using tricubic Hermite-spline interpolation
+- **Lightweight 3D U-Net Post-processing** — Residual learning with only 1.4M parameters; trained with a novel loss combining supervised, self-supervised consistency, and penalization terms
+- **Patient-Specific Fine-Tuning** — The self-supervised loss enables fine-tuning on a single patient (100 Adam steps), yielding state-of-the-art results across the complete cardiac cycle
+- **Multi-GPU Parallel Processing** — Optical flow computation distributed across GPUs for large datasets
+- **Modular Preprocessing** — Configurable pipeline: spatial cropping, isotropic resampling (80³), patient-wise nonlinear intensity normalization, and train/val splitting
+
+## Pipeline Overview
+
+```
+Cine MRI + Expert Masks at ED & ES
+    │
+    ▼
+┌─────────────────────────────────────────────┐
+│  Preprocessing                              │
+│  setup → crop → resample (80³) →            │
+│  normalize → train/val split                │
+└─────────────────┬───────────────────────────┘
+                  │
+                  ▼
+┌─────────────────────────────────────────────┐
+│  3D TV-L¹ Optical Flow (CUDA)              │
+│  Forward Φ(k,k+1) & Backward Φ(k+1,k)     │
+│  Anisotropic TV + primal-dual solver        │
+└─────────────────┬───────────────────────────┘
+                  │
+                  ▼
+┌─────────────────────────────────────────────┐
+│  Mask Propagation via Warping               │
+│  m→(k+1) = W(m→(k), Φ(k,k+1))             │
+│  m←(k)   = W(m←(k+1), Φ(k+1,k))           │
+└─────────────────┬───────────────────────────┘
+                  │
+                  ▼
+┌─────────────────────────────────────────────┐
+│  3D U-Net Refinement (PyTorch Lightning)    │
+│  m†(k) = m(k) + f_θ(m(k), i(k))           │
+│  Loss: supervised + self-supervised +       │
+│        penalization                         │
+└─────────────────┬───────────────────────────┘
+                  │
+                  ▼
+    Refined Segmentation Masks (all phases)
+```
+
+## Datasets
+
+The method is evaluated on two cardiac cine MRI datasets:
+
+- **ACDC** ([Automatic Cardiac Diagnosis Challenge](https://www.creatis.insa-lyon.fr/Challenge/acdc/)): 150 patients with annotations for left ventricle (LV), right ventricle (RV), and myocardium (MY) at ED and ES phases. 100 training / 50 test split.
+- **SVD** (Single Ventricle Dataset): 90 patients with single ventricle pathology acquired at University Hospital Bonn. Covers children (0–5 yrs), adolescents (6–17 yrs), and adults (≥18 yrs). 3 patients are fully annotated at every time point for evaluation.
+
+## Requirements
+
+- Linux (CUDA extension build requires Linux)
+- NVIDIA GPU with CUDA 11.8+
+- Conda (Miniconda or Anaconda)
 
 ## Installation
 
-1. Create a conda environment using the provided `environment.yaml` file:
+1. **Clone the repository:**
+
+    ```bash
+    git clone <repository-url>
+    cd singleVentricleSegmentation
+    ```
+
+2. **Create the conda environment:**
+
     ```bash
     conda env create -f environment.yaml
+    conda activate svs
     ```
 
-## Instructions for the ACDC Dataset
+    This installs Python 3.10, PyTorch 2.1, CUDA 11.8, PyTorch Lightning, MONAI, and all other dependencies.
 
-The ACDC dataset contains information for 3 ROIs (left ventricle, right ventricle, and myocardium). These ROIs must be separately extracted and preprocessed before computing the optical flow and performing CNN postprocessing.
+3. **Build the CUDA extension:**
 
-Configuration parameters can be found in `conf/setup_acdc.yaml` and `conf/preprocessing.yaml`. There are two different ways to preprocess the ACDC dataset:
+    The package installs in editable mode (`-e .`) via `environment.yaml`. If you need to rebuild manually:
 
-### Method 1: All-in-One
+    ```bash
+    pip install -e .
+    ```
 
-This method reads the raw ACDC dataset folder and runs all preprocessing steps listed in `scripts/run_acdc_preprocessing.py`. A folder for each preprocessing step will be created in the `out_dir` directory, which is specified in the `conf/preprocessing.yaml` configuration file.
+    This compiles the custom CUDA kernels for optical flow, warping, and prolongation operations into `opticalFlow_cuda_ext/`.
+
+## Usage
+
+All configuration files are in the `conf/` directory. The pipeline has four main stages:
+
+### 1. Preprocessing
+
+The ACDC dataset contains 3 ROIs (left ventricle, right ventricle, myocardium) that must be separately extracted and preprocessed. Configure paths in `conf/setup_acdc.yaml` and `conf/preprocessing.yaml`.
+
+**All-in-one** — runs all preprocessing steps sequentially:
 
 ```bash
-python scripts/run_acdc_preprocessing.py
+python scripts/acdc_preprocessing_pipeline.py
 ```
 
-### Method 2: Step-by-Step
+**Step-by-step** — run each stage independently:
 
-You can also preprocess the ACDC dataset by independently running each preprocessing script. Adjust settings as needed by editing `conf/preprocessing.yaml`.
+```bash
+# 1. Reformat raw ACDC data into project structure
+python svs/preprocessing/setup_acdc.py
 
-1. **Reformat the ACDC Dataset**: Set up the directory structure and filename convention used in this project.
+# 2. Crop volumes to ROI bounding boxes
+python svs/preprocessing/cutting.py
 
-    ```bash
-    python svs/preprocessing/setup_acdc.py
-    ```
+# 3. Resize to uniform dimensions (80×80×80) and pad to 35 frames
+python svs/preprocessing/prolongation.py
 
-    Use the `conf/setup_acdc.yaml` file to set the correct paths and desired configuration.
+# 4. Normalize intensity values
+python svs/preprocessing/normalization.py
 
-2. **Cutting**: Extract relevant portions of the dataset.
+# 5. Split into train/validation sets
+python svs/preprocessing/split.py
+```
 
-    ```bash
-    python svs/preprocessing/cutting.py
-    ```
+### 2. Optical Flow Computation
 
-3. **Prolongation**: Adjust the dimensions as needed.
+Compute 3D TV-L1 optical flow fields between consecutive cardiac frames. Configure parameters in `conf/flow.yaml`.
 
-    ```bash
-    python svs/preprocessing/prolongation.py
-    ```
+**Single GPU:**
 
-4. **Normalization**: Normalize the intensity values in the dataset.
+```bash
+python scripts/flow.py
+```
 
-    ```bash
-    python svs/preprocessing/normalization.py
-    ```
+**Multi-GPU parallel** — distributes forward/backward flow computation across GPUs:
 
-5. **Split**: Split the dataset for training, validation, and testing.
+```bash
+chmod +x scripts/parallel_flow.sh
+./scripts/parallel_flow.sh
+```
 
-    ```bash
-    python svs/preprocessing/split.py
-    ```
+Monitor progress via log files:
 
-## Optical Flow
+```bash
+tail -f results/fwd_0-25.log
+```
 
-This repository provides two methods for computing 3D optical flow using the TVL1-3D formulation: 
-1. Directly running the `scripts/flow.py` Python script.
-2. Using the `scripts/parallel_flow.sh` bash script for parallel processing with multiple GPUs.
+### 3. Warping Validation
 
-### Method 1: Using `scripts/flow.py`
-This method involves directly running the Python script to compute optical flow. This approach is straightforward and suitable for single or sequential processing.
-1. First, ensure the configuration file `conf/flow.yaml` is correctly set up with the necessary parameters.
+Validate optical flow quality by propagating ground-truth masks and measuring Dice and Hausdorff metrics. Configure in `conf/warping.yaml`.
 
-2. Then, run the script:
-    ```bash
-    python scripts/flow.py
-    ```
+```bash
+python scripts/warp.py
+```
 
-### Method 2: Using `scripts/parallel_flow.sh`
-This method involves using a bash script to run the optical flow computation in parallel on multiple GPUs. This approach maximizes the use of available computational resources, allowing for faster processing.
+### 4. Training
 
-1. **Make the Script Executable**:
-   ```bash
-   chmod +x scripts/parallel_flow.sh
-   ```
+Train the 3D U-Net for segmentation refinement using [Hydra](https://hydra.cc/) for configuration management. Configure in `conf/train.yaml` and `conf/model/unet.yaml`.
 
-2. **Run the Script**:
-   ```bash
-   ./scripts/parallel_flow.sh
-   ```
+```bash
+python scripts/train.py
+```
 
-   - The script will automatically create a `results` directory if it doesn't exist.
-   - It will start the forward and backward optical flow computations in parallel on different GPUs, logging the output to separate files.
-   - You can monitor the progress of each computation by checking the log files in the `results` directory. For example:
-        ```bash
-        tail -f results/fwd_0-25.log
-        ```
-        This command shows the last few lines of the log file and updates as new lines are added.
+Key training parameters (override via command line):
 
-## Warping optical flow
-The optical flow algorithm's performance can be assessed by propagating the ground truth masks at ED and ES cardiac phases. This can be done by running `scripts/warp.py`. The configuration parameters can be set using `conf/warping.yaml`. The results should like this animation.
-![Alt text](docs/animation.gif)
+```bash
+python scripts/train.py data.batch_size=8 trainer.max_epochs=200 model.lr=5e-4
+```
 
-## Training the CNN
+Monitor training with TensorBoard:
 
-Run the `scripts/train.py` Python script. Training configuration parameters can be found in `conf/train.yaml`.
+```bash
+tensorboard --logdir results/train/
+```
+
+## Project Structure
+
+```
+├── conf/                    # Hydra configuration files
+│   ├── flow.yaml            #   Optical flow parameters
+│   ├── preprocessing.yaml   #   Preprocessing pipeline settings
+│   ├── setup_acdc.yaml      #   ACDC dataset paths and labels
+│   ├── train.yaml           #   Training hyperparameters
+│   ├── warping.yaml         #   Warping validation settings
+│   └── model/unet.yaml      #   U-Net architecture config
+├── scripts/                 # Entry-point scripts
+│   ├── acdc_preprocessing_pipeline.py
+│   ├── flow.py
+│   ├── train.py
+│   ├── warp.py
+│   └── parallel_flow.sh
+├── svs/                     # Core library
+│   ├── models/              #   U-Net and Lightning module
+│   ├── modules/             #   Datasets, losses, metrics, transforms
+│   │   ├── flow/            #     TV-L1 optical flow implementation
+│   │   └── transforms/      #     Data augmentation (spatial + intensity)
+│   ├── preprocessing/       #   Preprocessing stages
+│   └── src/                 #   CUDA kernels (.cu) and C++ bindings
+├── thirdparty/              # Third-party model baselines
+├── environment.yaml         # Conda environment specification
+└── setup.py                 # CUDA extension build configuration
+```
+
+## Configuration
+
+All pipeline parameters are managed through YAML files in `conf/`. Key configuration files:
+
+| File | Purpose |
+|------|---------|
+| `conf/setup_acdc.yaml` | Dataset paths, ROI label selection |
+| `conf/preprocessing.yaml` | Cropping tolerances, target dimensions, normalization, split ratio |
+| `conf/flow.yaml` | TV-L1 parameters: pyramid scales, regularization weights, solver iterations |
+| `conf/train.yaml` | Batch size, learning rate, loss weights (λ_u, γ_p), callbacks |
+| `conf/model/unet.yaml` | Network architecture: layers, channels, kernel size, activation |
+| `conf/warping.yaml` | Flow validation: propagation direction, visualization settings |
+| `conf/transforms/custom.yaml` | Data augmentation: rotation, elastic deformation, intensity transforms |
+
+## Method Overview
+
+The approach consists of three stages (see paper for full details):
+
+1. **Anisotropic 3D TV-$L^1$ Optical Flow** — For each consecutive image pair $(i_k, i_{k+1})$, the optical flow $\Phi$ is computed by minimizing an energy with an $L^1$ data fidelity term and an anisotropic TV regularizer that preserves edges. The optimization uses a primal-dual proximal splitting algorithm on a 3-level coarse-to-fine image pyramid (15 warps × 300 iterations per level).
+
+2. **Bidirectional Mask Propagation** — Given expert masks $m_0$ (ED) and $m_K$ (ES), forward masks $\vec{m}_{k+1} = \mathcal{W}(\vec{m}_k, \Phi_{k,k+1})$ and backward masks $\overleftarrow{m}_k = \mathcal{W}(\overleftarrow{m}_{k+1}, \Phi_{k+1,k})$ are computed via tricubic Hermite-spline warping.
+
+3. **U-Net Refinement** — A residual 3D U-Net refines the warped masks: $m_k^\dagger = m_k + f_\theta(m_k, i_k)$. The loss function combines:
+   - **Supervised term**: MSE at ED/ES where ground truth is available
+   - **Self-supervised term**: forward–backward consistency at intermediate frames
+   - **Penalization term**: controls deviation magnitude from the initial warped masks
+
+Patient-specific fine-tuning (100 Adam steps) further improves accuracy without requiring additional annotations.
+
+## Citation
+
+If you use this code in your research, please cite:
+
+```bibtex
+@article{OrtizGonzalez2023OpticalFlow,
+  title     = {Optical Flow-Guided Cine MRI Segmentation with Learned Corrections},
+  author    = {Ortiz-Gonzalez, Antonio and Kobler, Erich and Simon, Stefan and
+               Bischoff, Leon and Nowak, Sebastian and Isaak, Alexander and
+               Block, Wolfgang and Sprinkart, Alois M. and Attenberger, Ulrike and
+               Luetkens, Julian A. and Bayro-Corrochano, Eduardo and Effland, Alexander},
+  journal   = {IEEE Transactions on Medical Imaging},
+  year      = {2023}
+}
+```
+
+## License
+
+This project is licensed under the GNU General Public License v3.0 — see [LICENSE](LICENSE) for details.
