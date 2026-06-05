@@ -143,3 +143,6 @@ tb_logs/
 outputs/
 
 opticalFlow_cuda_ext/
+
+CLAUDE.md
+.claude/
